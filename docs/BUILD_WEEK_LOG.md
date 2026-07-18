@@ -176,3 +176,29 @@ Each entry should capture:
 
 - Enable billing/quota on the OpenAI project or provide a quota-enabled key, then rerun `/api/explain`.
 - Link the GitHub repo to the intended Netlify site and set `OPENAI_API_KEY` as a secret Netlify environment variable before deployed testing.
+
+### Henry/Chatbase Corpus Strategy
+
+**Research**
+
+- Reviewed the existing HenryKnows local repo at `/Users/davidmaxon/Projects/henryknows`.
+- Confirmed Henry already has a server-side Netlify proxy that calls Chatbase at `https://www.chatbase.co/api/v1/chat` with `CHATBASE_API_KEY` and `CHATBASE_BOT_ID`.
+- Confirmed the Chatbase API supports sending messages to a trained chatbot by `chatbotId`, with optional conversation IDs and model/temperature settings.
+
+**Decisions**
+
+- Use Henry/Chatbase as the domain-corpus layer where it helps: F-1 background, DSO best-practices context, and short knowledge-base answers.
+- Do not treat Chatbase as the calculator or the fact extractor of record. It is knowledgeable but still an LLM-backed chatbot and may not provide machine-checkable structured facts.
+- Update Henry's knowledge base with the July 17, 2026 final rule before relying on it for new duration-of-status explanations.
+- Use OpenAI for structured narrative extraction into candidate facts and confidence/ambiguity flags, then show students "what I understood" before those facts reach the deterministic engine.
+- Keep the deterministic F-1 planner engine as the source of date/deadline/status calculations and citations.
+
+**Codex Assistance**
+
+- Identified the existing Henry proxy implementation so this app can reuse a known secure server-side Chatbase pattern.
+- Separated the app architecture into three layers: AI extraction, deterministic calculation, and Henry/Chatbase domain grounding.
+
+**Open Questions**
+
+- Decide whether to copy the Henry proxy pattern into this app or call Henry's deployed API through a narrowly scoped internal endpoint.
+- Check Henry/Chatbase plan limits before relying on it for public hackathon traffic.
