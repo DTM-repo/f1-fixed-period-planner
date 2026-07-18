@@ -13,7 +13,7 @@ npm install
 npm run dev
 ```
 
-Use Netlify Dev when testing server functions such as `/api/explain` or `/api/henry`:
+Use Netlify Dev when testing server functions such as `/api/explain` or `/api/intake`:
 
 ```bash
 npm run dev:netlify
@@ -24,24 +24,17 @@ For the OpenAI explanation and structured-intake endpoints, set:
 ```bash
 OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-5.6-terra
+OPENAI_INTAKE_MODEL=gpt-5.6-luna
 ```
 
-For the hackathon-safe Henry/Chatbase domain-corpus endpoint, set:
-
-```bash
-CHATBASE_API_KEY=...
-CHATBASE_BOT_ID=...
-CHATBASE_MODEL=
-```
-
-The Chatbase bot used for this submission must be trained only on public-source or David-authored material. Do not connect a bot trained on NAFSA AM360 text unless NAFSA grants permission.
+The submitted hackathon runtime is OpenAI-only plus a deterministic local rule engine. Henry/Chatbase may remain a private research aid, but it is not part of the submitted app path.
 
 ## Scope
 
 - F-1 first, including current D/S students and prospective students entering under fixed-period admission.
 - J-1 and M-1 are intentionally outside the first calculator module.
 - CPT, transfers, program changes, OPT, STEM OPT, travel, and pending extension scenarios are modeled as timing flags where the first-pass rule engine has enough source support.
-- Legal conclusions are never delegated to the model. AI output must explain the deterministic result or request missing facts.
+- Legal conclusions are never delegated to the model. AI output may extract candidate facts, explain the deterministic result, or request missing facts.
 
 ## Source Base
 

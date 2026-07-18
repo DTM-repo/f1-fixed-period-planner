@@ -43,8 +43,7 @@ Recommended app shape:
 - OpenAI: structured extraction from student narrative into candidate facts, confidence, ambiguity flags, and follow-up questions.
 - Student confirmation UI: show "what I understood" before applying extracted facts.
 - Deterministic engine: calculate dates, warnings, citations, and scenario comparisons from confirmed facts.
-- Henry/Chatbase: answer domain background questions and supply concise F-1/DSO context through this app's `/api/henry` Netlify Function when the app needs broader explanation or source-review help.
-- `/api/henry` must remain a server-side proxy. The browser should never receive `CHATBASE_API_KEY`.
+- Henry/Chatbase: keep as a private research aid only. The submitted hackathon runtime should be OpenAI-only plus the deterministic engine so the project story stays clean and squarely tied to GPT-5.6/Codex.
 
 Hackathon-safe source priority:
 

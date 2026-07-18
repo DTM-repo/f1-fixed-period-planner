@@ -246,6 +246,94 @@ a:focus-visible {
   top: 16px;
 }
 
+.understood {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.understood-heading {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.understood h3,
+.understood p {
+  margin: 0;
+}
+
+.understood-heading h3 {
+  font-size: 15px;
+}
+
+.understood-heading span,
+.understood-fact small,
+.understood-fact em,
+.understood-followups p {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.understood-list {
+  display: grid;
+  gap: 8px;
+}
+
+.understood-fact {
+  border-left: 4px solid var(--line);
+  display: grid;
+  gap: 5px;
+  padding: 2px 0 2px 10px;
+}
+
+.understood-fact.high {
+  border-left-color: var(--green);
+}
+
+.understood-fact.medium {
+  border-left-color: var(--amber);
+}
+
+.understood-fact.low {
+  border-left-color: var(--red);
+}
+
+.understood-fact div {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.understood-fact strong,
+.understood-fact span {
+  font-size: 13px;
+}
+
+.understood-fact span {
+  font-weight: 720;
+}
+
+.understood-fact p {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.understood-fact em {
+  font-style: normal;
+}
+
+.understood-followups {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+}
+
 .results {
   display: grid;
   gap: 16px;

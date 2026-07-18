@@ -174,7 +174,7 @@ Each entry should capture:
 
 **Open Questions**
 
-- Enable billing/quota on the OpenAI project or provide a quota-enabled key, then rerun `/api/explain`.
+- Resolved later on July 18, 2026: the OpenAI project key now has usable quota, and `/api/explain` returned a live `200 OK` response from `gpt-5.6-terra`.
 - Link the GitHub repo to the intended Netlify site and set `OPENAI_API_KEY` as a secret Netlify environment variable before deployed testing.
 
 ### Henry/Chatbase Corpus Strategy
@@ -230,6 +230,7 @@ Each entry should capture:
 
 **Decisions**
 
+- Superseded later the same day by the OpenAI-only runtime pivot below.
 - Add `/api/henry` as a narrow domain-context endpoint, not a student-status calculator.
 - Keep Chatbase credentials in `.env.local`/Netlify environment variables only.
 - Do not persist conversations through this endpoint for the first hackathon build; send bounded, stateless questions to reduce student-data retention.
@@ -239,3 +240,26 @@ Each entry should capture:
 
 - Added a modern Netlify Function proxy for the clean Henry/Chatbase bot.
 - Wrapped calls with app-specific guardrails: public-source framing, no proprietary subscription manuals, plain-English student language, and no individual deadline/status calculations.
+
+### Hackathon Runtime Pivot: OpenAI Only
+
+**Research**
+
+- Rechecked Build Week judging criteria: projects are judged on technical implementation, design, potential impact, and quality of idea, and strong submissions should clearly demonstrate thoughtful use of GPT-5.6 and Codex.
+- Confirmed third-party APIs are allowed only when authorized, but also add explanation and review surface.
+
+**Decisions**
+
+- Remove Chatbase/Henry from the submitted runtime path. Henry can remain a private research/support tool, but not a dependency for judging.
+- Center the submission architecture on OpenAI API plus the deterministic F-1 rule engine.
+- Replace the regex narrative parser with an OpenAI structured extraction endpoint so the app does not depend on brittle keyword/date proximity rules.
+- Keep the student confirmation step: extracted facts are candidate facts until the student applies them.
+
+**Codex Assistance**
+
+- Removed `/api/henry` from runtime config.
+- Added `/api/intake` for GPT-5.6 structured narrative extraction with a JSON schema and conservative ambiguity rules.
+- Removed the temporary regex narrative parser and its tests from the active app path.
+- Changed narrative-apply behavior to start from an unknown intake baseline, so old demo/default dates do not remain in the calculator as if the student confirmed them.
+- Verified `/api/intake` live through Netlify Dev with a narrative where graduation, OPT intent, I-20 end date, and travel appeared together. The model treated the full I-20 date as the program end date, refused to convert "August 2027" into a reentry date, and did not treat graduation as an OPT filing/start/EAD date.
+- Verified `/api/explain` live through Netlify Dev with `gpt-5.6-terra`.

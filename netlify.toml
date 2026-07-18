@@ -11,6 +11,6 @@
   status = 200
 
 [[redirects]]
-  from = "/api/henry"
-  to = "/.netlify/functions/henry"
+  from = "/api/intake"
+  to = "/.netlify/functions/intake"
   status = 200

@@ -13,11 +13,11 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExplanationResponse } from "./ai/explanationPayload";
+import type { IntakeCandidateFact, IntakeExtractionResponse, IntakeFactField } from "./ai/intakePayload";
 import { buildLocalExplanation } from "./ai/localExplanation";
 import { DEMO_SCENARIOS, DEFAULT_SCENARIO } from "./content/demoScenarios";
 import { calculateScenario } from "./engine/calculateScenario";
-import { formatDate } from "./engine/dateMath";
-import { draftScenarioFromNarrative } from "./engine/narrativeDraft";
+import { formatDate, isValidDateString } from "./engine/dateMath";
 import type {
   AdmissionBasis,
   CptPlan,
@@ -121,7 +121,20 @@ const cptLabels: Record<CptPlan, string> = {
   unknown: "Unknown"
 };
 
-const draftFieldLabels: Partial<Record<keyof StudentScenario, string>> = {
+const INTAKE_BASE_SCENARIO: StudentScenario = {
+  startingPosition: "unknown",
+  admissionBasis: "unknown",
+  inUsOnEffectiveDate: "unknown",
+  maintainingStatusOnEffectiveDate: "unknown",
+  optStage: "none",
+  travelPosture: "unknown",
+  reentryBasis: "unknown",
+  pendingExtensionOnDeparture: "unknown",
+  transferOrProgramChange: "unknown",
+  cptPlan: "unknown"
+};
+
+const factFieldLabels: Record<IntakeFactField, string> = {
   startingPosition: "starting point",
   admissionBasis: "I-94 basis",
   inUsOnEffectiveDate: "U.S. location on the rule date",
@@ -140,10 +153,78 @@ const draftFieldLabels: Partial<Record<keyof StudentScenario, string>> = {
   cptPlan: "CPT timing"
 };
 
-const draftFields = Object.keys(draftFieldLabels) as Array<keyof StudentScenario>;
+const draftFields = Object.keys(factFieldLabels) as IntakeFactField[];
 
 function describeDraftChanges(before: StudentScenario, after: StudentScenario): string[] {
-  return draftFields.flatMap((field) => (before[field] !== after[field] ? [draftFieldLabels[field] ?? field] : []));
+  return draftFields.flatMap((field) => (before[field] !== after[field] ? [factFieldLabels[field]] : []));
+}
+
+const enumFactValues: Partial<Record<IntakeFactField, readonly string[]>> = {
+  startingPosition: Object.keys(startingPositionLabels),
+  admissionBasis: Object.keys(admissionBasisLabels),
+  inUsOnEffectiveDate: yesNoOptions.map((option) => option.value),
+  maintainingStatusOnEffectiveDate: yesNoOptions.map((option) => option.value),
+  optStage: Object.keys(optLabels),
+  travelPosture: Object.keys(travelLabels),
+  reentryBasis: Object.keys(reentryLabels),
+  pendingExtensionOnDeparture: yesNoOptions.map((option) => option.value),
+  transferOrProgramChange: yesNoOptions.map((option) => option.value),
+  cptPlan: Object.keys(cptLabels)
+};
+
+const dateFactFields = new Set<IntakeFactField>([
+  "programEndOnEffectiveDate",
+  "currentProgramEndDate",
+  "eadEndOnEffectiveDate",
+  "currentEadEndDate",
+  "optFilingDate",
+  "reentryDate"
+]);
+
+function isSupportedFactValue(fact: IntakeCandidateFact): boolean {
+  if (dateFactFields.has(fact.field)) {
+    return isValidDateString(fact.value);
+  }
+
+  return enumFactValues[fact.field]?.includes(fact.value) ?? false;
+}
+
+function factDisplayValue(fact: IntakeCandidateFact): string {
+  if (dateFactFields.has(fact.field) && isValidDateString(fact.value)) {
+    return formatDate(fact.value);
+  }
+
+  const labelMap: Partial<Record<IntakeFactField, Record<string, string>>> = {
+    startingPosition: startingPositionLabels,
+    admissionBasis: admissionBasisLabels,
+    optStage: optLabels,
+    travelPosture: travelLabels,
+    reentryBasis: reentryLabels,
+    cptPlan: cptLabels
+  };
+
+  if (fact.field === "inUsOnEffectiveDate" || fact.field === "maintainingStatusOnEffectiveDate" || fact.field === "pendingExtensionOnDeparture" || fact.field === "transferOrProgramChange") {
+    return yesNoOptions.find((option) => option.value === fact.value)?.label ?? fact.value;
+  }
+
+  return labelMap[fact.field]?.[fact.value] ?? fact.value;
+}
+
+function readyFacts(facts: IntakeCandidateFact[]): IntakeCandidateFact[] {
+  return facts.filter((fact) => fact.confidence !== "low" && isSupportedFactValue(fact));
+}
+
+function scenarioWithFacts(current: StudentScenario, facts: IntakeCandidateFact[]): StudentScenario {
+  const patch: Partial<Record<IntakeFactField, string>> = {};
+  for (const fact of readyFacts(facts)) {
+    patch[fact.field] = fact.value;
+  }
+
+  return {
+    ...INTAKE_BASE_SCENARIO,
+    ...patch,
+    narrative: current.narrative
+  } as StudentScenario;
 }
 
 const monthOptions = [
@@ -321,6 +402,8 @@ export default function App() {
   const [recording, setRecording] = useState(false);
   const [voiceNotice, setVoiceNotice] = useState("Voice input is ready.");
   const [draftNotice, setDraftNotice] = useState("");
+  const [intakeExtraction, setIntakeExtraction] = useState<IntakeExtractionResponse | null>(null);
+  const [intakeState, setIntakeState] = useState<"idle" | "loading" | "failed" | "ready">("idle");
   const [aiExplanation, setAiExplanation] = useState<string>("");
   const [aiState, setAiState] = useState<"idle" | "loading" | "failed" | "fallback" | "ready">("idle");
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
@@ -328,6 +411,10 @@ export default function App() {
 
   function update<K extends keyof StudentScenario>(key: K, value: StudentScenario[K]) {
     setScenario((current) => ({ ...current, [key]: value }));
+    if (key === "narrative") {
+      setIntakeExtraction(null);
+      setIntakeState("idle");
+    }
     setAiExplanation("");
     setAiState("idle");
   }
@@ -337,27 +424,64 @@ export default function App() {
     if (demo) {
       setScenario(demo.scenario);
       setDraftNotice("");
+      setIntakeExtraction(null);
+      setIntakeState("idle");
       setAiExplanation("");
       setAiState("idle");
     }
   }
 
-  function applyNarrativeDraft() {
+  async function applyNarrativeDraft() {
     const narrative = scenario.narrative?.trim() ?? "";
     if (!narrative) {
       setDraftNotice("Tell your story first, by typing or speaking, and then I can draft facts from it.");
       return;
     }
 
-    const nextScenario = draftScenarioFromNarrative(narrative, scenario);
+    setIntakeState("loading");
+    setIntakeExtraction(null);
+    setDraftNotice("Reading your story with GPT-5.6...");
+
+    try {
+      const response = await fetch("/api/intake", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ narrative, currentScenario: scenario })
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      const payload = (await response.json()) as IntakeExtractionResponse;
+      setIntakeExtraction(payload);
+      setIntakeState("ready");
+      setAiExplanation("");
+      setAiState("idle");
+      setDraftNotice(
+        payload.facts.length
+          ? `I found ${payload.facts.length} candidate fact${payload.facts.length === 1 ? "" : "s"}. Review what I understood before applying it.`
+          : "I read the story but did not find calculator-ready facts yet. The follow-up questions below are the next best path."
+      );
+    } catch {
+      setIntakeState("failed");
+      setDraftNotice("OpenAI intake is not available yet, so I did not change the calculator facts.");
+    }
+  }
+
+  function applyExtractedFacts() {
+    if (!intakeExtraction) {
+      return;
+    }
+
+    const nextScenario = scenarioWithFacts(scenario, intakeExtraction.facts);
     const changes = describeDraftChanges(scenario, nextScenario);
     setScenario(nextScenario);
     setAiExplanation("");
     setAiState("idle");
     setDraftNotice(
       changes.length
-        ? `Drafted ${changes.length} fact${changes.length === 1 ? "" : "s"} from your story: ${changes.join(", ")}.`
-        : "I read the story, but did not find facts that changed the calculator yet. Try including dates with month names, travel plans, OPT/STEM, transfer plans, or the I-20 end date."
+        ? `Applied ${changes.length} confirmed fact${changes.length === 1 ? "" : "s"}: ${changes.join(", ")}.`
+        : "No calculator facts changed. The remaining items need clarification or can be edited directly."
     );
   }
 
@@ -401,6 +525,8 @@ export default function App() {
         }));
         setVoiceNotice(`Added to your story: "${transcript.trim()}"`);
         setDraftNotice("Press Draft facts to turn the story into calculator inputs.");
+        setIntakeExtraction(null);
+        setIntakeState("idle");
         setAiExplanation("");
         setAiState("idle");
       }
@@ -451,6 +577,7 @@ export default function App() {
   }
 
   const statusTone = result.status === "ok" ? "good" : result.status === "manual" ? "manual" : "warning";
+  const applicableFacts = intakeExtraction ? readyFacts(intakeExtraction.facts) : [];
 
   return (
     <div className="app">
@@ -574,9 +701,9 @@ export default function App() {
                 {recording ? <Square aria-hidden="true" /> : <Mic aria-hidden="true" />}
                 {recording ? "Stop" : "Speak"}
               </button>
-              <button type="button" onClick={applyNarrativeDraft}>
-                <Wand2 aria-hidden="true" />
-                Draft facts
+              <button type="button" onClick={applyNarrativeDraft} disabled={intakeState === "loading"}>
+                {intakeState === "loading" ? <RefreshCw aria-hidden="true" className="spin" /> : <Wand2 aria-hidden="true" />}
+                {intakeState === "loading" ? "Reading" : "Draft facts"}
               </button>
             </div>
             <p className="muted status-line" aria-live="polite">
@@ -585,6 +712,55 @@ export default function App() {
             {draftNotice && (
               <p className="muted status-line" aria-live="polite">
                 {draftNotice}
+              </p>
+            )}
+            {intakeExtraction && (
+              <div className="understood">
+                <div className="understood-heading">
+                  <h3>What I understood</h3>
+                  {intakeExtraction.model && <span>{intakeExtraction.model}</span>}
+                </div>
+                <p>{intakeExtraction.summary}</p>
+
+                {intakeExtraction.facts.length > 0 && (
+                  <div className="understood-list">
+                    {intakeExtraction.facts.map((fact, index) => (
+                      <div key={`${fact.field}-${fact.value}-${index}`} className={`understood-fact ${fact.confidence}`}>
+                        <div>
+                          <strong>{fact.label || factFieldLabels[fact.field]}</strong>
+                          <span>{factDisplayValue(fact)}</span>
+                        </div>
+                        <p>{fact.evidence}</p>
+                        <small>
+                          {fact.confidence} confidence{fact.needsConfirmation ? " · check this" : ""}
+                          {!isSupportedFactValue(fact) ? " · needs clarification" : ""}
+                        </small>
+                        {fact.note && <em>{fact.note}</em>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {(intakeExtraction.followUpQuestions.length > 0 || intakeExtraction.cautions.length > 0) && (
+                  <div className="understood-followups">
+                    {intakeExtraction.followUpQuestions.map((question) => (
+                      <p key={question}>{question}</p>
+                    ))}
+                    {intakeExtraction.cautions.map((caution) => (
+                      <p key={caution}>{caution}</p>
+                    ))}
+                  </div>
+                )}
+
+                <button type="button" onClick={applyExtractedFacts} disabled={applicableFacts.length === 0}>
+                  <CheckCircle2 aria-hidden="true" />
+                  Apply understood facts
+                </button>
+              </div>
+            )}
+            {intakeState === "failed" && (
+              <p className="muted status-line" aria-live="polite">
+                The OpenAI intake endpoint is not available yet. No calculator facts were changed.
               </p>
             )}
           </section>
