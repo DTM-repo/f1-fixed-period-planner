@@ -112,3 +112,17 @@ Each entry should capture:
 
 - Diagnose why the Vite/Vitest wrappers hung locally even though direct TypeScript compilation and isolated engine assertions passed.
 - Build a dedicated approved OPT/STEM status-end branch only after source-backed data requirements are explicit.
+
+### Local Preview Setup
+
+**Decisions**
+
+- Active development should use the local clone at `/Users/davidmaxon/Projects/f1-fixed-period-planner`, not the iCloud-backed Documents clone. GitHub remains canonical.
+- Use local preview for rapid iteration. Netlify can wait until David needs an external share link or production-style deploy.
+
+**Codex Assistance**
+
+- Cloned the GitHub repo into `/Users/davidmaxon/Projects/f1-fixed-period-planner`.
+- Ran `npm ci`, `npm run test`, and `npm run build` successfully from the local clone.
+- Started Vite preview at `http://127.0.0.1:5177/`.
+- Confirmed the page responds with HTTP 200 and captured a Chrome screenshot showing the calculator UI and explicit Month / Day / Year controls.
