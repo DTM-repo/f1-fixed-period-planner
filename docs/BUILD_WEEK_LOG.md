@@ -202,3 +202,21 @@ Each entry should capture:
 
 - Decide whether to copy the Henry proxy pattern into this app or call Henry's deployed API through a narrowly scoped internal endpoint.
 - Check Henry/Chatbase plan limits before relying on it for public hackathon traffic.
+
+### NAFSA/AM360 Corpus Boundary
+
+**Research**
+
+- Reviewed NAFSA public terms, copyright language, AM360 licensing information, and Build Week submission requirements.
+- Build Week requires a repository for judging/testing and requires entrants to be authorized to use third-party APIs/data included in the project.
+
+**Decisions**
+
+- Do not submit or connect the hackathon app to a Henry bot trained on NAFSA Adviser's Manual 360 text unless NAFSA grants permission.
+- Use public legal/regulatory sources plus David's independent professional interpretation in his own words.
+- Do not build a close paraphrase, substitute guide, or AM360-shaped corpus. Distill only what this app needs, grounded in public sources and David-reviewed judgment.
+- The app README should eventually state that the submitted knowledge/corpus materials are public-source or author-created and that NAFSA does not sponsor or endorse the project.
+
+**Codex Assistance**
+
+- Helped separate copyright/licensing risk from product architecture: Henry/Chatbase can still be used, but the hackathon corpus should be clean, public, and author-created.

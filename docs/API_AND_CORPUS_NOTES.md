@@ -19,6 +19,8 @@ Efficient integration path:
 - Treat any student narrative, document scan, or API result as transient unless the user explicitly chooses to save it.
 - Before relying on Henry for the duration-of-status rule, update Henry's Chatbase knowledge base with the July 17, 2026 final rule and any David-reviewed interpretation notes.
 - Do not use Henry/Chatbase to compute deadlines or classify a student's legal result. It can provide contextual explanation and candidate research, while the F-1 planner's deterministic engine remains the calculator of record.
+- Do not connect the hackathon app to a Henry/Chatbase bot trained on NAFSA Adviser's Manual 360 text unless NAFSA grants permission for that use.
+- For hackathon-safe corpus material, use public source text plus David's own professional interpretation, written independently in his own words. Avoid copying AM360 text, close paraphrases, proprietary organization/selection, or a structure that functions as a substitute for the subscription guide.
 
 Useful future shape:
 
@@ -42,3 +44,9 @@ Recommended app shape:
 - Student confirmation UI: show "what I understood" before applying extracted facts.
 - Deterministic engine: calculate dates, warnings, citations, and scenario comparisons from confirmed facts.
 - Henry/Chatbase: answer domain background questions and supply concise F-1/DSO context when the app needs broader explanation or source-review help.
+
+Hackathon-safe source priority:
+
+- Federal Register final rule, eCFR, DHS, ICE, SEVP, USCIS, DOS, and other public government materials.
+- David-authored summaries, examples, decision notes, and practice cautions grounded in those public sources.
+- Short citation pointers to paid/proprietary references only if needed for David's private research workflow, not as chatbot training data or submitted app content.
