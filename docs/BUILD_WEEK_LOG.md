@@ -89,18 +89,21 @@ Each entry should capture:
 
 **Decisions**
 
-- Adopted David's bright-line safety standard: the app must never give a confident false result. If confirmed facts or a fully modeled rule branch are missing, the result should become manual review, risk, or a follow-up question.
+- Adopted David's bright-line safety standard: the app must never give a confident false result. If confirmed facts or a fully modeled rule branch are missing, the result should show the safe partial answer, explain conditional branches, and ask for the missing fact.
 - Known danger findings now outrank other status signals so concrete risks are not softened.
-- Invalid or malformed dates stop the calculation rather than being coerced into a deadline.
-- Fixed-period OPT/STEM admission after the effective date is explicitly not guessed in the MVP. It routes to confirmation/review until the approved EAD, pending I-765, DSO recommendation, travel, and admission facts are modeled.
-- Approved OPT/STEM transition results require an EAD end date before the engine will calculate.
+- Refined the safety standard after David's correction: no false result should mean "give every source-backed partial result and conditional branch available," not "stop early."
+- Unambiguous non-canonical dates are normalized; ambiguous or unreadable dates become targeted follow-up questions while the app keeps any safe dates that do not depend on them.
+- Fixed-period OPT/STEM admission after the effective date surfaces the ordinary fixed-period context, then asks for the approved EAD, pending I-765, DSO recommendation, travel, and admission facts needed to sharpen the OPT/STEM branch.
+- Approved OPT/STEM transition results show the I-20-based transition dates already available and explain how the EAD end date would change the result.
 
 **Codex Assistance**
 
 - Found and fixed the fixed-period F-1 departure-period bug: incoming/readmitted fixed-period F-1 now uses 30 days instead of the transition 60 days.
 - Hardened the deterministic engine so questions and danger findings escalate top-level status.
+- Revised the engine to normalize safe date formats, preserve partial results for ambiguous dates, and show conditional context for missing EAD facts.
+- Reworked travel findings to compare stay-put D/S transition outcomes with ordinary fixed-period return outcomes, including the 30-day fixed-period post-period.
 - Added source ID coverage for 8 CFR 214.2(f)(5)(v).
-- Expanded deterministic scenario tests around cap dates, EAD dates, malformed dates, STEM OPT timing, pending extension travel, AVR, and fixed-period OPT/STEM refusal.
+- Expanded deterministic scenario tests around cap dates, EAD dates, normalized/ambiguous dates, STEM OPT timing, pending extension travel, AVR, and fixed-period OPT/STEM conditional context.
 - Verified the rules module with a full TypeScript compile plus an isolated TypeScript compile and Node assertion run after Vite/Vitest CLI commands hung before reporting in this local Node v24.14.0 environment, including `--version` checks.
 
 **Open Questions**

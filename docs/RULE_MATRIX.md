@@ -1,6 +1,6 @@
 # Rule Matrix
 
-Core safety rule: when the app cannot source a result from confirmed facts, it must route to manual review or ask follow-up questions. It should never present a guessed date or green status.
+Core safety rule: the app should give every source-backed result it can from confirmed facts, then mark the exact fact that would sharpen or change the answer. It should never present a guessed date or green status.
 
 ## F-1 D/S Transition Cohort
 
@@ -18,6 +18,7 @@ Current deterministic output:
 - That date is capped at September 15, 2030.
 - F-1 departure period is 60 days after the calculated end.
 - A later transfer, program change, CPT plan, or target program end creates an extension-planning flag.
+- If the student travels after the effective date, the app should compare the stay-put D/S transition branch with the ordinary fixed-period return branch. The return branch uses the fixed-period 30-day post-period.
 
 ## Incoming or Readmitted F-1
 
@@ -32,7 +33,7 @@ Current deterministic output:
 - Admission end is the shorter of the I-20 program end or four years from admission.
 - Fixed-period F-1 departure/maintain-status period is 30 days after the admit-until date.
 - Program dates beyond that period create an extension-planning flag.
-- Post-completion OPT/STEM OPT admission after the effective date is not guessed by the MVP; it routes to confirmation/review until EAD, pending I-765, and return facts are known.
+- Post-completion OPT/STEM OPT admission after the effective date surfaces the ordinary fixed-period context, then asks for EAD, pending I-765, DSO recommendation, and return facts needed to sharpen the OPT/STEM return branch.
 
 ## Transition OPT/STEM OPT
 
@@ -47,7 +48,7 @@ Current deterministic output:
 - Filing on or before March 18, 2027 is flagged as inside the transition window.
 - Travel before filing is flagged for manual review.
 - STEM OPT filings must also be on or before the current OPT EAD end date.
-- Approved OPT/STEM OPT results require the EAD end date before the engine will calculate.
+- Approved OPT/STEM OPT results show the I-20-based transition dates already available and explain how the EAD end date changes the branch.
 
 ## Pending Extension and Travel
 

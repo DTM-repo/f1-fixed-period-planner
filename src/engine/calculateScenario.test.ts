@@ -107,7 +107,10 @@ describe("calculateScenario", () => {
     });
 
     expect(result.coverageEnd).toBe("2030-09-15");
-    expect(findingIds(result)).toContain("travel-may-reset-clock");
+    expect(result.latestDepartureDate).toBe("2030-11-14");
+    expect(findingIds(result)).toContain("travel-fixed-period-branch");
+    expect(result.findings.find((finding) => finding.id === "travel-fixed-period-branch")?.detail).toContain("2031");
+    expect(result.findings.find((finding) => finding.id === "travel-fixed-period-branch")?.detail).toContain("30-day");
   });
 
   it("surfaces manual review when transition eligibility facts are unknown", () => {
@@ -122,17 +125,36 @@ describe("calculateScenario", () => {
     expect(result.followUpQuestions.length).toBeGreaterThan(0);
   });
 
-  it("refuses to calculate from malformed dates", () => {
+  it("normalizes unambiguous date input before calculating", () => {
     const result = calculateScenario({
       ...baseTransitionScenario,
-      currentProgramEndDate: "2030-02-31"
+      startingPosition: "prospective_outside_us",
+      admissionBasis: "fixed_period",
+      inUsOnEffectiveDate: "no",
+      maintainingStatusOnEffectiveDate: "unknown",
+      currentProgramEndDate: "2030-5-20"
+    });
+
+    expect(result.status).toBe("ok");
+    expect(result.classification).toBe("incoming_fixed_period");
+    expect(result.coverageEnd).toBe("2030-05-20");
+    expect(result.latestDepartureDate).toBe("2030-06-19");
+    expect(findingIds(result)).toContain("date-input-normalized");
+  });
+
+  it("keeps safe transition dates while asking about ambiguous date input", () => {
+    const result = calculateScenario({
+      ...baseTransitionScenario,
+      programEndOnEffectiveDate: "2029-05-20",
+      currentProgramEndDate: "03/04/2030"
     });
 
     expect(result.status).toBe("manual");
-    expect(result.classification).toBe("manual_review");
-    expect(result.coverageEnd).toBeUndefined();
-    expect(result.latestDepartureDate).toBeUndefined();
-    expect(findingIds(result)).toContain("invalid-date-input");
+    expect(result.classification).toBe("transition_ds");
+    expect(result.coverageEnd).toBe("2029-05-20");
+    expect(result.latestDepartureDate).toBe("2029-07-19");
+    expect(findingIds(result)).toContain("date-confirmation-needed");
+    expect(findingIds(result)).toContain("target-program-end-needed");
     expect(result.followUpQuestions[0]).toContain("program end date");
   });
 
@@ -200,7 +222,10 @@ describe("calculateScenario", () => {
     });
 
     expect(result.status).toBe("manual");
+    expect(result.coverageEnd).toBe("2026-12-20");
+    expect(result.latestDepartureDate).toBe("2027-02-18");
     expect(findingIds(result)).toContain("approved-opt-ead-needed");
+    expect(result.findings.find((finding) => finding.id === "approved-opt-ead-needed")?.detail).toContain("If an approved OPT/STEM EAD expires after");
   });
 
   it("flags pending extension travel when return seeks a longer I-20 period", () => {
@@ -227,7 +252,7 @@ describe("calculateScenario", () => {
     expect(findingIds(result)).toContain("automatic-visa-revalidation");
   });
 
-  it("does not guess a fixed-period OPT/STEM admission result", () => {
+  it("gives fixed-period context while asking for OPT/STEM return facts", () => {
     const result = calculateScenario({
       ...baseTransitionScenario,
       startingPosition: "prospective_outside_us",
@@ -241,6 +266,9 @@ describe("calculateScenario", () => {
 
     expect(result.status).toBe("manual");
     expect(result.classification).toBe("incoming_fixed_period");
+    expect(result.coverageEnd).toBe("2027-08-20");
+    expect(result.latestDepartureDate).toBe("2027-09-19");
     expect(findingIds(result)).toContain("fixed-opt-admission-needs-review");
+    expect(result.findings.find((finding) => finding.id === "fixed-opt-admission-needs-review")?.detail).toContain("ordinary post-effective-date F-1 admission");
   });
 });

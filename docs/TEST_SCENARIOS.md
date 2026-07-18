@@ -7,16 +7,17 @@ The first deterministic tests cover:
 - Incoming F-1 student whose program runs beyond the four-year fixed admission cap.
 - Effective-date EAD end later than I-20 end but before the transition cap.
 - Effective-date EAD end later than September 15, 2030.
-- Current transition student testing post-effective-date travel.
+- Current transition student comparing the stay-put D/S branch with a post-effective-date fixed-period travel branch.
 - Unknown transition facts that must route to manual review.
-- Malformed dates that must route to manual review without calculating deadlines.
+- Unambiguous non-canonical dates that should normalize before calculation.
+- Ambiguous date inputs that should preserve safe partial results while asking for confirmation.
 - Transition OPT filing inside the March 18, 2027 checkpoint.
 - STEM OPT filing cases requiring the current OPT EAD end date.
 - STEM OPT filing after the current OPT EAD end date.
-- Approved OPT/STEM without an EAD end date.
+- Approved OPT/STEM without an EAD end date, while preserving the I-20-based transition dates already available.
 - Pending I-539 travel with return seeking a longer I-20 period.
 - Automatic visa revalidation branch.
-- Fixed-period OPT/STEM admission branch, which must not be guessed by the MVP.
+- Fixed-period OPT/STEM admission branch that shows ordinary fixed-period context while asking for the OPT/STEM return facts.
 
 Next test additions:
 
