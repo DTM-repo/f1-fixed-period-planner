@@ -1,33 +1,43 @@
 import type { StudentScenario } from "./types";
+import { normalizeDateInput } from "./dateMath";
 
-const isoDatePattern = /\b(20\d{2})[-/](0?[1-9]|1[0-2])[-/](0?[1-9]|[12]\d|3[01])\b/g;
-const usDatePattern = /\b(0?[1-9]|1[0-2])\/(0?[1-9]|[12]\d|3[01])\/(20\d{2})\b/g;
+const explicitDatePattern =
+  /\b(?:20\d{2}-\d{1,2}-\d{1,2}|(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t|tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?,?\s+20\d{2}|\d{1,2}(?:st|nd|rd|th)?\s+(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t|tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?),?\s+20\d{2})\b/gi;
 
-function pad(value: string): string {
-  return value.padStart(2, "0");
+interface DateMention {
+  value: string;
+  before: string;
+  after: string;
+  context: string;
 }
 
-function normalizeDate(match: RegExpExecArray, order: "ymd" | "mdy"): string {
-  if (order === "ymd") {
-    return `${match[1]}-${pad(match[2])}-${pad(match[3])}`;
+function extractDateMentions(text: string): DateMention[] {
+  const mentions: DateMention[] = [];
+  const seen = new Set<string>();
+  for (const match of text.matchAll(explicitDatePattern)) {
+    const normalized = normalizeDateInput(match[0]);
+    if (!normalized.value || seen.has(`${normalized.value}-${match.index}`)) {
+      continue;
+    }
+    seen.add(`${normalized.value}-${match.index}`);
+    const start = Math.max(0, match.index - 70);
+    const end = Math.min(text.length, match.index + match[0].length + 70);
+    const beforeStart = Math.max(0, match.index - 45);
+    const afterEnd = Math.min(text.length, match.index + match[0].length + 35);
+    mentions.push({
+      value: normalized.value,
+      before: text.slice(beforeStart, match.index).toLowerCase(),
+      after: text.slice(match.index + match[0].length, afterEnd).toLowerCase(),
+      context: text.slice(start, end).toLowerCase()
+    });
   }
-  return `${match[3]}-${pad(match[1])}-${pad(match[2])}`;
-}
-
-function extractDates(text: string): string[] {
-  const dates = new Set<string>();
-  for (const match of text.matchAll(isoDatePattern)) {
-    dates.add(normalizeDate(match, "ymd"));
-  }
-  for (const match of text.matchAll(usDatePattern)) {
-    dates.add(normalizeDate(match, "mdy"));
-  }
-  return [...dates].sort();
+  return mentions;
 }
 
 export function draftScenarioFromNarrative(text: string, current: StudentScenario): StudentScenario {
   const normalized = text.toLowerCase();
-  const dates = extractDates(text);
+  const dateMentions = extractDateMentions(text);
+  const dates = dateMentions.map((mention) => mention.value);
   const next: StudentScenario = {
     ...current,
     narrative: text
@@ -38,6 +48,9 @@ export function draftScenarioFromNarrative(text: string, current: StudentScenari
     next.admissionBasis = "fixed_period";
     next.inUsOnEffectiveDate = "no";
     next.maintainingStatusOnEffectiveDate = "unknown";
+  } else if (/\b(in the u\.?s\.?|inside the u\.?s\.?|already here|current f-?1)\b/.test(normalized)) {
+    next.startingPosition = "current_ds_inside_us";
+    next.inUsOnEffectiveDate = "yes";
   }
 
   if (/\b(d\/s|duration of status)\b/.test(normalized)) {
@@ -69,16 +82,43 @@ export function draftScenarioFromNarrative(text: string, current: StudentScenari
     next.reentryBasis = "unknown";
   }
 
-  if (!next.programEndOnEffectiveDate && dates[0]) {
-    next.programEndOnEffectiveDate = dates[0];
+  for (const mention of dateMentions) {
+    const nearBefore = mention.before.slice(-36);
+    const nearbyWords = `${nearBefore} ${mention.after.slice(0, 24)}`;
+    if (/\b(ead|work permit|employment authorization|card expires|card ends)\b/.test(nearBefore)) {
+      next.currentEadEndDate = mention.value;
+      if (/\bseptember 15|sep\.? 15|effective date|on sep|on september\b/.test(mention.context)) {
+        next.eadEndOnEffectiveDate = mention.value;
+      }
+      continue;
+    }
+    if (/\b(i-?765|file|filing|apply|application|receipt)\b/.test(nearBefore)) {
+      next.optFilingDate = mention.value;
+      continue;
+    }
+    if (/\b(i-?20|program|school|degree|study|studies|graduate|graduation|complete|finish|end|ends)\b/.test(nearBefore)) {
+      next.programEndOnEffectiveDate = mention.value;
+      next.currentProgramEndDate = mention.value;
+      continue;
+    }
+    if (/\b(travel|leave|re-enter|reenter|return|coming back|come back|arrive|arrival|enter)\b/.test(nearBefore)) {
+      next.reentryDate = mention.value;
+      continue;
+    }
+    if (/\b(ead|work permit|employment authorization|i-?765|file|filing|apply|application|receipt|travel|leave|re-enter|reenter|return|coming back|come back|arrive|arrival|enter)\b/.test(nearbyWords)) {
+      continue;
+    }
+    if (/\b(i-?20|program|school|degree|study|studies|graduate|graduation|complete|finish|end|ends)\b/.test(mention.context)) {
+      next.programEndOnEffectiveDate = mention.value;
+      next.currentProgramEndDate = mention.value;
+    }
   }
 
-  if (!next.currentProgramEndDate && dates.at(-1)) {
-    next.currentProgramEndDate = dates.at(-1);
+  if (dates.length === 1 && !next.currentProgramEndDate) {
+    next.currentProgramEndDate = dates[0];
   }
-
-  if (!next.reentryDate && dates.length > 1 && /\btravel|re-enter|reenter|return\b/.test(normalized)) {
-    next.reentryDate = dates[0];
+  if (dates.length > 0 && !next.programEndOnEffectiveDate && next.startingPosition !== "prospective_outside_us") {
+    next.programEndOnEffectiveDate = dates.at(-1);
   }
 
   return next;

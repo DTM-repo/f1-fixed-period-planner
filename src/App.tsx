@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExplanationResponse } from "./ai/explanationPayload";
+import { buildLocalExplanation } from "./ai/localExplanation";
 import { DEMO_SCENARIOS, DEFAULT_SCENARIO } from "./content/demoScenarios";
 import { calculateScenario } from "./engine/calculateScenario";
 import { formatDate } from "./engine/dateMath";
@@ -52,7 +53,7 @@ type SpeechRecognitionLike = {
   lang: string;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
   onend: (() => void) | null;
-  onerror: (() => void) | null;
+  onerror: ((event: { error?: string }) => void) | null;
   start: () => void;
   stop: () => void;
 };
@@ -119,6 +120,31 @@ const cptLabels: Record<CptPlan, string> = {
   after_admission_end: "After end",
   unknown: "Unknown"
 };
+
+const draftFieldLabels: Partial<Record<keyof StudentScenario, string>> = {
+  startingPosition: "starting point",
+  admissionBasis: "I-94 basis",
+  inUsOnEffectiveDate: "U.S. location on the rule date",
+  maintainingStatusOnEffectiveDate: "status on the rule date",
+  programEndOnEffectiveDate: "I-20 end on the rule date",
+  currentProgramEndDate: "program end date",
+  eadEndOnEffectiveDate: "EAD end on the rule date",
+  currentEadEndDate: "EAD end date",
+  optStage: "OPT/STEM situation",
+  optFilingDate: "I-765 filing date",
+  travelPosture: "travel plan",
+  reentryDate: "return/admission date",
+  reentryBasis: "return basis",
+  pendingExtensionOnDeparture: "pending I-539 travel",
+  transferOrProgramChange: "transfer/program change",
+  cptPlan: "CPT timing"
+};
+
+const draftFields = Object.keys(draftFieldLabels) as Array<keyof StudentScenario>;
+
+function describeDraftChanges(before: StudentScenario, after: StudentScenario): string[] {
+  return draftFields.flatMap((field) => (before[field] !== after[field] ? [draftFieldLabels[field] ?? field] : []));
+}
 
 const monthOptions = [
   { value: "1", label: "January" },
@@ -293,8 +319,10 @@ function findingIcon(tone: Finding["tone"]) {
 export default function App() {
   const [scenario, setScenario] = useState<StudentScenario>(DEFAULT_SCENARIO);
   const [recording, setRecording] = useState(false);
+  const [voiceNotice, setVoiceNotice] = useState("Voice input is ready.");
+  const [draftNotice, setDraftNotice] = useState("");
   const [aiExplanation, setAiExplanation] = useState<string>("");
-  const [aiState, setAiState] = useState<"idle" | "loading" | "failed" | "ready">("idle");
+  const [aiState, setAiState] = useState<"idle" | "loading" | "failed" | "fallback" | "ready">("idle");
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const result = useMemo(() => calculateScenario(scenario), [scenario]);
 
@@ -308,13 +336,29 @@ export default function App() {
     const demo = DEMO_SCENARIOS.find((item) => item.id === id);
     if (demo) {
       setScenario(demo.scenario);
+      setDraftNotice("");
       setAiExplanation("");
       setAiState("idle");
     }
   }
 
   function applyNarrativeDraft() {
-    setScenario((current) => draftScenarioFromNarrative(current.narrative ?? "", current));
+    const narrative = scenario.narrative?.trim() ?? "";
+    if (!narrative) {
+      setDraftNotice("Tell your story first, by typing or speaking, and then I can draft facts from it.");
+      return;
+    }
+
+    const nextScenario = draftScenarioFromNarrative(narrative, scenario);
+    const changes = describeDraftChanges(scenario, nextScenario);
+    setScenario(nextScenario);
+    setAiExplanation("");
+    setAiState("idle");
+    setDraftNotice(
+      changes.length
+        ? `Drafted ${changes.length} fact${changes.length === 1 ? "" : "s"} from your story: ${changes.join(", ")}.`
+        : "I read the story, but did not find facts that changed the calculator yet. Try including dates with month names, travel plans, OPT/STEM, transfer plans, or the I-20 end date."
+    );
   }
 
   function toggleSpeech() {
@@ -323,42 +367,66 @@ export default function App() {
       recognitionRef.current?.stop();
       recognitionRef.current = null;
       setRecording(false);
+      setVoiceNotice("Stopped listening.");
       return;
     }
 
     if (!Recognition) {
       setRecording(false);
+      setVoiceNotice("Voice input is not available in this browser. Typing your story works too.");
       return;
     }
 
     const recognition = new Recognition();
     recognition.continuous = true;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.lang = "en-US";
     recognition.onresult = (event) => {
       let transcript = "";
+      let interimTranscript = "";
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
         if (event.results[index].isFinal) {
           transcript += `${event.results[index][0].transcript} `;
+        } else {
+          interimTranscript += `${event.results[index][0].transcript} `;
         }
+      }
+      if (interimTranscript.trim()) {
+        setVoiceNotice(`Listening: "${interimTranscript.trim()}"`);
       }
       if (transcript.trim()) {
         setScenario((current) => ({
           ...current,
           narrative: `${current.narrative ?? ""} ${transcript}`.trim()
         }));
+        setVoiceNotice(`Added to your story: "${transcript.trim()}"`);
+        setDraftNotice("Press Draft facts to turn the story into calculator inputs.");
         setAiExplanation("");
         setAiState("idle");
       }
     };
-    recognition.onerror = () => setRecording(false);
+    recognition.onerror = (event) => {
+      setRecording(false);
+      setVoiceNotice(
+        event.error === "not-allowed"
+          ? "Microphone permission was blocked. Typing your story works too."
+          : "Voice input stopped before adding text. You can try again or type your story."
+      );
+    };
     recognition.onend = () => {
       recognitionRef.current = null;
       setRecording(false);
+      setVoiceNotice((current) => (current.startsWith("Listening") ? "Listening ended. Try speaking again or type your story." : current));
     };
     recognitionRef.current = recognition;
-    setRecording(true);
-    recognition.start();
+    try {
+      recognition.start();
+      setRecording(true);
+      setVoiceNotice("Listening. Speak naturally about your school, I-20 dates, travel, OPT/STEM, or transfer plans.");
+    } catch {
+      setRecording(false);
+      setVoiceNotice("Voice input could not start. Typing your story works too.");
+    }
   }
 
   async function explainWithAi() {
@@ -377,7 +445,8 @@ export default function App() {
       setAiExplanation(payload.explanation);
       setAiState("ready");
     } catch {
-      setAiState("failed");
+      setAiExplanation(buildLocalExplanation(result));
+      setAiState("fallback");
     }
   }
 
@@ -498,7 +567,7 @@ export default function App() {
             <textarea
               value={scenario.narrative ?? ""}
               onChange={(event) => update("narrative", event.currentTarget.value)}
-              placeholder="Example: I am in the U.S. now on F-1 D/S. My I-20 ends 2031-05-15 and I may travel in 2027."
+              placeholder="Example: I am in the U.S. now on F-1 D/S. My I-20 ends May 15, 2031 and I may travel in August 2027."
             />
             <div className="button-row">
               <button type="button" onClick={toggleSpeech}>
@@ -510,6 +579,14 @@ export default function App() {
                 Draft facts
               </button>
             </div>
+            <p className="muted status-line" aria-live="polite">
+              {recording ? "Recording..." : voiceNotice}
+            </p>
+            {draftNotice && (
+              <p className="muted status-line" aria-live="polite">
+                {draftNotice}
+              </p>
+            )}
           </section>
         </aside>
 
@@ -608,7 +685,7 @@ export default function App() {
           <section className="band">
             <div className="section-title">
               <Sparkles aria-hidden="true" />
-              <h2>AI explanation</h2>
+              <h2>Plain-language explanation</h2>
             </div>
             <div className="button-row">
               <button type="button" onClick={explainWithAi} disabled={aiState === "loading"}>
@@ -618,6 +695,9 @@ export default function App() {
             </div>
             {aiState === "failed" && (
               <p className="muted">The explanation call failed. The calculator result above is still available.</p>
+            )}
+            {aiState === "fallback" && (
+              <p className="muted">The model endpoint is not connected in this local preview, so this explanation comes from the calculator result.</p>
             )}
             {aiExplanation && <div className="ai-output">{aiExplanation}</div>}
           </section>

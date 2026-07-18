@@ -126,3 +126,23 @@ Each entry should capture:
 - Ran `npm ci`, `npm run test`, and `npm run build` successfully from the local clone.
 - Started Vite preview at `http://127.0.0.1:5177/`.
 - Confirmed the page responds with HTTP 200 and captured a Chrome screenshot showing the calculator UI and explicit Month / Day / Year controls.
+
+### Intake Interaction Fixes
+
+**Research**
+
+- Rechecked date-entry handling against the earlier internationalization decision: the narrative parser should accept explicit month-name dates and ISO dates, but should not guess compact slash dates like `6/2/2029`.
+
+**Decisions**
+
+- Voice/story intake must show visible status at every step. A silent "Draft facts" button feels broken and is unsafe because the student cannot tell whether the app understood them.
+- The local preview should not depend on a model-backed endpoint for basic usefulness. If the AI explanation call is unavailable, the app should fall back to a deterministic plain-language explanation built from the calculator result.
+- Narrative drafting should update obvious facts from the student's story even when defaults already exist, while still refusing ambiguous numeric dates.
+
+**Codex Assistance**
+
+- Fixed the narrative draft flow so speaking or typing a story can change calculator facts and produce visible "Drafted facts" feedback.
+- Added local voice-status messages for listening, unsupported speech recognition, microphone errors, and completed transcript capture.
+- Added deterministic explanation fallback copy when `/api/explain` is not available in the local Vite preview.
+- Added narrative parser tests for month-name dates, incoming/outside-U.S. stories, OPT filing dates, and ambiguous slash-date refusal.
+- Verified with `npm run test` and `npm run build` in the local clone.
