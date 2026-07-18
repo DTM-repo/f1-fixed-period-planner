@@ -13,12 +13,28 @@ npm install
 npm run dev
 ```
 
-For the optional AI explanation endpoint, set:
+Use Netlify Dev when testing server functions such as `/api/explain` or `/api/henry`:
+
+```bash
+npm run dev:netlify
+```
+
+For the OpenAI explanation and structured-intake endpoints, set:
 
 ```bash
 OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-5.6-terra
 ```
+
+For the hackathon-safe Henry/Chatbase domain-corpus endpoint, set:
+
+```bash
+CHATBASE_API_KEY=...
+CHATBASE_BOT_ID=...
+CHATBASE_MODEL=
+```
+
+The Chatbase bot used for this submission must be trained only on public-source or David-authored material. Do not connect a bot trained on NAFSA AM360 text unless NAFSA grants permission.
 
 ## Scope
 

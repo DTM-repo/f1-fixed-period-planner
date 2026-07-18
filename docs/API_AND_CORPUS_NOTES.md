@@ -43,7 +43,8 @@ Recommended app shape:
 - OpenAI: structured extraction from student narrative into candidate facts, confidence, ambiguity flags, and follow-up questions.
 - Student confirmation UI: show "what I understood" before applying extracted facts.
 - Deterministic engine: calculate dates, warnings, citations, and scenario comparisons from confirmed facts.
-- Henry/Chatbase: answer domain background questions and supply concise F-1/DSO context when the app needs broader explanation or source-review help.
+- Henry/Chatbase: answer domain background questions and supply concise F-1/DSO context through this app's `/api/henry` Netlify Function when the app needs broader explanation or source-review help.
+- `/api/henry` must remain a server-side proxy. The browser should never receive `CHATBASE_API_KEY`.
 
 Hackathon-safe source priority:
 

@@ -220,3 +220,22 @@ Each entry should capture:
 **Codex Assistance**
 
 - Helped separate copyright/licensing risk from product architecture: Henry/Chatbase can still be used, but the hackathon corpus should be clean, public, and author-created.
+
+### Chatbase API Endpoint
+
+**Research**
+
+- Reviewed the existing Henry Netlify proxy and Chatbase API documentation for `POST https://www.chatbase.co/api/v1/chat`.
+- Used the Chatbase `get-chatbots` endpoint with the existing API key to identify the trained clean bot candidate, without exposing the API key.
+
+**Decisions**
+
+- Add `/api/henry` as a narrow domain-context endpoint, not a student-status calculator.
+- Keep Chatbase credentials in `.env.local`/Netlify environment variables only.
+- Do not persist conversations through this endpoint for the first hackathon build; send bounded, stateless questions to reduce student-data retention.
+- Reject obvious direct identifiers such as SEVIS IDs, SSNs, and email addresses before calling Chatbase.
+
+**Codex Assistance**
+
+- Added a modern Netlify Function proxy for the clean Henry/Chatbase bot.
+- Wrapped calls with app-specific guardrails: public-source framing, no proprietary subscription manuals, plain-English student language, and no individual deadline/status calculations.
