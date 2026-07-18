@@ -146,3 +146,33 @@ Each entry should capture:
 - Added deterministic explanation fallback copy when `/api/explain` is not available in the local Vite preview.
 - Added narrative parser tests for month-name dates, incoming/outside-U.S. stories, OPT filing dates, and ambiguous slash-date refusal.
 - Verified with `npm run test` and `npm run build` in the local clone.
+
+### Live OpenAI and Netlify Function Wiring
+
+**Research**
+
+- Confirmed the local Vite preview alone cannot serve the Netlify Function route at `/api/explain`; testing the real model-backed explanation requires Netlify Dev or a deployed Netlify site.
+- Found that two existing local project env files contained OpenAI key entries, but one key was quota-blocked and the other was a placeholder/invalid value.
+- Created a fresh OpenAI project key through the secure Codex/OpenAI Platform flow and wrote it to this repo's ignored `.env.local`.
+
+**Decisions**
+
+- Keep the deterministic fallback as resilience, but do not treat it as sufficient for end-to-end testing.
+- Use Netlify Dev at `http://localhost:8888/` for local testing whenever the OpenAI-backed function needs to run.
+- The narrative intake needs an AI extraction/chat layer. The regex parser is only a temporary helper and cannot safely infer meaning in sentences like "I want to do OPT because in December 2026 I graduate."
+- Add a student-facing "what I understood" confirmation step so students can immediately correct extracted facts before the deterministic calculator treats them as confirmed.
+- Keep the legal/date result engine deterministic: AI can extract candidate facts, ask follow-up questions, and explain results, but deterministic code must still calculate deadlines and cite sources.
+- Netlify/GitHub sync is the right deployment path once the local function works with a quota-enabled key.
+
+**Codex Assistance**
+
+- Ran Netlify Dev with a fixed Vite target port so `/api/explain` routes through the local Netlify Function runtime.
+- Verified that the function reaches OpenAI by observing real API errors through the local endpoint.
+- Fixed the OpenAI Responses request by removing `temperature`, which the selected GPT-5.6 model rejects.
+- Added a reusable `npm run dev:netlify` script for local function testing.
+- Moved the Netlify env type declaration under `_shared` so Netlify Dev does not try to load it as a function.
+
+**Open Questions**
+
+- Enable billing/quota on the OpenAI project or provide a quota-enabled key, then rerun `/api/explain`.
+- Link the GitHub repo to the intended Netlify site and set `OPENAI_API_KEY` as a secret Netlify environment variable before deployed testing.

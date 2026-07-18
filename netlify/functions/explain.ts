@@ -77,7 +77,6 @@ export default async (request: Request): Promise<Response> => {
         "You are helping explain a source-cited immigration compliance calculator. You are not a lawyer, and you must not override the deterministic result.",
       input: buildPrompt(payload),
       max_output_tokens: 900,
-      temperature: 0.2,
       store: false
     })
   });
