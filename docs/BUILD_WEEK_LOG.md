@@ -62,7 +62,8 @@ Each entry should capture:
 - Students should not be asked to self-identify with expert labels like "current D/S, long program."
 - The intake should ask one plain-language question at a time only when direct confirmation is needed.
 - Preferred opening direction: black screen, typed introductory copy, a blinking-light "click to start talking" path, and a smaller "Get interviewed instead" path.
-- The interview route should still be progressive, plain-language, and student-centered.
+- Refined intake model: story-first is the default, but it should not mean voice-only. Students should be able to tell their story by speaking or typing.
+- The interview route should still be progressive, plain-language, and student-centered. It should default to text because students who avoid freeform speech are also unlikely to prefer a spoken interview, but voice can remain an optional accessibility/comfort layer.
 - Internal rule-engine terms should stay behind the scenes unless surfaced as plain explanations in context.
 - Results should be visual and personalized: the student's F-1 clock, safe dates, risk points, and scenario comparisons.
 
