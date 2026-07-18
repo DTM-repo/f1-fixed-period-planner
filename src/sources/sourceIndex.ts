@@ -52,6 +52,13 @@ export const SOURCE_INDEX: Record<string, SourceReference> = {
     locator: "Final rule updates for OPT/STEM OPT extension-of-stay filing context",
     url: "https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant",
     lastVerified: "2026-07-18"
+  },
+  "8CFR-214-2-F5V": {
+    id: "8CFR-214-2-F5V",
+    title: "8 CFR 214.2(f)(5)(v), F-1 period of preparation for departure",
+    locator: "Final rule fixed-period F-1 30-day departure/maintain-status period",
+    url: "https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant",
+    lastVerified: "2026-07-18"
   }
 };
 

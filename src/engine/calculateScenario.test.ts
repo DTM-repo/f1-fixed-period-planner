@@ -17,6 +17,10 @@ const baseTransitionScenario: StudentScenario = {
   cptPlan: "none"
 };
 
+function findingIds(result: ReturnType<typeof calculateScenario>) {
+  return result.findings.map((finding) => finding.id);
+}
+
 describe("calculateScenario", () => {
   it("caps a qualifying D/S transition student at four years plus the F-1 departure period", () => {
     const result = calculateScenario(baseTransitionScenario);
@@ -24,11 +28,12 @@ describe("calculateScenario", () => {
     expect(result.classification).toBe("transition_ds");
     expect(result.coverageEnd).toBe("2030-09-15");
     expect(result.latestDepartureDate).toBe("2030-11-14");
+    expect(result.departurePeriodDays).toBe(60);
     expect(result.extensionNeededBy).toBe("2030-09-15");
     expect(result.appliedRules.map((rule) => rule.id)).toContain("transition-ds-cap");
   });
 
-  it("uses the shorter of program length or four years for incoming fixed-period students", () => {
+  it("uses the shorter of program length or four years plus 30 days for incoming fixed-period students", () => {
     const result = calculateScenario({
       ...baseTransitionScenario,
       startingPosition: "prospective_outside_us",
@@ -40,8 +45,57 @@ describe("calculateScenario", () => {
 
     expect(result.classification).toBe("incoming_fixed_period");
     expect(result.coverageEnd).toBe("2030-05-20");
-    expect(result.latestDepartureDate).toBe("2030-07-19");
+    expect(result.latestDepartureDate).toBe("2030-06-19");
+    expect(result.departurePeriodDays).toBe(30);
     expect(result.extensionNeededBy).toBeUndefined();
+  });
+
+  it("caps incoming fixed-period students at four years from admission plus 30 days", () => {
+    const result = calculateScenario({
+      ...baseTransitionScenario,
+      startingPosition: "prospective_outside_us",
+      admissionBasis: "fixed_period",
+      inUsOnEffectiveDate: "no",
+      maintainingStatusOnEffectiveDate: "unknown",
+      currentProgramEndDate: "2032-05-20"
+    });
+
+    expect(result.status).toBe("caution");
+    expect(result.coverageEnd).toBe("2030-09-15");
+    expect(result.latestDepartureDate).toBe("2030-10-15");
+    expect(result.departurePeriodDays).toBe(30);
+    expect(result.extensionNeededBy).toBe("2030-09-15");
+    expect(findingIds(result)).toContain("fixed-extension-needed");
+  });
+
+  it("uses an effective-date EAD end when it is later than the I-20 but before the transition cap", () => {
+    const result = calculateScenario({
+      ...baseTransitionScenario,
+      programEndOnEffectiveDate: "2028-05-15",
+      currentProgramEndDate: "2028-05-15",
+      eadEndOnEffectiveDate: "2029-06-30"
+    });
+
+    expect(result.status).toBe("ok");
+    expect(result.coverageEnd).toBe("2029-06-30");
+    expect(result.latestDepartureDate).toBe("2029-08-29");
+    expect(result.departurePeriodDays).toBe(60);
+    expect(result.extensionNeededBy).toBeUndefined();
+  });
+
+  it("flags effective-date EAD coverage that runs beyond the four-year transition cap", () => {
+    const result = calculateScenario({
+      ...baseTransitionScenario,
+      programEndOnEffectiveDate: "2028-05-15",
+      currentProgramEndDate: "2028-05-15",
+      eadEndOnEffectiveDate: "2032-01-15"
+    });
+
+    expect(result.status).toBe("caution");
+    expect(result.coverageEnd).toBe("2030-09-15");
+    expect(result.latestDepartureDate).toBe("2030-11-14");
+    expect(result.extensionNeededBy).toBe("2030-09-15");
+    expect(findingIds(result)).toContain("transition-extension-needed");
   });
 
   it("models a post-effective-date regular reentry as a new fixed-period clock", () => {
@@ -53,7 +107,7 @@ describe("calculateScenario", () => {
     });
 
     expect(result.coverageEnd).toBe("2030-09-15");
-    expect(result.findings.map((finding) => finding.id)).toContain("travel-may-reset-clock");
+    expect(findingIds(result)).toContain("travel-may-reset-clock");
   });
 
   it("surfaces manual review when transition eligibility facts are unknown", () => {
@@ -68,6 +122,20 @@ describe("calculateScenario", () => {
     expect(result.followUpQuestions.length).toBeGreaterThan(0);
   });
 
+  it("refuses to calculate from malformed dates", () => {
+    const result = calculateScenario({
+      ...baseTransitionScenario,
+      currentProgramEndDate: "2030-02-31"
+    });
+
+    expect(result.status).toBe("manual");
+    expect(result.classification).toBe("manual_review");
+    expect(result.coverageEnd).toBeUndefined();
+    expect(result.latestDepartureDate).toBeUndefined();
+    expect(findingIds(result)).toContain("invalid-date-input");
+    expect(result.followUpQuestions[0]).toContain("program end date");
+  });
+
   it("flags transition OPT filings inside the March 18, 2027 window", () => {
     const result = calculateScenario({
       ...baseTransitionScenario,
@@ -78,6 +146,101 @@ describe("calculateScenario", () => {
     });
 
     expect(result.i765TransitionDeadline).toBe("2027-03-18");
-    expect(result.findings.map((finding) => finding.id)).toContain("opt-filing-in-window");
+    expect(findingIds(result)).toContain("opt-filing-in-window");
+  });
+
+  it("routes STEM OPT to manual review when the current OPT EAD end date is missing", () => {
+    const result = calculateScenario({
+      ...baseTransitionScenario,
+      programEndOnEffectiveDate: "2026-12-20",
+      currentProgramEndDate: "2026-12-20",
+      optStage: "stem_not_filed",
+      optFilingDate: "2027-02-01"
+    });
+
+    expect(result.status).toBe("manual");
+    expect(findingIds(result)).toContain("stem-current-ead-needed");
+    expect(findingIds(result)).not.toContain("stem-filing-in-window");
+  });
+
+  it("flags STEM OPT filings after the current OPT EAD end date as risk", () => {
+    const result = calculateScenario({
+      ...baseTransitionScenario,
+      programEndOnEffectiveDate: "2026-12-20",
+      currentProgramEndDate: "2026-12-20",
+      optStage: "stem_not_filed",
+      optFilingDate: "2027-02-01",
+      currentEadEndDate: "2027-01-31"
+    });
+
+    expect(result.status).toBe("risk");
+    expect(findingIds(result)).toContain("stem-filing-after-current-ead");
+  });
+
+  it("accepts STEM OPT transition timing only when both statutory dates fit", () => {
+    const result = calculateScenario({
+      ...baseTransitionScenario,
+      programEndOnEffectiveDate: "2026-12-20",
+      currentProgramEndDate: "2026-12-20",
+      optStage: "stem_not_filed",
+      optFilingDate: "2027-02-01",
+      currentEadEndDate: "2027-04-30"
+    });
+
+    expect(result.status).toBe("ok");
+    expect(findingIds(result)).toContain("stem-filing-in-window");
+  });
+
+  it("does not treat approved OPT/STEM as calculable without an EAD end date", () => {
+    const result = calculateScenario({
+      ...baseTransitionScenario,
+      programEndOnEffectiveDate: "2026-12-20",
+      currentProgramEndDate: "2026-12-20",
+      optStage: "post_completion_approved"
+    });
+
+    expect(result.status).toBe("manual");
+    expect(findingIds(result)).toContain("approved-opt-ead-needed");
+  });
+
+  it("flags pending extension travel when return seeks a longer I-20 period", () => {
+    const result = calculateScenario({
+      ...baseTransitionScenario,
+      pendingExtensionOnDeparture: "yes",
+      travelPosture: "planned",
+      reentryDate: "2028-01-10",
+      reentryBasis: "longer_program_i20"
+    });
+
+    expect(result.status).toBe("risk");
+    expect(findingIds(result)).toContain("pending-extension-travel");
+  });
+
+  it("routes automatic visa revalidation to manual review", () => {
+    const result = calculateScenario({
+      ...baseTransitionScenario,
+      travelPosture: "automatic_visa_revalidation",
+      reentryBasis: "automatic_visa_revalidation"
+    });
+
+    expect(result.status).toBe("manual");
+    expect(findingIds(result)).toContain("automatic-visa-revalidation");
+  });
+
+  it("does not guess a fixed-period OPT/STEM admission result", () => {
+    const result = calculateScenario({
+      ...baseTransitionScenario,
+      startingPosition: "prospective_outside_us",
+      admissionBasis: "fixed_period",
+      inUsOnEffectiveDate: "no",
+      maintainingStatusOnEffectiveDate: "unknown",
+      currentProgramEndDate: "2027-08-20",
+      optStage: "post_completion_pending",
+      optFilingDate: "2027-02-01"
+    });
+
+    expect(result.status).toBe("manual");
+    expect(result.classification).toBe("incoming_fixed_period");
+    expect(findingIds(result)).toContain("fixed-opt-admission-needs-review");
   });
 });

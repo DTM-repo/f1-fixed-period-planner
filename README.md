@@ -4,6 +4,8 @@ Build Week prototype for turning DHS's July 17, 2026 fixed-period admission rule
 
 The core calculator is deterministic: the same confirmed inputs produce the same dates, warnings, source citations, and follow-up questions without calling an AI model. OpenAI is used only for optional plain-language explanation and follow-up drafting.
 
+Safety bar: the app should prefer "needs review" or a follow-up question over a confident result when a source-backed branch is not fully modeled or the student's facts are not confirmed.
+
 ## Local Setup
 
 ```bash

@@ -1,9 +1,10 @@
 import { SOURCE_INDEX, source } from "../sources/sourceIndex";
-import { addDays, addYears, formatDate, isAfter, isOnOrBefore, maxDate, minDate } from "./dateMath";
+import { addDays, addYears, formatDate, isAfter, isOnOrBefore, isValidDateString, maxDate, minDate } from "./dateMath";
 import type { AppliedRule, Finding, PlannerResult, StudentScenario, TimelineItem } from "./types";
 
 export const DEFAULT_EFFECTIVE_DATE = "2026-09-15";
-export const F1_DEPARTURE_PERIOD_DAYS = 60;
+export const F1_TRANSITION_DEPARTURE_PERIOD_DAYS = 60;
+export const F1_FIXED_DEPARTURE_PERIOD_DAYS = 30;
 export const OPT_TRANSITION_I765_DEADLINE = "2027-03-18";
 
 const TRANSITION_RULE: AppliedRule = {
@@ -18,8 +19,8 @@ const FIXED_ADMISSION_RULE: AppliedRule = {
   id: "fixed-admission-period",
   label: "Fixed F-1 admission period",
   summary:
-    "A new or returning F-1 admission after the effective date is limited to the program length shown on the Form I-20 or four years, whichever is shorter, plus the F-1 departure period.",
-  sourceIds: ["8CFR-214-1-A4"]
+    "A new or returning F-1 admission after the effective date is limited to the program length shown on the Form I-20 or four years, whichever is shorter, plus the fixed-period F-1 30-day departure period.",
+  sourceIds: ["8CFR-214-1-A4", "8CFR-214-2-F5V"]
 };
 
 const OPT_TRANSITION_RULE: AppliedRule = {
@@ -47,6 +48,26 @@ function uniqueSources(rules: AppliedRule[], findings: Finding[]) {
     finding.sourceIds.forEach((id) => ids.add(id));
   }
   return [...ids].map((id) => SOURCE_INDEX[id]).filter(Boolean);
+}
+
+const DATE_FIELDS: Array<[keyof StudentScenario, string]> = [
+  ["programEndOnEffectiveDate", "I-20 end on September 15, 2026"],
+  ["currentProgramEndDate", "program end date"],
+  ["eadEndOnEffectiveDate", "EAD end on September 15, 2026"],
+  ["currentEadEndDate", "current EAD end date"],
+  ["optFilingDate", "I-765 filing date"],
+  ["reentryDate", "return/admission date"],
+  ["effectiveDate", "rule effective date"]
+];
+
+function findInvalidDateFacts(scenario: StudentScenario): string[] {
+  return DATE_FIELDS.flatMap(([field, label]) => {
+    const value = scenario[field];
+    if (typeof value === "string" && value && !isValidDateString(value)) {
+      return [`Confirm the ${label}. The app received "${value}", which is not a valid YYYY-MM-DD date.`];
+    }
+    return [];
+  });
 }
 
 function findMissingTransitionFacts(scenario: StudentScenario): string[] {
@@ -86,6 +107,23 @@ function timeline(
   tone: TimelineItem["tone"] = "neutral"
 ): TimelineItem {
   return { date, title, detail, tone };
+}
+
+function safestStatus(
+  preferred: PlannerResult["status"],
+  findings: Finding[],
+  followUpQuestions: string[]
+): PlannerResult["status"] {
+  if (findings.some((item) => item.tone === "danger")) {
+    return "risk";
+  }
+  if (followUpQuestions.length > 0 || findings.some((item) => item.tone === "question")) {
+    return "manual";
+  }
+  if (preferred === "ok" && findings.some((item) => item.tone === "warning")) {
+    return "caution";
+  }
+  return preferred;
 }
 
 function baseResult(
@@ -128,7 +166,24 @@ function computeTransitionCoverage(scenario: StudentScenario) {
   return minDate(documentEnd, cap);
 }
 
-function addOptFindings(scenario: StudentScenario, findings: Finding[], nextActions: string[]) {
+function isPostCompletionOpt(stage: StudentScenario["optStage"]): boolean {
+  return stage.startsWith("post_completion");
+}
+
+function isStemOpt(stage: StudentScenario["optStage"]): boolean {
+  return stage.startsWith("stem");
+}
+
+function isTransitionOpt(stage: StudentScenario["optStage"]): boolean {
+  return isPostCompletionOpt(stage) || isStemOpt(stage);
+}
+
+function addOptFindings(
+  scenario: StudentScenario,
+  findings: Finding[],
+  nextActions: string[],
+  options: { fixedAdmission?: boolean; transitionLatestDepartureDate?: string } = {}
+) {
   const optTransitionStages = new Set([
     "post_completion_not_filed",
     "post_completion_pending",
@@ -142,19 +197,63 @@ function addOptFindings(scenario: StudentScenario, findings: Finding[], nextActi
     return;
   }
 
-  if (scenario.optFilingDate && isOnOrBefore(scenario.optFilingDate, OPT_TRANSITION_I765_DEADLINE)) {
+  if (options.fixedAdmission) {
     findings.push(
       finding(
-        "opt-filing-in-window",
-        "good",
-        "OPT filing date falls inside the transition window",
-        `The tested I-765 filing date (${formatDate(
-          scenario.optFilingDate
-        )}) is on or before ${formatDate(OPT_TRANSITION_I765_DEADLINE)}.`,
+        "fixed-opt-admission-needs-review",
+        "question",
+        "OPT/STEM return needs its own fixed-admission check",
+        "Post-effective-date admission for post-completion OPT or STEM OPT can depend on the approved EAD end date, the DSO-recommended employment end date, a pending I-765 receipt, and travel/extension facts. This prototype will not guess that branch.",
+        ["8CFR-214-1-A4", "8CFR-214-2-F5V"]
+      )
+    );
+    nextActions.push("Confirm EAD or pending I-765 facts before calculating a fixed-period OPT/STEM admission.");
+    return;
+  }
+
+  if (scenario.optStage.endsWith("approved") && !scenario.currentEadEndDate && !scenario.eadEndOnEffectiveDate) {
+    findings.push(
+      finding(
+        "approved-opt-ead-needed",
+        "question",
+        "Approved OPT/STEM needs the EAD end date",
+        "When OPT or STEM OPT is already approved, the app needs the EAD expiration date before it can safely calculate the period of authorized stay.",
         OPT_TRANSITION_RULE.sourceIds
       )
     );
-  } else if (scenario.optStage.endsWith("not_filed")) {
+    nextActions.push("Confirm the EAD expiration date before relying on an approved OPT/STEM result.");
+    return;
+  }
+
+  if (scenario.optStage.endsWith("approved") && scenario.currentEadEndDate && !scenario.eadEndOnEffectiveDate) {
+    findings.push(
+      finding(
+        "approved-opt-branch-not-modeled",
+        "question",
+        "Approved OPT/STEM needs a dedicated status-end check",
+        "The app has an EAD end date, but this prototype only applies EAD coverage that existed on the rule's effective date. It will not silently fall back to the I-20 date for a later approved OPT/STEM branch.",
+        OPT_TRANSITION_RULE.sourceIds
+      )
+    );
+    nextActions.push("Confirm whether the approved EAD was active on September 15, 2026 or was approved under the transition OPT/STEM filing rule.");
+    return;
+  }
+
+  if (!scenario.optFilingDate && scenario.optStage.endsWith("pending")) {
+    findings.push(
+      finding(
+        "opt-pending-date-needed",
+        "question",
+        "Pending OPT/STEM filing date is needed",
+        "A pending I-765 can be treated differently depending on whether it was pending on the rule's effective date or filed later inside the transition window. The app needs the filing or receipt date before calling this branch safe.",
+        OPT_TRANSITION_RULE.sourceIds
+      )
+    );
+    nextActions.push("Confirm the I-765 receipt date for the pending OPT/STEM application.");
+    return;
+  }
+
+  if (!scenario.optFilingDate && scenario.optStage.endsWith("not_filed")) {
     findings.push(
       finding(
         "opt-filing-needed",
@@ -167,9 +266,114 @@ function addOptFindings(scenario: StudentScenario, findings: Finding[], nextActi
       )
     );
     nextActions.push("Confirm the planned I-765 filing date before relying on the transition OPT treatment.");
+    return;
   }
 
-  if (scenario.travelPosture !== "none" && scenario.optStage.endsWith("not_filed")) {
+  if (!scenario.optFilingDate) {
+    return;
+  }
+
+  const insideMarchWindow = isOnOrBefore(scenario.optFilingDate, OPT_TRANSITION_I765_DEADLINE);
+
+  if (!insideMarchWindow) {
+    findings.push(
+      finding(
+        "opt-filing-after-transition-window",
+        "warning",
+        "OPT/STEM filing date is outside the transition window",
+        `The tested I-765 filing date (${formatDate(
+          scenario.optFilingDate
+        )}) is after ${formatDate(OPT_TRANSITION_I765_DEADLINE)}. The app should not apply the special transition filing treatment to this scenario.`,
+        OPT_TRANSITION_RULE.sourceIds
+      )
+    );
+    nextActions.push("Plan for an extension-of-stay analysis instead of relying on the transition OPT exception.");
+  } else if (isPostCompletionOpt(scenario.optStage)) {
+    if (!options.transitionLatestDepartureDate) {
+      findings.push(
+        finding(
+          "post-opt-period-end-needed",
+          "question",
+          "Post-completion OPT needs the transition end date",
+          "The post-completion OPT exception requires filing before the transition period of admission expires, including the F-1 60-day departure period.",
+          OPT_TRANSITION_RULE.sourceIds
+        )
+      );
+    } else if (isOnOrBefore(scenario.optFilingDate, options.transitionLatestDepartureDate)) {
+      findings.push(
+        finding(
+          "opt-filing-in-window",
+          "good",
+          "OPT filing date falls inside the transition window",
+          `The tested I-765 filing date (${formatDate(
+            scenario.optFilingDate
+          )}) is on or before ${formatDate(OPT_TRANSITION_I765_DEADLINE)} and before the tested transition period expires.`,
+          OPT_TRANSITION_RULE.sourceIds
+        )
+      );
+    } else {
+      findings.push(
+        finding(
+          "post-opt-after-period-expiration",
+          "danger",
+          "Post-completion OPT filing is after the transition period",
+          `The tested I-765 filing date (${formatDate(
+            scenario.optFilingDate
+          )}) is after the calculated transition departure-period end (${formatDate(options.transitionLatestDepartureDate)}). The app should not apply the no-I-539 transition exception.`,
+          OPT_TRANSITION_RULE.sourceIds
+        )
+      );
+    }
+  } else if (isStemOpt(scenario.optStage)) {
+    if (!scenario.currentEadEndDate) {
+      findings.push(
+        finding(
+          "stem-current-ead-needed",
+          "question",
+          "STEM OPT needs the current OPT EAD end date",
+          "The STEM OPT transition exception requires filing before the current OPT EAD expires. The app needs that date before calling the STEM branch safe.",
+          OPT_TRANSITION_RULE.sourceIds
+        )
+      );
+      nextActions.push("Confirm the current post-completion OPT EAD end date before relying on STEM OPT transition treatment.");
+    } else if (isOnOrBefore(scenario.optFilingDate, scenario.currentEadEndDate)) {
+      findings.push(
+        finding(
+          "stem-filing-in-window",
+          "good",
+          "STEM OPT filing date fits the transition rule",
+          `The tested STEM OPT filing date (${formatDate(
+            scenario.optFilingDate
+          )}) is on or before ${formatDate(OPT_TRANSITION_I765_DEADLINE)} and before the current OPT EAD end date.`,
+          OPT_TRANSITION_RULE.sourceIds
+        )
+      );
+    } else {
+      findings.push(
+        finding(
+          "stem-filing-after-current-ead",
+          "danger",
+          "STEM OPT filing is after the current OPT EAD end date",
+          `The tested STEM OPT filing date (${formatDate(
+            scenario.optFilingDate
+          )}) is after the current OPT EAD end date (${formatDate(scenario.currentEadEndDate)}). The app should not apply the no-I-539 transition exception.`,
+          OPT_TRANSITION_RULE.sourceIds
+        )
+      );
+    }
+  }
+
+  if (scenario.travelPosture === "unknown" && scenario.optStage.endsWith("not_filed")) {
+    findings.push(
+      finding(
+        "opt-travel-unknown",
+        "question",
+        "Travel before filing must be confirmed",
+        "The transition OPT/STEM rule treats departure before filing differently. The app needs to know whether the student will leave the United States before filing.",
+        OPT_TRANSITION_RULE.sourceIds
+      )
+    );
+  } else if (scenario.travelPosture !== "none" && scenario.optStage.endsWith("not_filed")) {
     findings.push(
       finding(
         "opt-travel-before-filing",
@@ -254,7 +458,7 @@ function buildFixedAdmissionResult(scenario: StudentScenario, isReentry: boolean
   const fourYearEnd = addYears(startDate, 4);
   const targetProgramEnd = scenario.currentProgramEndDate ?? scenario.programEndOnEffectiveDate;
   const coverageEnd = targetProgramEnd ? minDate(targetProgramEnd, fourYearEnd) : undefined;
-  const latestDepartureDate = coverageEnd ? addDays(coverageEnd, F1_DEPARTURE_PERIOD_DAYS) : undefined;
+  const latestDepartureDate = coverageEnd ? addDays(coverageEnd, F1_FIXED_DEPARTURE_PERIOD_DAYS) : undefined;
   const extensionNeeded = coverageEnd && targetProgramEnd ? isAfter(targetProgramEnd, coverageEnd) : false;
   const appliedRules = [FIXED_ADMISSION_RULE];
   const findings: Finding[] = [];
@@ -268,7 +472,7 @@ function buildFixedAdmissionResult(scenario: StudentScenario, isReentry: boolean
     timelineItems.push(
       timeline(startDate, isReentry ? "Tested re-entry" : "Tested initial entry", "Admission clock starts from the inspected admission date."),
       timeline(coverageEnd, "Admit-until date to test", "Earlier of program end or four years from admission.", extensionNeeded ? "warning" : "good"),
-      timeline(latestDepartureDate!, "F-1 departure period ends", "Sixty days after the tested admit-until date.")
+      timeline(latestDepartureDate!, "F-1 departure/maintain-status period ends", "Thirty days after the tested program, training, or four-year point.")
     );
   }
 
@@ -289,17 +493,22 @@ function buildFixedAdmissionResult(scenario: StudentScenario, isReentry: boolean
 
   addTransferAndCptFindings(scenario, coverageEnd, findings, nextActions);
   addTravelFindings(scenario, findings, nextActions);
-  addOptFindings(scenario, findings, nextActions);
+  addOptFindings(scenario, findings, nextActions, { fixedAdmission: isTransitionOpt(scenario.optStage) });
+  const status = safestStatus(
+    followUpQuestions.length ? "manual" : extensionNeeded ? "caution" : "ok",
+    findings,
+    followUpQuestions
+  );
 
   const result = baseResult(
     scenario,
-    followUpQuestions.length ? "manual" : extensionNeeded ? "caution" : "ok",
+    status,
     isReentry ? "fixed_period_reentry" : "incoming_fixed_period",
     coverageEnd
       ? `Fixed-period admission through ${formatDate(coverageEnd)}`
       : "Fixed-period admission needs the I-20 program end",
     coverageEnd
-      ? `The tested admission period ends on ${formatDate(coverageEnd)}, with departure period through ${formatDate(
+      ? `The tested program/training or four-year point is ${formatDate(coverageEnd)}, with the fixed-period F-1 30-day period running through ${formatDate(
           latestDepartureDate
         )}.`
       : "A fixed-period admission cannot be calculated until the I-20 program end date is known.",
@@ -313,7 +522,7 @@ function buildFixedAdmissionResult(scenario: StudentScenario, isReentry: boolean
   return {
     ...result,
     coverageEnd,
-    departurePeriodDays: coverageEnd ? F1_DEPARTURE_PERIOD_DAYS : undefined,
+    departurePeriodDays: coverageEnd ? F1_FIXED_DEPARTURE_PERIOD_DAYS : undefined,
     latestDepartureDate,
     extensionNeededBy: extensionNeeded ? coverageEnd : undefined,
     i765TransitionDeadline: OPT_TRANSITION_I765_DEADLINE
@@ -321,28 +530,52 @@ function buildFixedAdmissionResult(scenario: StudentScenario, isReentry: boolean
 }
 
 export function calculateScenario(scenario: StudentScenario): PlannerResult {
-  const effectiveDate = scenario.effectiveDate ?? DEFAULT_EFFECTIVE_DATE;
+  const effectiveDate = isValidDateString(scenario.effectiveDate) ? scenario.effectiveDate : DEFAULT_EFFECTIVE_DATE;
+  const scenarioWithEffectiveDate = { ...scenario, effectiveDate };
+  const invalidDateFacts = findInvalidDateFacts(scenario);
+  if (invalidDateFacts.length) {
+    const findings = [
+      finding(
+        "invalid-date-input",
+        "question",
+        "A date needs to be checked",
+        "The rules engine will not calculate deadlines from a date that is missing or malformed. Correct the date first, then run the scenario again.",
+        []
+      )
+    ];
+
+    return baseResult(
+      scenarioWithEffectiveDate,
+      "manual",
+      "manual_review",
+      "Date confirmation needed before calculating",
+      "A date in this scenario could not be safely interpreted, so the app is refusing to produce a deadline.",
+      [],
+      findings,
+      [timeline(effectiveDate, "Rule effective date", "Calculation paused until the date issue is fixed.", "warning")],
+      invalidDateFacts,
+      ["Correct the flagged date before relying on this result."]
+    );
+  }
+
   const transitionCapDate = addYears(effectiveDate, 4);
-  const missingFacts = findMissingTransitionFacts(scenario);
-  const isProspective = scenario.startingPosition === "prospective_outside_us";
+  const missingFacts = findMissingTransitionFacts(scenarioWithEffectiveDate);
+  const isProspective = scenarioWithEffectiveDate.startingPosition === "prospective_outside_us";
   const isFixedAlready =
-    scenario.admissionBasis === "fixed_period" || scenario.startingPosition === "readmitted_fixed_period";
+    scenarioWithEffectiveDate.admissionBasis === "fixed_period" || scenarioWithEffectiveDate.startingPosition === "readmitted_fixed_period";
 
   if (isProspective || isFixedAlready) {
     return buildFixedAdmissionResult(
-      {
-        ...scenario,
-        effectiveDate
-      },
-      scenario.startingPosition === "readmitted_fixed_period"
+      scenarioWithEffectiveDate,
+      scenarioWithEffectiveDate.startingPosition === "readmitted_fixed_period"
     );
   }
 
   if (
     missingFacts.length ||
-    scenario.admissionBasis !== "duration_of_status" ||
-    scenario.inUsOnEffectiveDate !== "yes" ||
-    scenario.maintainingStatusOnEffectiveDate !== "yes"
+    scenarioWithEffectiveDate.admissionBasis !== "duration_of_status" ||
+    scenarioWithEffectiveDate.inUsOnEffectiveDate !== "yes" ||
+    scenarioWithEffectiveDate.maintainingStatusOnEffectiveDate !== "yes"
   ) {
     const findings = [
       finding(
@@ -355,7 +588,7 @@ export function calculateScenario(scenario: StudentScenario): PlannerResult {
     ];
 
     return baseResult(
-      { ...scenario, effectiveDate },
+      scenarioWithEffectiveDate,
       "manual",
       "manual_review",
       "More facts needed before calculating the transition period",
@@ -368,10 +601,12 @@ export function calculateScenario(scenario: StudentScenario): PlannerResult {
     );
   }
 
-  const coverageEnd = computeTransitionCoverage({ ...scenario, effectiveDate });
-  const latestDepartureDate = coverageEnd ? addDays(coverageEnd, F1_DEPARTURE_PERIOD_DAYS) : undefined;
-  const targetProgramEnd = scenario.currentProgramEndDate ?? scenario.programEndOnEffectiveDate;
-  const extensionNeeded = Boolean(coverageEnd && targetProgramEnd && isAfter(targetProgramEnd, coverageEnd));
+  const coverageEnd = computeTransitionCoverage(scenarioWithEffectiveDate);
+  const latestDepartureDate = coverageEnd ? addDays(coverageEnd, F1_TRANSITION_DEPARTURE_PERIOD_DAYS) : undefined;
+  const targetProgramEnd = scenarioWithEffectiveDate.currentProgramEndDate ?? scenarioWithEffectiveDate.programEndOnEffectiveDate;
+  const targetTrainingEnd = scenarioWithEffectiveDate.eadEndOnEffectiveDate;
+  const targetActivityEnd = maxDate(targetProgramEnd, targetTrainingEnd);
+  const extensionNeeded = Boolean(coverageEnd && targetActivityEnd && isAfter(targetActivityEnd, coverageEnd));
   const appliedRules = [TRANSITION_RULE];
   const findings: Finding[] = [
     finding(
@@ -384,13 +619,13 @@ export function calculateScenario(scenario: StudentScenario): PlannerResult {
   ];
   const nextActions: string[] = [];
 
-  if (extensionNeeded && coverageEnd && targetProgramEnd) {
+  if (extensionNeeded && coverageEnd && targetActivityEnd) {
     findings.push(
       finding(
         "transition-extension-needed",
         "warning",
-        "Program runs past the grandfathered period",
-        `The tested program end (${formatDate(targetProgramEnd)}) is later than the calculated transition end (${formatDate(
+        "Study or training runs past the grandfathered period",
+        `The tested study/training end (${formatDate(targetActivityEnd)}) is later than the calculated transition end (${formatDate(
           coverageEnd
         )}). Staying in the United States past that date likely requires an extension-of-stay strategy.`,
         ["8CFR-214-1-M1"]
@@ -411,11 +646,11 @@ export function calculateScenario(scenario: StudentScenario): PlannerResult {
     );
   }
 
-  if (scenario.travelPosture === "planned" || scenario.travelPosture === "completed") {
-    const fixedAfterTravel = scenario.reentryDate
+  if (scenarioWithEffectiveDate.travelPosture === "planned" || scenarioWithEffectiveDate.travelPosture === "completed") {
+    const fixedAfterTravel = scenarioWithEffectiveDate.reentryDate
       ? buildFixedAdmissionResult(
           {
-            ...scenario,
+            ...scenarioWithEffectiveDate,
             startingPosition: "readmitted_fixed_period",
             admissionBasis: "fixed_period",
             effectiveDate
@@ -449,29 +684,29 @@ export function calculateScenario(scenario: StudentScenario): PlannerResult {
     }
   }
 
-  addTransferAndCptFindings(scenario, coverageEnd, findings, nextActions);
-  addTravelFindings(scenario, findings, nextActions);
-  addOptFindings(scenario, findings, nextActions);
+  addTransferAndCptFindings(scenarioWithEffectiveDate, coverageEnd, findings, nextActions);
+  addTravelFindings(scenarioWithEffectiveDate, findings, nextActions);
+  addOptFindings(scenarioWithEffectiveDate, findings, nextActions, { transitionLatestDepartureDate: latestDepartureDate });
 
   const timelineItems = [
     timeline(effectiveDate, "Rule effective date", "Transition eligibility is tested on this date."),
     timeline(transitionCapDate, "Four-year transition cap", "Grandfathered D/S period cannot run past this date.", extensionNeeded ? "warning" : "neutral")
   ];
 
-  if (scenario.programEndOnEffectiveDate) {
+  if (scenarioWithEffectiveDate.programEndOnEffectiveDate) {
     timelineItems.push(
       timeline(
-        scenario.programEndOnEffectiveDate,
+        scenarioWithEffectiveDate.programEndOnEffectiveDate,
         "I-20 end on effective date",
         "Program end shown on the active I-20 used for the transition calculation."
       )
     );
   }
 
-  if (scenario.eadEndOnEffectiveDate) {
+  if (scenarioWithEffectiveDate.eadEndOnEffectiveDate) {
     timelineItems.push(
       timeline(
-        scenario.eadEndOnEffectiveDate,
+        scenarioWithEffectiveDate.eadEndOnEffectiveDate,
         "EAD end on effective date",
         "EAD end can be the later transition date if it extends beyond the program date."
       )
@@ -485,7 +720,7 @@ export function calculateScenario(scenario: StudentScenario): PlannerResult {
     );
   }
 
-  if (scenario.optStage !== "none" && scenario.optStage !== "pre_completion") {
+  if (scenarioWithEffectiveDate.optStage !== "none" && scenarioWithEffectiveDate.optStage !== "pre_completion") {
     appliedRules.push(OPT_TRANSITION_RULE);
     timelineItems.push(
       timeline(
@@ -497,13 +732,15 @@ export function calculateScenario(scenario: StudentScenario): PlannerResult {
     );
   }
 
-  if (scenario.pendingExtensionOnDeparture === "yes") {
+  if (scenarioWithEffectiveDate.pendingExtensionOnDeparture === "yes") {
     appliedRules.push(PENDING_EOS_TRAVEL_RULE);
   }
 
+  const status = safestStatus(extensionNeeded ? "caution" : "ok", findings, []);
+
   const result = baseResult(
-    { ...scenario, effectiveDate },
-    extensionNeeded ? "caution" : "ok",
+    scenarioWithEffectiveDate,
+    status,
     "transition_ds",
     coverageEnd
       ? `Grandfathered F-1 period through ${formatDate(coverageEnd)}`
@@ -523,7 +760,7 @@ export function calculateScenario(scenario: StudentScenario): PlannerResult {
   return {
     ...result,
     coverageEnd,
-    departurePeriodDays: coverageEnd ? F1_DEPARTURE_PERIOD_DAYS : undefined,
+    departurePeriodDays: coverageEnd ? F1_TRANSITION_DEPARTURE_PERIOD_DAYS : undefined,
     latestDepartureDate,
     extensionNeededBy: extensionNeeded ? coverageEnd : undefined,
     i765TransitionDeadline: OPT_TRANSITION_I765_DEADLINE,

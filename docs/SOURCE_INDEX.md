@@ -15,5 +15,6 @@ Rule identifiers used by the app:
 - `8CFR-214-1-M1-OPT`: transition treatment for certain post-completion OPT and STEM OPT filings.
 - `8CFR-214-1-C8`: travel while an extension request is pending.
 - `8CFR-214-2-F11`: practical-training extension-of-stay context.
+- `8CFR-214-2-F5V`: fixed-period F-1 30-day departure/maintain-status period.
 
 Source handling rule: a calculator result should expose the exact source IDs that drove the result. AI explanation may paraphrase those results, but it must not invent citations.

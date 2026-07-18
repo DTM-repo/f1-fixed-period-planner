@@ -78,3 +78,32 @@ Each entry should capture:
 - Should the first talking path use browser speech recognition, OpenAI audio transcription, or both?
 - What is the best visual metaphor for the result: timeline, status clock, journey map, decision tree, or combination?
 - How should the app handle translation or multilingual support in the first demo without overcommitting?
+
+### Logic QA: No False Results
+
+**Research**
+
+- Rechecked the official Federal Register final rule text against the engine branches for fixed admission, D/S transition, OPT/STEM transition treatment, pending extension travel, and F-1 preparation-for-departure periods.
+- Confirmed a key split that the first prototype blurred: D/S transition F-1 students use the transition 60-day F-1 departure period, while new/readmitted fixed-period F-1 admissions use the fixed-period 30-day departure/maintain-status period.
+- Confirmed that transition OPT/STEM treatment depends on specific filing windows and, for STEM OPT, the current OPT EAD end date.
+
+**Decisions**
+
+- Adopted David's bright-line safety standard: the app must never give a confident false result. If confirmed facts or a fully modeled rule branch are missing, the result should become manual review, risk, or a follow-up question.
+- Known danger findings now outrank other status signals so concrete risks are not softened.
+- Invalid or malformed dates stop the calculation rather than being coerced into a deadline.
+- Fixed-period OPT/STEM admission after the effective date is explicitly not guessed in the MVP. It routes to confirmation/review until the approved EAD, pending I-765, DSO recommendation, travel, and admission facts are modeled.
+- Approved OPT/STEM transition results require an EAD end date before the engine will calculate.
+
+**Codex Assistance**
+
+- Found and fixed the fixed-period F-1 departure-period bug: incoming/readmitted fixed-period F-1 now uses 30 days instead of the transition 60 days.
+- Hardened the deterministic engine so questions and danger findings escalate top-level status.
+- Added source ID coverage for 8 CFR 214.2(f)(5)(v).
+- Expanded deterministic scenario tests around cap dates, EAD dates, malformed dates, STEM OPT timing, pending extension travel, AVR, and fixed-period OPT/STEM refusal.
+- Verified the rules module with a full TypeScript compile plus an isolated TypeScript compile and Node assertion run after Vite/Vitest CLI commands hung before reporting in this local Node v24.14.0 environment, including `--version` checks.
+
+**Open Questions**
+
+- Diagnose why the Vite/Vitest wrappers hung locally even though direct TypeScript compilation and isolated engine assertions passed.
+- Build a dedicated approved OPT/STEM status-end branch only after source-backed data requirements are explicit.
