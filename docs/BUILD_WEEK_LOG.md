@@ -263,3 +263,15 @@ Each entry should capture:
 - Changed narrative-apply behavior to start from an unknown intake baseline, so old demo/default dates do not remain in the calculator as if the student confirmed them.
 - Verified `/api/intake` live through Netlify Dev with a narrative where graduation, OPT intent, I-20 end date, and travel appeared together. The model treated the full I-20 date as the program end date, refused to convert "August 2027" into a reentry date, and did not treat graduation as an OPT filing/start/EAD date.
 - Verified `/api/explain` live through Netlify Dev with `gpt-5.6-terra`.
+
+### Intake Merge Behavior
+
+**Decision**
+
+- Reversed the blunt unknown-baseline apply behavior after David tested the app and found it erased fields he had already entered manually.
+- Applying OpenAI-understood facts now merges only the supported extracted fields into the current scenario, preserving unrelated manually entered facts.
+- The remaining product problem is funnel clarity: the app needs a single clear source-of-truth path and should distinguish confirmed manual facts, AI-understood candidate facts, and demo/sample facts.
+
+**Codex Assistance**
+
+- Updated the apply step so narrative intake does not undo prior student input.

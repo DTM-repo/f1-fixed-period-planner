@@ -121,19 +121,6 @@ const cptLabels: Record<CptPlan, string> = {
   unknown: "Unknown"
 };
 
-const INTAKE_BASE_SCENARIO: StudentScenario = {
-  startingPosition: "unknown",
-  admissionBasis: "unknown",
-  inUsOnEffectiveDate: "unknown",
-  maintainingStatusOnEffectiveDate: "unknown",
-  optStage: "none",
-  travelPosture: "unknown",
-  reentryBasis: "unknown",
-  pendingExtensionOnDeparture: "unknown",
-  transferOrProgramChange: "unknown",
-  cptPlan: "unknown"
-};
-
 const factFieldLabels: Record<IntakeFactField, string> = {
   startingPosition: "starting point",
   admissionBasis: "I-94 basis",
@@ -221,7 +208,7 @@ function scenarioWithFacts(current: StudentScenario, facts: IntakeCandidateFact[
   }
 
   return {
-    ...INTAKE_BASE_SCENARIO,
+    ...current,
     ...patch,
     narrative: current.narrative
   } as StudentScenario;
