@@ -185,6 +185,12 @@ a {
   font-weight: 720;
 }
 
+.date-triplet {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1.4fr) minmax(68px, 0.6fr) minmax(84px, 0.8fr);
+}
+
 input,
 select,
 textarea {
@@ -210,6 +216,12 @@ button:focus-visible,
 a:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 2px;
+}
+
+@media (max-width: 520px) {
+  .date-triplet {
+    grid-template-columns: 1fr;
+  }
 }
 
 .segmented {

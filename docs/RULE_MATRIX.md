@@ -2,6 +2,8 @@
 
 Core safety rule: the app should give every source-backed result it can from confirmed facts, then mark the exact fact that would sharpen or change the answer. It should never present a guessed date or green status.
 
+Date input rule: student-entered dates should use an explicit month name, day, and year. Numeric slash/dot dates are treated as a confirmation question because date order varies by country. Browser date-picker values may still be stored internally as `YYYY-MM-DD`.
+
 ## F-1 D/S Transition Cohort
 
 Inputs:

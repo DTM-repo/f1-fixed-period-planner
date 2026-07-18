@@ -9,8 +9,8 @@ The first deterministic tests cover:
 - Effective-date EAD end later than September 15, 2030.
 - Current transition student comparing the stay-put D/S branch with a post-effective-date fixed-period travel branch.
 - Unknown transition facts that must route to manual review.
-- Unambiguous non-canonical dates that should normalize before calculation.
-- Ambiguous date inputs that should preserve safe partial results while asking for confirmation.
+- Month-name dates that should normalize before calculation.
+- Numeric date inputs that should preserve safe partial results while asking for confirmation because date order varies by country.
 - Transition OPT filing inside the March 18, 2027 checkpoint.
 - STEM OPT filing cases requiring the current OPT EAD end date.
 - STEM OPT filing after the current OPT EAD end date.

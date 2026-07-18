@@ -125,14 +125,14 @@ describe("calculateScenario", () => {
     expect(result.followUpQuestions.length).toBeGreaterThan(0);
   });
 
-  it("normalizes unambiguous date input before calculating", () => {
+  it("normalizes month-name date input before calculating", () => {
     const result = calculateScenario({
       ...baseTransitionScenario,
       startingPosition: "prospective_outside_us",
       admissionBasis: "fixed_period",
       inUsOnEffectiveDate: "no",
       maintainingStatusOnEffectiveDate: "unknown",
-      currentProgramEndDate: "2030-5-20"
+      currentProgramEndDate: "May 20, 2030"
     });
 
     expect(result.status).toBe("ok");
@@ -142,7 +142,7 @@ describe("calculateScenario", () => {
     expect(findingIds(result)).toContain("date-input-normalized");
   });
 
-  it("keeps safe transition dates while asking about ambiguous date input", () => {
+  it("keeps safe transition dates while asking about numeric date input", () => {
     const result = calculateScenario({
       ...baseTransitionScenario,
       programEndOnEffectiveDate: "2029-05-20",

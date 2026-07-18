@@ -74,15 +74,9 @@ export function normalizeDateInput(value?: string): DateNormalizationResult {
     return { value: trimmed, normalized: false };
   }
 
-  const isoLike = trimmed.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  const isoLike = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
   if (isoLike) {
     const normalized = canonicalDate(Number(isoLike[1]), Number(isoLike[2]), Number(isoLike[3]));
-    return normalized ? { value: normalized, normalized: true } : { normalized: false, issue: "invalid" };
-  }
-
-  const compact = trimmed.match(/^(\d{4})(\d{2})(\d{2})$/);
-  if (compact) {
-    const normalized = canonicalDate(Number(compact[1]), Number(compact[2]), Number(compact[3]));
     return normalized ? { value: normalized, normalized: true } : { normalized: false, issue: "invalid" };
   }
 
@@ -100,20 +94,9 @@ export function normalizeDateInput(value?: string): DateNormalizationResult {
     return normalized ? { value: normalized, normalized: true } : { normalized: false, issue: "invalid" };
   }
 
-  const numeric = trimmed.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  const numeric = trimmed.match(/^(\d{1,4})[-/.](\d{1,2})[-/.](\d{1,4})$/) || trimmed.match(/^(\d{8})$/);
   if (numeric) {
-    const first = Number(numeric[1]);
-    const second = Number(numeric[2]);
-    const year = Number(numeric[3]);
-
-    if (first <= 12 && second <= 12) {
-      return { normalized: false, issue: "ambiguous" };
-    }
-
-    const month = first > 12 ? second : first;
-    const day = first > 12 ? first : second;
-    const normalized = canonicalDate(year, month, day);
-    return normalized ? { value: normalized, normalized: true } : { normalized: false, issue: "invalid" };
+    return { normalized: false, issue: "ambiguous" };
   }
 
   return { normalized: false, issue: "invalid" };

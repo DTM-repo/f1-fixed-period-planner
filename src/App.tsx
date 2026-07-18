@@ -11,7 +11,7 @@ import {
   Square,
   Wand2
 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExplanationResponse } from "./ai/explanationPayload";
 import { DEMO_SCENARIOS, DEFAULT_SCENARIO } from "./content/demoScenarios";
 import { calculateScenario } from "./engine/calculateScenario";
@@ -120,6 +120,48 @@ const cptLabels: Record<CptPlan, string> = {
   unknown: "Unknown"
 };
 
+const monthOptions = [
+  { value: "1", label: "January" },
+  { value: "2", label: "February" },
+  { value: "3", label: "March" },
+  { value: "4", label: "April" },
+  { value: "5", label: "May" },
+  { value: "6", label: "June" },
+  { value: "7", label: "July" },
+  { value: "8", label: "August" },
+  { value: "9", label: "September" },
+  { value: "10", label: "October" },
+  { value: "11", label: "November" },
+  { value: "12", label: "December" }
+];
+
+interface DateParts {
+  month: string;
+  day: string;
+  year: string;
+}
+
+function datePartsFromValue(value?: string): DateParts {
+  const match = value?.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  return {
+    month: match ? String(Number(match[2])) : "",
+    day: match ? String(Number(match[3])) : "",
+    year: match ? match[1] : ""
+  };
+}
+
+function dateValueFromParts(parts: DateParts): string | undefined {
+  const empty = !parts.month && !parts.day && !parts.year;
+  if (empty) {
+    return undefined;
+  }
+  if (!parts.month || !parts.day || !parts.year) {
+    return undefined;
+  }
+
+  return `${parts.year.padStart(4, "0")}-${parts.month.padStart(2, "0")}-${parts.day.padStart(2, "0")}`;
+}
+
 function SelectField<T extends string>({
   label,
   value,
@@ -154,10 +196,56 @@ function DateField({
   value?: string;
   onChange: (value: string | undefined) => void;
 }) {
+  const [parts, setParts] = useState(() => datePartsFromValue(value));
+
+  useEffect(() => {
+    setParts(datePartsFromValue(value));
+  }, [value]);
+
+  function updatePart(part: keyof DateParts, nextValue: string) {
+    const nextParts = { ...parts, [part]: nextValue };
+    setParts(nextParts);
+
+    const complete = Boolean(nextParts.month && nextParts.day && nextParts.year);
+    const empty = !nextParts.month && !nextParts.day && !nextParts.year;
+    if (complete || empty) {
+      onChange(dateValueFromParts(nextParts));
+    }
+  }
+
   return (
-    <label className="field">
+    <label className="field date-field">
       <span>{label}</span>
-      <input type="date" value={value ?? ""} onChange={(event) => onChange(event.currentTarget.value || undefined)} />
+      <div className="date-triplet">
+        <select aria-label={`${label} month`} value={parts.month} onChange={(event) => updatePart("month", event.currentTarget.value)}>
+          <option value="">Month</option>
+          {monthOptions.map((month) => (
+            <option key={month.value} value={month.value}>
+              {month.label}
+            </option>
+          ))}
+        </select>
+        <input
+          aria-label={`${label} day`}
+          inputMode="numeric"
+          min="1"
+          max="31"
+          placeholder="Day"
+          type="number"
+          value={parts.day}
+          onChange={(event) => updatePart("day", event.currentTarget.value)}
+        />
+        <input
+          aria-label={`${label} year`}
+          inputMode="numeric"
+          min="2020"
+          max="2040"
+          placeholder="Year"
+          type="number"
+          value={parts.year}
+          onChange={(event) => updatePart("year", event.currentTarget.value)}
+        />
+      </div>
     </label>
   );
 }
