@@ -197,20 +197,102 @@ function factDisplayValue(fact: IntakeCandidateFact): string {
 }
 
 function readyFacts(facts: IntakeCandidateFact[]): IntakeCandidateFact[] {
-  return facts.filter((fact) => fact.confidence !== "low" && isSupportedFactValue(fact));
+  return facts.filter((fact) => fact.confidence !== "low" && fact.value !== "unknown" && isSupportedFactValue(fact));
 }
 
 function scenarioWithFacts(current: StudentScenario, facts: IntakeCandidateFact[]): StudentScenario {
-  const patch: Partial<Record<IntakeFactField, string>> = {};
+  let next: StudentScenario = { ...current };
   for (const fact of readyFacts(facts)) {
-    patch[fact.field] = fact.value;
+    if (fact.field === "startingPosition") {
+      const value = fact.value as StartingPosition;
+      next = {
+        ...next,
+        startingPosition: value,
+        admissionBasis:
+          value === "current_ds_inside_us"
+            ? next.admissionBasis === "fixed_period"
+              ? next.admissionBasis
+              : "duration_of_status"
+            : value === "prospective_outside_us"
+              ? "fixed_period"
+              : next.admissionBasis,
+        inUsOnEffectiveDate: value === "prospective_outside_us" ? "no" : next.inUsOnEffectiveDate,
+        travelPosture: next.travelPosture ?? "unknown",
+        returningAfterEffectiveDate: next.returningAfterEffectiveDate ?? "unknown",
+        optIntent: next.optIntent ?? "unknown",
+        schoolTransferPlan: next.schoolTransferPlan ?? "unknown",
+        academicProgramChangePlan: next.academicProgramChangePlan ?? "unknown"
+      };
+      continue;
+    }
+
+    if (fact.field === "admissionBasis") {
+      next = {
+        ...next,
+        admissionBasis: fact.value as AdmissionBasis,
+        i94AdmitUntilDate: fact.value === "fixed_period" ? next.i94AdmitUntilDate : undefined
+      };
+      continue;
+    }
+
+    if (fact.field === "travelPosture") {
+      const value = fact.value as TravelPosture;
+      next = {
+        ...next,
+        travelPosture: value,
+        returningAfterEffectiveDate: value === "none" ? "no" : next.returningAfterEffectiveDate ?? "unknown",
+        reentryDate: value === "none" ? undefined : next.reentryDate,
+        reentryBasis: value === "none" ? "unknown" : next.reentryBasis,
+        pendingExtensionOnDeparture: value === "none" ? "no" : next.pendingExtensionOnDeparture
+      };
+      continue;
+    }
+
+    if (fact.field === "reentryDate") {
+      next = {
+        ...next,
+        reentryDate: fact.value,
+        travelPosture: next.travelPosture === "none" || next.travelPosture === "unknown" ? "planned" : next.travelPosture,
+        returningAfterEffectiveDate: compareDates(fact.value, next.effectiveDate ?? DEFAULT_EFFECTIVE_DATE) > 0 ? "yes" : "no"
+      };
+      continue;
+    }
+
+    if (fact.field === "optStage") {
+      next = {
+        ...next,
+        optStage: fact.value as OptStage,
+        optIntent: fact.value === "none" ? "no" : "yes"
+      };
+      continue;
+    }
+
+    next = {
+      ...next,
+      [fact.field]: fact.value
+    } as StudentScenario;
+  }
+
+  if (isCurrentTrack(next)) {
+    next = {
+      ...next,
+      admissionBasis: next.admissionBasis === "unknown" ? "duration_of_status" : next.admissionBasis,
+      programEndOnEffectiveDate: next.programEndOnEffectiveDate ?? next.currentProgramEndDate,
+      currentProgramEndDate: next.currentProgramEndDate ?? next.programEndOnEffectiveDate
+    };
+  }
+
+  if (next.reentryDate && hasTravelPlan(next)) {
+    next = {
+      ...next,
+      returningAfterEffectiveDate: compareDates(next.reentryDate, next.effectiveDate ?? DEFAULT_EFFECTIVE_DATE) > 0 ? "yes" : "no"
+    };
   }
 
   return {
-    ...current,
-    ...patch,
+    ...next,
     narrative: current.narrative
-  } as StudentScenario;
+  };
 }
 
 const monthOptions = [
@@ -1197,13 +1279,16 @@ export default function App() {
       return;
     }
 
+    const factsToApply = readyFacts(intakeExtraction.facts);
     const nextScenario = scenarioWithFacts(scenario, intakeExtraction.facts);
     const changes = describeDraftChanges(scenario, nextScenario);
     setScenario(nextScenario);
     setDraftNotice(
       changes.length
-        ? `Applied ${changes.length} confirmed fact${changes.length === 1 ? "" : "s"}: ${changes.join(", ")}.`
-        : "No calculator facts changed. The remaining items need clarification or can be edited directly."
+        ? `Updated ${changes.length} scenario field${changes.length === 1 ? "" : "s"} from ${factsToApply.length} applied fact${factsToApply.length === 1 ? "" : "s"}: ${changes.join(", ")}.`
+        : factsToApply.length
+          ? "Those facts were already in your scenario. Nothing else changed."
+          : "No facts are ready to apply yet. The remaining items need clarification or can be edited directly."
     );
   }
 
@@ -1562,7 +1647,9 @@ export default function App() {
 
                 <button type="button" onClick={applyExtractedFacts} disabled={applicableFacts.length === 0}>
                   <CheckCircle2 aria-hidden="true" />
-                  Apply understood facts
+                  {applicableFacts.length
+                    ? `Apply ${applicableFacts.length} fact${applicableFacts.length === 1 ? "" : "s"} to my scenario`
+                    : "No facts ready to apply"}
                 </button>
               </div>
             )}

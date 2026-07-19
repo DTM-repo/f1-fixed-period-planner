@@ -342,3 +342,20 @@ Each entry should capture:
 - Rewrote the deterministic engine's result copy from third-person expert language into second-person student language.
 - Added linked citation chips for finding-level source IDs.
 - Adjusted the OpenAI intake function so summaries, follow-ups, cautions, and fact notes address the student as "you" and do not strand broad follow-up questions with no way to answer them.
+
+### Narrative Apply Fix
+
+**Research**
+
+- Live-tested narrative intake with a current F-1 student story. GPT extracted useful dates and travel facts, but the scenario could remain visually stuck at the first question if the starting-position/default-D/S facts were too conservative or if derived fields were hidden.
+
+**Decisions**
+
+- Treat current-in-the-U.S. F-1 narratives as the current-student path and default I-94 to D/S unless the narrative gives a fixed I-94 end date.
+- Applying facts should update the same visible scenario fields the interview flow uses, including the current I-20 date and return-after-September-15 branch.
+- Do not apply `unknown` facts. Leave them as follow-up questions instead of letting them overwrite useful scenario state.
+
+**Codex Assistance**
+
+- Rebuilt the apply step from raw field spreading into scenario-aware fact application.
+- Verified in the live app that clicking Apply moves the scenario into the current-F-1 flow, populates the I-20 date, and surfaces the travel branch.

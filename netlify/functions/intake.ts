@@ -49,7 +49,7 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
         "If the student gives the active I-20/program end date and does not mention a different I-20 before the rule effective date, return currentProgramEndDate and also return programEndOnEffectiveDate with needsConfirmation=true.",
         "Only return i94AdmitUntilDate when the student explicitly gives an I-94 admit-until, expiration, or end date. Do not confuse it with an I-20 date, visa expiration date, passport date, OPT date, or graduation date.",
         "For incoming students outside the United States, use startingPosition=prospective_outside_us, admissionBasis=fixed_period, and inUsOnEffectiveDate=no only if the narrative supports it.",
-        "For current students in the United States on D/S, use startingPosition=current_ds_inside_us and admissionBasis=duration_of_status only if the narrative supports it.",
+        "If the student says they are currently in the United States in F-1 status, use startingPosition=current_ds_inside_us. If they do not mention an I-94 end date, use admissionBasis=duration_of_status with needsConfirmation=true because current F-1 students usually have D/S but should still be able to correct it.",
         "If the narrative mentions travel but not how the student will return, use travelPosture=planned and reentryBasis=unknown.",
         "Prefer follow-up questions over overconfident extraction."
       ],
