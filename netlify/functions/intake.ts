@@ -51,6 +51,8 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
         "For incoming students outside the United States, use startingPosition=prospective_outside_us, admissionBasis=fixed_period, and inUsOnEffectiveDate=no only if the narrative supports it.",
         "If the student says they are currently in the United States in F-1 status, use startingPosition=current_ds_inside_us. If they do not mention an I-94 end date, use admissionBasis=duration_of_status with needsConfirmation=true because current F-1 students usually have D/S but should still be able to correct it.",
         "If the narrative mentions travel but not how the student will return, use travelPosture=planned and reentryBasis=unknown.",
+        "If the student says bachelor, associate, undergraduate, or undergrad, use educationLevel=undergraduate. If the student says master's, PhD, doctorate, doctoral, graduate school, or graduate program, use educationLevel=graduate.",
+        "If the student says they want a second program at the same level or a lower level, including a second master's, second bachelor's, another associate degree, or a lower degree after completing a higher one, use nextProgramLevelPlan=same_or_lower with needsConfirmation=true unless the level is unmistakable.",
         "Prefer follow-up questions over overconfident extraction."
       ],
       allowedFields: {
@@ -79,6 +81,8 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
         reentryBasis: ["same_i20_balance", "new_f1_admission", "longer_program_i20", "automatic_visa_revalidation", "unknown"],
         pendingExtensionOnDeparture: ["yes", "no", "unknown"],
         transferOrProgramChange: ["yes", "no", "unknown"],
+        educationLevel: ["undergraduate", "graduate", "other", "unknown"],
+        nextProgramLevelPlan: ["higher", "same_or_lower", "not_planning", "unknown"],
         cptPlan: ["none", "before_admission_end", "after_admission_end", "unknown"]
       },
       currentScenario: payload.currentScenario,
@@ -125,6 +129,8 @@ const intakeSchema = {
               "reentryBasis",
               "pendingExtensionOnDeparture",
               "transferOrProgramChange",
+              "educationLevel",
+              "nextProgramLevelPlan",
               "cptPlan"
             ]
           },

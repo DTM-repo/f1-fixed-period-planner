@@ -13,6 +13,8 @@ export const DEFAULT_SCENARIO: StudentScenario = {
   transferOrProgramChange: "no",
   schoolTransferPlan: "unknown",
   academicProgramChangePlan: "unknown",
+  educationLevel: "unknown",
+  nextProgramLevelPlan: "unknown",
   returningAfterEffectiveDate: "unknown",
   cptPlan: "none"
 };
@@ -33,6 +35,8 @@ export const DEMO_SCENARIOS: Array<{ id: string; label: string; scenario: Studen
       reentryBasis: "unknown",
       pendingExtensionOnDeparture: "no",
       transferOrProgramChange: "no",
+      educationLevel: "graduate",
+      nextProgramLevelPlan: "unknown",
       cptPlan: "none"
     }
   },
@@ -50,6 +54,8 @@ export const DEMO_SCENARIOS: Array<{ id: string; label: string; scenario: Studen
       reentryBasis: "unknown",
       pendingExtensionOnDeparture: "no",
       transferOrProgramChange: "no",
+      educationLevel: "undergraduate",
+      nextProgramLevelPlan: "higher",
       cptPlan: "none"
     }
   },
@@ -69,6 +75,8 @@ export const DEMO_SCENARIOS: Array<{ id: string; label: string; scenario: Studen
       reentryBasis: "new_f1_admission",
       pendingExtensionOnDeparture: "no",
       transferOrProgramChange: "no",
+      educationLevel: "graduate",
+      nextProgramLevelPlan: "unknown",
       cptPlan: "none"
     }
   },
@@ -88,6 +96,8 @@ export const DEMO_SCENARIOS: Array<{ id: string; label: string; scenario: Studen
       reentryBasis: "unknown",
       pendingExtensionOnDeparture: "no",
       transferOrProgramChange: "no",
+      educationLevel: "undergraduate",
+      nextProgramLevelPlan: "unknown",
       cptPlan: "none"
     }
   }

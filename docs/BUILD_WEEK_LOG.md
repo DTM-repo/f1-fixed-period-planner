@@ -359,3 +359,30 @@ Each entry should capture:
 
 - Rebuilt the apply step from raw field spreading into scenario-aware fact application.
 - Verified in the live app that clicking Apply moves the scenario into the current-F-1 flow, populates the I-20 date, and surfaces the travel branch.
+
+### Travel, Extension, and Program-Level Pass
+
+**Research**
+
+- Rechecked the final rule overview against David's travel question: travel does not extend D/S transition protection itself, but a post-effective-date F-1 return can create a separate fixed-period admission branch that may reach farther than the transition cap in some scenarios.
+- Verified the official USCIS G-1055 fee schedule for Form I-539. As of the page last reviewed August 29, 2025, USCIS lists the general Form I-539 filing fee as $420 online or $470 by paper; it does not support hard-coding a separate $85 biometrics fee for this category.
+- Verified premium-processing language against USCIS and the Federal Register: DHS says USCIS will announce any expansion for affected EOS populations through USCIS premium-processing guidance; the existing USCIS bulletin covers certain F/M/J change-of-status I-539 premium-processing requests and notes biometrics must be submitted before the premium clock starts.
+- Rechecked final-rule program-level restrictions: undergraduate transfer/program changes depend on the one-academic-year rule; graduate transfers/program changes are much more restricted; same-level or lower-level next programs after completion are generally blocked for programs completed after September 15, 2026.
+
+**Decisions**
+
+- Phrase travel as a comparison branch, not as "travel extends exemption." The app should say that travel can create a new fixed-period admission that may avoid or delay an I-539 in the right fact pattern.
+- Add a top "What happened" overview link and keep "Official rule" visible as the primary legal source.
+- Add an advisement-style result layer above the technical findings so the post-calculation response gives scenario-specific interpretation instead of merely repeating cards.
+- Include the 60-day to 30-day change as a core visible impact: D/S transition path can still have 60 days; new fixed-period admission has 30 days.
+- Keep fee language current-source-based: list $420 online / $470 paper for I-539 and say biometrics may be required if USCIS notices the student for biometrics.
+- Do not let uncertain travel dates stop the intake. OPT/STEM and school-change questions should continue even when the student does not know return timing yet.
+- Ask education level and same/lower-level next-program questions in the structured flow because those facts materially change the advice.
+
+**Codex Assistance**
+
+- Added source-index entries for the USCIS I-539 fee schedule, USCIS premium-processing bulletin, and final-rule school/program-level limits.
+- Added `educationLevel` and `nextProgramLevelPlan` to the deterministic scenario model, demo scenarios, OpenAI intake schema, and student-facing fact labels.
+- Added deterministic findings for graduate program/transfer limits, undergraduate one-academic-year checks, and same/lower-level next-program risk.
+- Added a source-linked "What happened" overview and a source-linked advisement panel that explains travel, extension, OPT/STEM, grace-period, and school-change consequences in direct student language.
+- Changed progressive reveal logic so uncertain travel answers no longer block OPT/STEM and school-change questions.

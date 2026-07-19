@@ -285,6 +285,30 @@ describe("calculateScenario", () => {
     expect(findingIds(result)).toContain("automatic-visa-revalidation");
   });
 
+  it("flags graduate school transfers and program changes", () => {
+    const result = calculateScenario({
+      ...baseTransitionScenario,
+      educationLevel: "graduate",
+      schoolTransferPlan: "yes",
+      academicProgramChangePlan: "yes",
+      transferOrProgramChange: "yes"
+    });
+
+    expect(result.status).toBe("risk");
+    expect(findingIds(result)).toContain("graduate-program-change-limit");
+    expect(findingIds(result)).toContain("graduate-transfer-limit");
+  });
+
+  it("flags same-level or lower-level next programs", () => {
+    const result = calculateScenario({
+      ...baseTransitionScenario,
+      nextProgramLevelPlan: "same_or_lower"
+    });
+
+    expect(result.status).toBe("risk");
+    expect(findingIds(result)).toContain("same-or-lower-next-program");
+  });
+
   it("gives fixed-period context while asking for OPT/STEM return facts", () => {
     const result = calculateScenario({
       ...baseTransitionScenario,

@@ -88,13 +88,13 @@ function normalizeScenarioDates(scenario: StudentScenario): {
 
     if (kind === "effectiveDate") {
       writableScenario[field] = DEFAULT_EFFECTIVE_DATE;
-      followUpQuestions.push(`Confirm the ${label}. For now, the app is using ${formatDate(DEFAULT_EFFECTIVE_DATE)}.`);
+      followUpQuestions.push(`Confirm the ${label}. For now, this scenario uses ${formatDate(DEFAULT_EFFECTIVE_DATE)}.`);
     } else {
       writableScenario[field] = undefined;
       followUpQuestions.push(
         normalized.issue === "ambiguous"
           ? `Confirm the ${label}. "${value}" could mean more than one calendar date.`
-          : `Confirm the ${label}. "${value}" did not match a calendar date the app could safely read.`
+          : `Confirm the ${label}. "${value}" did not match a calendar date that can be safely read.`
       );
     }
   }
@@ -463,11 +463,65 @@ function addTransferAndCptFindings(scenario: StudentScenario, coverageEnd: strin
         "program-change-anchor",
         "warning",
         "A later school or program change needs a separate check",
-        "The old-rule protection is based on the I-20 or EAD date in place on September 15, 2026. A later school transfer, education-level change, or longer program date may require an extension of stay.",
-        ["8CFR-214-1-M1"]
+        "The old-rule protection is based on the I-20 or EAD date in place on September 15, 2026. A later school transfer, education-level change, or longer program date can require an extension of stay and may also trigger the new school/program-change limits.",
+        ["8CFR-214-1-M1", "8CFR-214-2-F5II"]
       )
     );
     nextActions.push("Compare the I-20 end date on September 15, 2026 against the later transfer or new-program end date.");
+  }
+
+  if (scenario.educationLevel === "graduate") {
+    if (scenario.academicProgramChangePlan === "yes") {
+      findings.push(
+        finding(
+          "graduate-program-change-limit",
+          "danger",
+          "Graduate program changes are tightly limited",
+          "Because you selected graduate study and a planned academic program change, this scenario needs a graduate-level restriction check before relying on the plan. The final rule generally blocks graduate-level F-1 students from changing educational objectives during the program.",
+          ["8CFR-214-2-F5II"]
+        )
+      );
+      nextActions.push("Confirm whether the program change would count as a change of educational objective at the graduate level.");
+    }
+
+    if (scenario.schoolTransferPlan === "yes") {
+      findings.push(
+        finding(
+          "graduate-transfer-limit",
+          "warning",
+          "Graduate transfers may need an SEVP exception",
+          "Because you selected graduate study and a planned school transfer, this scenario needs an exception check. The final rule generally restricts graduate-level F-1 transfers unless SEVP authorizes an exception for extenuating circumstances.",
+          ["8CFR-214-2-F5II"]
+        )
+      );
+      nextActions.push("Confirm whether an SEVP exception would be available before planning a graduate-level transfer.");
+    }
+  }
+
+  if (scenario.educationLevel === "undergraduate" && (scenario.schoolTransferPlan === "yes" || scenario.academicProgramChangePlan === "yes")) {
+    findings.push(
+      finding(
+        "undergraduate-first-year-check",
+        "warning",
+        "Undergraduate changes need the one-academic-year check",
+        "Because you selected undergraduate study and a school or program change, timing matters. The final rule generally requires undergraduate students to complete one academic year before transferring schools or changing programs, unless an exception applies.",
+        ["8CFR-214-2-F5II"]
+      )
+    );
+    nextActions.push("Confirm whether you will have completed one academic year before the transfer or program change.");
+  }
+
+  if (scenario.nextProgramLevelPlan === "same_or_lower") {
+    findings.push(
+      finding(
+        "same-or-lower-next-program",
+        "danger",
+        "Same-level or lower-level next programs may be blocked",
+        "You selected a possible next program at the same or a lower education level. For programs completed after September 15, 2026, the final rule generally does not allow F-1 status for a new program at the same or a lower education level.",
+        ["8CFR-214-2-F5II"]
+      )
+    );
+    nextActions.push("Before relying on a same-level or lower-level next program, check whether the rule blocks that F-1 path.");
   }
 
   if (scenario.cptPlan === "after_admission_end") {
@@ -583,7 +637,7 @@ function buildFixedAdmissionResult(
         `The tested program end (${formatDate(targetProgramEnd)}) is after the four-year admission cap (${formatDate(
           coverageEnd
         )}). You should plan an extension-of-stay filing before the admission period expires.`,
-        ["8CFR-214-1-A4"]
+        ["8CFR-214-1-A4", "USCIS-G1055-I539"]
       )
     );
     nextActions.push("Work backward from the fixed admit-until date to plan the I-539 extension window.");
@@ -775,7 +829,7 @@ export function calculateScenario(scenario: StudentScenario): PlannerResult {
         `Your program or training date (${formatDate(targetActivityEnd)}) is later than the protected end date (${formatDate(
           coverageEnd
         )}). To stay in the United States past that date, you likely need to file an extension of stay before the protected period ends.`,
-        ["8CFR-214-1-M1"]
+        ["8CFR-214-1-M1", "USCIS-G1055-I539"]
       )
     );
     nextActions.push("Map an extension-of-stay plan before the protected period expires.");

@@ -37,6 +37,8 @@ export type ReentryBasis =
   | "unknown";
 
 export type CptPlan = "none" | "before_admission_end" | "after_admission_end" | "unknown";
+export type EducationLevel = "undergraduate" | "graduate" | "other" | "unknown";
+export type NextProgramLevelPlan = "higher" | "same_or_lower" | "not_planning" | "unknown";
 
 export interface StudentScenario {
   startingPosition: StartingPosition;
@@ -58,6 +60,8 @@ export interface StudentScenario {
   transferOrProgramChange: YesNoUnknown;
   schoolTransferPlan?: YesNoUnknown;
   academicProgramChangePlan?: YesNoUnknown;
+  educationLevel?: EducationLevel;
+  nextProgramLevelPlan?: NextProgramLevelPlan;
   returningAfterEffectiveDate?: YesNoUnknown;
   cptPlan: CptPlan;
   narrative?: string;

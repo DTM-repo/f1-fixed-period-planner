@@ -17,6 +17,8 @@ export type IntakeFactField =
   | "reentryBasis"
   | "pendingExtensionOnDeparture"
   | "transferOrProgramChange"
+  | "educationLevel"
+  | "nextProgramLevelPlan"
   | "cptPlan";
 
 export type IntakeConfidence = "high" | "medium" | "low";

@@ -59,6 +59,27 @@ export const SOURCE_INDEX: Record<string, SourceReference> = {
     locator: "Final rule fixed-period F-1 30-day departure/maintain-status period",
     url: "https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant",
     lastVerified: "2026-07-19"
+  },
+  "8CFR-214-2-F5II": {
+    id: "8CFR-214-2-F5II",
+    title: "8 CFR 214.2(f)(5)(ii), F-1 school transfer, program change, and education-level limits",
+    locator: "Final rule rules for undergraduate first-year changes, graduate changes/transfers, and same/lower-level programs",
+    url: "https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant",
+    lastVerified: "2026-07-19"
+  },
+  "USCIS-G1055-I539": {
+    id: "USCIS-G1055-I539",
+    title: "USCIS G-1055 Fee Schedule, Form I-539",
+    locator: "Form I-539 general filing fee: $470 paper filing or $420 online filing; page last reviewed August 29, 2025",
+    url: "https://www.uscis.gov/g-1055?topic_id=97292",
+    lastVerified: "2026-07-19"
+  },
+  "USCIS-I539-PREMIUM": {
+    id: "USCIS-I539-PREMIUM",
+    title: "USCIS premium processing bulletin for certain Form I-539 F/M/J change-of-status requests",
+    locator: "USCIS bulletin describing premium processing for certain change-of-status I-539 filings and biometrics timing",
+    url: "https://content.govdelivery.com/accounts/USDHSCIS/bulletins/35fa3e4",
+    lastVerified: "2026-07-19"
   }
 };
 
