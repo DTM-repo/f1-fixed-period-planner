@@ -35,6 +35,16 @@ export type IntakeFactField =
 
 export type IntakeConfidence = "high" | "medium" | "low";
 
+export type IntakeTopic =
+  | "travel"
+  | "opt"
+  | "stem_opt"
+  | "cpt"
+  | "extension"
+  | "school_transfer"
+  | "program_change"
+  | "change_of_status";
+
 export interface IntakeCandidateFact {
   field: IntakeFactField;
   value: string;
@@ -52,6 +62,8 @@ export interface IntakeExtractionRequest {
 
 export interface IntakeExtractionResponse {
   summary: string;
+  highlights: string[];
+  topics: IntakeTopic[];
   facts: IntakeCandidateFact[];
   followUpQuestions: string[];
   cautions: string[];

@@ -31,7 +31,7 @@ function travelComparisonFor(scenario: StudentScenario) {
   if (
     scenario.startingPosition !== "current_ds_inside_us" ||
     (scenario.travelPosture !== "planned" && scenario.travelPosture !== "completed") ||
-    !scenario.reentryDate
+    scenario.returningAfterEffectiveDate !== "yes"
   ) {
     return null;
   }
@@ -57,9 +57,11 @@ function buildPrompt(scenario: StudentScenario): string {
       },
       requiredArc: [
         "Open with the main answer and why it applies to this student's situation.",
+        "If the verified travel result is present, open with the fact that returning after September 15 moves the student into the fixed-period system. Treat that as the primary path and the stay-in-the-United-States result as the alternative.",
         "Explain each important date and what happens on that date.",
         "Explain travel, OPT or STEM OPT, CPT, transfers, program changes, and extensions only when the verified facts make them relevant.",
         "When travel is planned or a travel comparison is present, clearly separate a stay-in-the-United-States timeline from a return timeline.",
+        "When post-completion OPT and travel are both relevant, explain the DSO recommendation first, then compare filing before departure under the stay-in-the-United-States path with filing after a fixed-period return. Do not call an I-765 an extension of stay.",
         "End with concrete next steps and name any missing fact that would change the answer."
       ],
       hardRules: [
@@ -67,6 +69,7 @@ function buildPrompt(scenario: StudentScenario): string {
         "Never change, recalculate, extend, or contradict a deterministic date or legal outcome.",
         "Never call the reader the student and never refer to the calculator or app in the third person.",
         "Never use the phrases tested entry, tested admission, tested status, transition cohort, admission basis, grandfathered, stay-put, or the calculation treats.",
+        "Never use the phrases temporary OPT rule, temporary no-I-539 rule, protected study period, or pending I-539 without explaining them in ordinary words.",
         "Do not use markdown, bullets, numbered lists, section labels, citations in brackets, or generic legal disclaimers.",
         "Do not hedge a definite rule with may, might, likely, generally, or appears. State the rule, then separately state any exception.",
         "Call a date projected when it is projected. Say that the actual I-94 issued by CBP controls after entry.",
@@ -74,9 +77,11 @@ function buildPrompt(scenario: StudentScenario): string {
         "Use four to seven short paragraphs and keep every paragraph focused on one idea."
       ],
       scenario,
-      verifiedResult: result,
-      verifiedTravelComparison: travelResult,
-      sources: result.citations.map(({ id, title, locator, url }) => ({ id, title, locator, url }))
+      verifiedPrimaryResult: travelResult ?? result,
+      verifiedStayInUnitedStatesAlternative: travelResult ? result : null,
+      verifiedTravelResult: travelResult,
+      sources: [...new Map([...(travelResult?.citations ?? []), ...result.citations].map((source) => [source.id, source])).values()]
+        .map(({ id, title, locator, url }) => ({ id, title, locator, url }))
     },
     null,
     2

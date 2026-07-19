@@ -542,3 +542,37 @@ Each entry should capture:
 - Rebuilt the story screen into a side-by-side live workspace on desktop, with a compact stacked result flow and automatic result focus after stopping on smaller screens.
 - Added a visible "details are shaping these results" acknowledgment and preserved the last interim speech phrase through the stop event.
 - Re-ran TypeScript, all 39 deterministic tests, and the production build successfully.
+
+### Voice Relevance, Memory, and Travel Hierarchy
+
+**Research**
+
+- A live advisor-style test used this story: a third-year international student graduating in December 2026 wants OPT and is unsure whether or when to travel.
+- The extraction service heard the words, but its visible output repeated too much of the narrative, stopped at the September 15 presence question, and did not reliably carry the travel concern into the guided interview.
+- The result hierarchy also favored the stay-in-the-United-States D/S path even after the student confirmed a return after September 15. That made a technically conditional old-rule result look like the student's main answer.
+- Plain-language review found that “protected study period,” “temporary no-I-539 rule,” and “Will an I-539 be pending?” require students to understand the answer before they can understand the question.
+
+**Decisions**
+
+- Give structured intake two distinct outputs: compact rule-relevant highlights and persistent student-raised topics. A fact drives the calculator; a topic guarantees that a question such as travel or OPT remains visible until it is addressed.
+- For a student who identifies themself as a current international student and clearly describes study continuing beyond September 15, use current F-1, D/S, and presence on that date as correctable working assumptions. Never make that assumption when the story says the student will be outside the United States or out of status.
+- Adapt the funnel to a question raised in the story. When travel is raised, ask its controlling questions immediately after the core I-20 date and keep a visible concern tracker above the interview.
+- Ask whether any trip will bring the student back after September 15, rather than asking whether the student will return after that date. This avoids treating an earlier return as proof that every later trip is harmless.
+- Once a post-September 15 return is confirmed, make the fixed-period return result primary. Keep the D/S result only as the “if you stay in the United States” comparison.
+- Ask about a filed extension of stay only when an extension is actually relevant or the student already supplied that fact. Do not present Form I-539 as though it were the OPT application.
+
+**Codex Assistance**
+
+- Added deterministic topic preservation for travel, OPT/STEM OPT, CPT, extensions, transfers, program changes, and change of status, so a model omission cannot erase a concern explicitly stated in the narrative.
+- Added guarded current-student assumptions with explicit counterexample handling and an immediate correction path in answer history.
+- Replaced the voice fact-card transcript with a short bullet list such as “Current F-1 student,” “Graduating December 2026,” and “Has a travel question.”
+- Added the persistent “Your questions are saved” tracker, adaptive travel-first questioning, student-specific question explanations, and an emphasized travel difference-maker in the result column.
+- Rewrote OPT and extension findings to explain the DSO recommendation, Form I-765, Form I-539, March 18, 2027 transition deadline, and travel interaction without internal rule-engine language.
+- Updated the GPT-5.6 Sol report prompt so a confirmed return is the primary narrative path and the stay-in-the-United-States result is clearly presented as an alternative.
+
+**Verification**
+
+- Added four intake-semantics regression tests, including the exact third-year/December 2026/OPT/travel story and an explicit-outside-the-U.S. counterexample.
+- Vitest: 43/43 passed.
+- `tsc --noEmit`: passed.
+- Production Vite build: passed.

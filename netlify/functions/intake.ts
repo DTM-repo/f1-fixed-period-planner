@@ -1,4 +1,5 @@
 import type { IntakeExtractionRequest, IntakeExtractionResponse } from "../../src/ai/intakePayload";
+import { addCurrentStudentAssumptions, buildIntakeHighlights, deriveNarrativeTopics } from "../../src/ai/intakeSemantics";
 import { DEFAULT_EFFECTIVE_DATE } from "../../src/engine/calculateScenario";
 
 const DEFAULT_MODEL = "gpt-5.6-sol";
@@ -54,6 +55,7 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
         "For incoming students outside the United States, use startingPosition=prospective_outside_us, admissionBasis=fixed_period, and inUsOnEffectiveDate=no only if the narrative supports it.",
         "For a prospective student outside the United States, put the first planned F-1 entry date in reentryDate because that legacy field stores either an entry or return date. Do not call the first admission a travel plan and do not return travelPosture or reentryBasis for it unless the student describes a separate trip after entering.",
         "If the student says they are currently in the United States in F-1 status, use startingPosition=current_ds_inside_us. If they do not mention an I-94 end date, use admissionBasis=duration_of_status with needsConfirmation=true because current F-1 students usually have D/S but should still be able to correct it.",
+        "If the student identifies themself as a current, first-year, second-year, third-year, fourth-year, junior, senior, undergraduate, or graduate international student and describes study continuing beyond September 15, 2026, use startingPosition=current_ds_inside_us, admissionBasis=duration_of_status, inUsOnEffectiveDate=yes, and maintainingStatusOnEffectiveDate=yes with medium confidence and needsConfirmation=true unless the story says they will be outside the United States or not in valid F-1 status that day.",
         "If the narrative mentions travel but not how the student will return, use travelPosture=planned and reentryBasis=unknown.",
         "If a full return date is after September 15, 2026, also return returningAfterEffectiveDate=yes.",
         "A school transfer and a change of major or education level are separate facts. Never infer one from the other. Prefer schoolTransferPlan and academicProgramChangePlan over the legacy summary transferOrProgramChange.",
@@ -63,6 +65,8 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
         "Use startingPosition=change_status_inside_us only when the student says they will request F-1 status without leaving the United States.",
         "If the student says they want a second program at the same level or a lower level, including a second master's, second bachelor's, another associate degree, or a lower degree after completing a higher one, use nextProgramLevelPlan=same_or_lower with needsConfirmation=true unless the level is unmistakable.",
         "Prefer follow-up questions over overconfident extraction.",
+        "Return two to six highlights. Each highlight must be a compact noun phrase of no more than nine words and include only a fact or concern that affects this rule. Good examples are Current F-1 student, Third-year undergraduate, Graduating December 2026, Plans post-completion OPT, and Has a travel question. Do not retell the narrative.",
+        "Return every topic the student raises even if the narrative does not establish enough facts to calculate it. Topics keep travel, OPT, CPT, extensions, transfers, program changes, and change of status visible while the student answers earlier questions.",
         "Never use internal labels such as starting position, admission basis, travel posture, transition cohort, or tested entry in visible text. Use ordinary student language."
       ],
       allowedFields: {
@@ -118,11 +122,25 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
 const intakeSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["summary", "facts", "followUpQuestions", "cautions"],
+  required: ["summary", "highlights", "topics", "facts", "followUpQuestions", "cautions"],
   properties: {
     summary: {
       type: "string",
       description: "A short plain-English summary addressed directly to the student with 'you' and 'your'."
+    },
+    highlights: {
+      type: "array",
+      minItems: 1,
+      maxItems: 6,
+      items: { type: "string", minLength: 2, maxLength: 80 }
+    },
+    topics: {
+      type: "array",
+      maxItems: 8,
+      items: {
+        type: "string",
+        enum: ["travel", "opt", "stem_opt", "cpt", "extension", "school_transfer", "program_change", "change_of_status"]
+      }
     },
     facts: {
       type: "array",
@@ -205,18 +223,23 @@ function speakToStudent(text: string): string {
     .replace(/\bthe student\b/g, "you");
 }
 
-function normalizeExtraction(value: unknown, model: string): IntakeExtractionResponse {
+function normalizeExtraction(value: unknown, model: string, narrative: string): IntakeExtractionResponse {
   const parsed = value as IntakeExtractionResponse;
+  const normalizedFacts = Array.isArray(parsed.facts)
+    ? parsed.facts.map((fact) => ({
+        ...fact,
+        label: typeof fact.label === "string" ? speakToStudent(fact.label) : fact.label,
+        evidence: typeof fact.evidence === "string" ? speakToStudent(fact.evidence) : fact.evidence,
+        note: typeof fact.note === "string" ? speakToStudent(fact.note) : fact.note
+      }))
+    : [];
+  const facts = addCurrentStudentAssumptions(narrative, normalizedFacts);
+  const topics = deriveNarrativeTopics(narrative, parsed.topics);
   return {
     summary: typeof parsed.summary === "string" ? speakToStudent(parsed.summary) : "I found possible facts to review.",
-    facts: Array.isArray(parsed.facts)
-      ? parsed.facts.map((fact) => ({
-          ...fact,
-          label: typeof fact.label === "string" ? speakToStudent(fact.label) : fact.label,
-          evidence: typeof fact.evidence === "string" ? speakToStudent(fact.evidence) : fact.evidence,
-          note: typeof fact.note === "string" ? speakToStudent(fact.note) : fact.note
-        }))
-      : [],
+    highlights: buildIntakeHighlights(narrative, facts, parsed.highlights, topics),
+    topics,
+    facts,
     followUpQuestions: Array.isArray(parsed.followUpQuestions)
       ? parsed.followUpQuestions.filter((item) => typeof item === "string").map(speakToStudent)
       : [],
@@ -288,7 +311,7 @@ export default async (request: Request): Promise<Response> => {
   const text = extractOutputText(data);
 
   try {
-    return json(normalizeExtraction(JSON.parse(text), model));
+    return json(normalizeExtraction(JSON.parse(text), model, payload.narrative));
   } catch {
     return json({ error: "OpenAI intake returned invalid structured output" }, 502);
   }

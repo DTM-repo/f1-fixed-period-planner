@@ -328,10 +328,10 @@ function addTravelAndDependentFindings(scenario: StudentScenario, findings: Find
       finding(
         "pending-extension-travel",
         scenario.reentryBasis === "longer_program_i20" ? "danger" : "warning",
-        "Travel while an I-539 is pending can change the case",
+        "Travel after filing an extension of stay can change the case",
         scenario.reentryBasis === "longer_program_i20"
-          ? "If you return seeking a period beyond the unexpired balance of the prior admission, USCIS may treat the pending extension as abandoned."
-          : "The pending extension is not automatically abandoned only when the prior admission is still unexpired and you return seeking its remaining balance. Carry the receipt notice and valid I-20.",
+          ? "If you leave after filing Form I-539 and return seeking more time than remained on your prior admission, USCIS can treat that extension request as abandoned."
+          : "USCIS does not automatically treat the extension request as abandoned only when your prior admission remains unexpired and you return seeking its remaining balance. Carry the receipt notice and valid I-20.",
         ["8CFR-214-1-C8"]
       )
     );
@@ -419,8 +419,8 @@ function addOptFindings(
       finding(
         "opt-dso-recommendation-needed",
         "question",
-        "OPT requires your DSO's recommendation",
-        "The temporary no-I-539 filing rule applies only after your DSO recommends post-completion OPT or STEM OPT. Confirm that step before relying on the filing window.",
+        "Get your DSO's OPT recommendation before filing",
+        "Your DSO must recommend post-completion OPT or STEM OPT in SEVIS first. If you stay in the United States under D/S and USCIS receives your I-765 on time, the new rule does not by itself require a separate Form I-539 with that OPT filing.",
         ["8CFR-214-1-M1-OPT"]
       )
     );
@@ -449,8 +449,8 @@ function addOptFindings(
       finding(
         "opt-filing-date-needed",
         "question",
-        "The I-765 filing date changes the answer",
-        `To use the temporary rule, file by March 18, 2027 and by the earlier applicable status deadline${latestDepartureDate ? ` of ${formatDate(latestDepartureDate)}` : ""}.`,
+        "Your I-765 filing date changes the OPT answer",
+        `If you stay in the United States and do not return after September 15, USCIS must receive your I-765 by March 18, 2027${latestDepartureDate ? ` and before your current D/S timeline ends on ${formatDate(latestDepartureDate)}` : ""}. Filing on time can let you use the transition OPT path without a separate Form I-539 solely because D/S ended.`,
         ["8CFR-214-1-M1-OPT"]
       )
     );
@@ -458,11 +458,11 @@ function addOptFindings(
   }
 
   if (isAfter(scenario.optFilingDate, OPT_TRANSITION_I765_DEADLINE)) {
-    findings.push(finding("opt-after-march-deadline", "danger", "This filing date misses the temporary OPT deadline", `${formatDate(scenario.optFilingDate)} is after March 18, 2027, so the temporary no-I-539 rule does not apply.`, ["8CFR-214-1-M1-OPT"]));
+    findings.push(finding("opt-after-march-deadline", "danger", "This filing date misses the special transition deadline", `${formatDate(scenario.optFilingDate)} is after March 18, 2027. You cannot use the transition OPT path that avoids a separate Form I-539 solely because D/S ended.`, ["8CFR-214-1-M1-OPT"]));
     return;
   }
   if (latestDepartureDate && isAfter(scenario.optFilingDate, latestDepartureDate) && !isStem) {
-    findings.push(finding("opt-after-status-deadline", "danger", "This post-completion OPT filing is too late for the temporary rule", `USCIS must receive the I-765 before your protected period ends on ${formatDate(latestDepartureDate)}.`, ["8CFR-214-1-M1-OPT"]));
+    findings.push(finding("opt-after-status-deadline", "danger", "This post-completion OPT filing is too late for the transition path", `USCIS must receive the I-765 before your current D/S timeline ends on ${formatDate(latestDepartureDate)}.`, ["8CFR-214-1-M1-OPT"]));
     return;
   }
   if (isStem && scenario.currentEadEndDate && isAfter(scenario.optFilingDate, scenario.currentEadEndDate)) {
@@ -478,14 +478,14 @@ function addOptFindings(
     finding(
       "opt-filing-in-window",
       "good",
-      "This filing date fits the temporary OPT window",
-      `The date you entered, ${formatDate(scenario.optFilingDate)}, is on or before March 18, 2027 and fits the other confirmed timing facts. You may avoid filing an I-539 solely because D/S ended, provided your DSO recommendation and all normal OPT requirements are met.`,
+      "This filing date fits the stay-in-the-U.S. OPT path",
+      `${formatDate(scenario.optFilingDate)} is on or before March 18, 2027 and fits the other confirmed timing facts. If you stay in the United States, you can avoid a separate Form I-539 solely because D/S ended, provided your DSO recommendation and all normal OPT requirements are met.`,
       ["8CFR-214-1-M1-OPT"]
     )
   );
   if (scenario.travelPosture !== "none" && isNotFiled) {
-    findings.push(finding("opt-travel-before-filing", "danger", "Leaving before you file changes the OPT path", "If you leave before filing and return under the fixed-period system, you must plan for both the I-765 and I-539 requirements rather than relying on the temporary stay-in-the-U.S. path.", ["8CFR-214-1-M1-OPT"]));
-    nextActions.push("Compare filing before travel with the documents needed for a fixed-period return.");
+    findings.push(finding("opt-travel-before-filing", "danger", "File timing and travel can change which OPT process you use", "If you leave before filing and then return under the fixed-period system, plan for both the I-765 and Form I-539 requirements. Before you travel, ask your DSO to compare that path with getting the OPT recommendation and filing while you are still in the United States.", ["8CFR-214-1-M1-OPT"]));
+    nextActions.push("Before traveling, compare filing the I-765 in the United States with the documents required after a fixed-period return.");
   }
 }
 
@@ -793,8 +793,8 @@ export function calculateScenario(input: StudentScenario): PlannerResult {
       finding(
         "transition-covers-current-plan",
         "good",
-        "Your current program fits inside the old-rule protection",
-        `Based on the dates entered, you do not need an I-539 just to finish this program before ${formatDate(activityEnd)}. Travel, a later program, or a later training plan can change that answer.`,
+        "You can finish this program without filing Form I-539",
+        `Your current program ends by ${formatDate(activityEnd)}, so you do not need to file an extension of stay just to finish it. Returning from travel after September 15, starting a later program, or adding later training can change that answer.`,
         ["8CFR-214-1-M1"]
       )
     );
@@ -805,8 +805,8 @@ export function calculateScenario(input: StudentScenario): PlannerResult {
       finding(
         "travel-ends-ds-branch",
         "warning",
-        "Returning after September 15 puts you in the fixed-period system",
-        "The stay-in-the-U.S. timeline and the return timeline are alternatives. A return does not preserve D/S. The I-94 issued after your return controls, and the projected fixed period must be calculated from the I-20 program dates, not simply from the day you return.",
+        "A return after September 15 ends the old-rule path",
+        "If any trip brings you back after September 15, you return under the fixed-period system instead of keeping D/S. The I-94 issued after your return controls, and its projected end is calculated from the I-20 program dates, not simply from the day you return.",
         ["8CFR-214-1-M1", "8CFR-214-1-A4", "FR-FOUR-YEAR-START"]
       )
     );
