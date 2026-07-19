@@ -58,6 +58,9 @@ describe("D/S transition", () => {
     expect(result.status).toBe("ok");
     expect(result.headline).toBe("You are under the old rules");
     expect(result.summary).toContain("60 days after your program ends");
+    expect(result.findings.find((item) => item.id === "transition-covers-current-plan")?.detail).toBe(
+      "Your I-20 program ends on May 20, 2028, within your old-rule protection. You do not need Form I-539 just to finish this program."
+    );
   });
 
   it("immediately tells a qualifying current student that the old rules continue even before a document date is entered", () => {

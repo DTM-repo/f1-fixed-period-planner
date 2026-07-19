@@ -847,12 +847,15 @@ export function calculateScenario(input: StudentScenario): PlannerResult {
     );
     actions.push("Before the old-rule protection ends, ask your DSO to compare a Form I-539 extension with departure and readmission on an updated I-20.");
   } else {
+    const coveredProgramEnd = scenario.currentProgramEndDate ?? scenario.programEndOnEffectiveDate;
     findings.push(
       finding(
         "transition-covers-current-plan",
         "good",
         "You can finish this program without filing Form I-539",
-        `Your current program ends by ${formatDate(activityEnd)}, so you do not need to file an extension of stay just to finish it. Returning from travel after September 15, starting a later program, or adding later training can change that answer.`,
+        coveredProgramEnd
+          ? `Your I-20 program ends on ${formatDate(coveredProgramEnd)}, within your old-rule protection. You do not need Form I-539 just to finish this program.`
+          : "Your current program ends within your old-rule protection. You do not need Form I-539 just to finish it.",
         ["8CFR-214-1-M1"]
       )
     );

@@ -640,3 +640,11 @@ Each entry should capture:
 - Vitest: 55/55 passed.
 - `tsc --noEmit` and the production Vite build passed.
 - Browser walkthrough of a current graduate student with a May 22, 2028 I-20 confirmed that the interview ends without asking about CPT when CPT was not raised and no earlier admission deadline exists.
+
+### Literal Result Copy for Covered Programs
+
+**Research and Decision**
+
+- David flagged “adding later training” as unclear in a result for a student who had already said no to OPT. The phrase was intended to cover later post-completion OPT or STEM OPT, but it introduced an unconfirmed hypothetical instead of answering the student's facts.
+- Removed the umbrella phrase and the entire speculative sentence. The result now gives the actual I-20 end date and says directly that Form I-539 is not needed to finish that program.
+- Added a regression assertion for the complete visible sentence so internal shorthand cannot quietly return to this card.
