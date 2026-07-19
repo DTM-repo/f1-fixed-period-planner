@@ -5,16 +5,22 @@ export const DEFAULT_SCENARIO: StudentScenario = {
   admissionBasis: "unknown",
   inUsOnEffectiveDate: "unknown",
   maintainingStatusOnEffectiveDate: "unknown",
+  departBeforeEffectiveDate: "unknown",
   optIntent: "unknown",
   optStage: "none",
   travelPosture: "unknown",
   reentryBasis: "unknown",
-  pendingExtensionOnDeparture: "no",
+  pendingExtensionOnDeparture: "unknown",
   transferOrProgramChange: "no",
   schoolTransferPlan: "unknown",
   academicProgramChangePlan: "unknown",
   educationLevel: "unknown",
+  programType: "unknown",
+  firstAcademicYearCompleted: "unknown",
   nextProgramLevelPlan: "unknown",
+  dsoRecommendedOpt: "unknown",
+  hasF2Dependents: "unknown",
+  earlyEndSituation: "none",
   returningAfterEffectiveDate: "unknown",
   cptPlan: "none"
 };
@@ -28,6 +34,7 @@ export const DEMO_SCENARIOS: Array<{ id: string; label: string; scenario: Studen
       admissionBasis: "duration_of_status",
       inUsOnEffectiveDate: "yes",
       maintainingStatusOnEffectiveDate: "yes",
+      programStartDate: "2025-08-25",
       programEndOnEffectiveDate: "2031-05-15",
       currentProgramEndDate: "2031-05-15",
       optStage: "none",
@@ -36,6 +43,8 @@ export const DEMO_SCENARIOS: Array<{ id: string; label: string; scenario: Studen
       pendingExtensionOnDeparture: "no",
       transferOrProgramChange: "no",
       educationLevel: "graduate",
+      programType: "college_or_university",
+      firstAcademicYearCompleted: "yes",
       nextProgramLevelPlan: "unknown",
       cptPlan: "none"
     }
@@ -48,6 +57,7 @@ export const DEMO_SCENARIOS: Array<{ id: string; label: string; scenario: Studen
       admissionBasis: "fixed_period",
       inUsOnEffectiveDate: "no",
       maintainingStatusOnEffectiveDate: "unknown",
+      programStartDate: "2026-08-24",
       currentProgramEndDate: "2030-05-20",
       optStage: "none",
       travelPosture: "none",
@@ -55,6 +65,8 @@ export const DEMO_SCENARIOS: Array<{ id: string; label: string; scenario: Studen
       pendingExtensionOnDeparture: "no",
       transferOrProgramChange: "no",
       educationLevel: "undergraduate",
+      programType: "college_or_university",
+      firstAcademicYearCompleted: "no",
       nextProgramLevelPlan: "higher",
       cptPlan: "none"
     }
@@ -67,6 +79,7 @@ export const DEMO_SCENARIOS: Array<{ id: string; label: string; scenario: Studen
       admissionBasis: "duration_of_status",
       inUsOnEffectiveDate: "yes",
       maintainingStatusOnEffectiveDate: "yes",
+      programStartDate: "2025-08-25",
       programEndOnEffectiveDate: "2031-05-15",
       currentProgramEndDate: "2031-05-15",
       optStage: "none",
@@ -76,6 +89,8 @@ export const DEMO_SCENARIOS: Array<{ id: string; label: string; scenario: Studen
       pendingExtensionOnDeparture: "no",
       transferOrProgramChange: "no",
       educationLevel: "graduate",
+      programType: "college_or_university",
+      firstAcademicYearCompleted: "yes",
       nextProgramLevelPlan: "unknown",
       cptPlan: "none"
     }
@@ -88,6 +103,7 @@ export const DEMO_SCENARIOS: Array<{ id: string; label: string; scenario: Studen
       admissionBasis: "duration_of_status",
       inUsOnEffectiveDate: "yes",
       maintainingStatusOnEffectiveDate: "yes",
+      programStartDate: "2023-08-28",
       programEndOnEffectiveDate: "2026-12-20",
       currentProgramEndDate: "2026-12-20",
       optStage: "post_completion_not_filed",
@@ -97,6 +113,8 @@ export const DEMO_SCENARIOS: Array<{ id: string; label: string; scenario: Studen
       pendingExtensionOnDeparture: "no",
       transferOrProgramChange: "no",
       educationLevel: "undergraduate",
+      programType: "college_or_university",
+      firstAcademicYearCompleted: "yes",
       nextProgramLevelPlan: "unknown",
       cptPlan: "none"
     }

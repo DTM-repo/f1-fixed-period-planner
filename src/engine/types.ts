@@ -6,6 +6,7 @@ export type YesNoUnknown = "yes" | "no" | "unknown";
 export type StartingPosition =
   | "current_ds_inside_us"
   | "prospective_outside_us"
+  | "change_status_inside_us"
   | "readmitted_fixed_period"
   | "transfer_or_program_change"
   | "unknown";
@@ -39,6 +40,20 @@ export type ReentryBasis =
 export type CptPlan = "none" | "before_admission_end" | "after_admission_end" | "unknown";
 export type EducationLevel = "undergraduate" | "graduate" | "other" | "unknown";
 export type NextProgramLevelPlan = "higher" | "same_or_lower" | "not_planning" | "unknown";
+export type ProgramType =
+  | "college_or_university"
+  | "english_language_training"
+  | "public_high_school"
+  | "private_high_school"
+  | "other"
+  | "unknown";
+
+export type EarlyEndSituation =
+  | "none"
+  | "completed_early"
+  | "authorized_withdrawal"
+  | "status_violation"
+  | "unknown";
 
 export interface StudentScenario {
   startingPosition: StartingPosition;
@@ -46,6 +61,8 @@ export interface StudentScenario {
   i94AdmitUntilDate?: DateString;
   inUsOnEffectiveDate: YesNoUnknown;
   maintainingStatusOnEffectiveDate: YesNoUnknown;
+  departBeforeEffectiveDate?: YesNoUnknown;
+  programStartDate?: DateString;
   programEndOnEffectiveDate?: DateString;
   currentProgramEndDate?: DateString;
   eadEndOnEffectiveDate?: DateString;
@@ -61,7 +78,13 @@ export interface StudentScenario {
   schoolTransferPlan?: YesNoUnknown;
   academicProgramChangePlan?: YesNoUnknown;
   educationLevel?: EducationLevel;
+  programType?: ProgramType;
+  firstAcademicYearCompleted?: YesNoUnknown;
   nextProgramLevelPlan?: NextProgramLevelPlan;
+  dsoRecommendedOpt?: YesNoUnknown;
+  hasF2Dependents?: YesNoUnknown;
+  earlyEndSituation?: EarlyEndSituation;
+  earlyEndDate?: DateString;
   returningAfterEffectiveDate?: YesNoUnknown;
   cptPlan: CptPlan;
   narrative?: string;
@@ -94,15 +117,24 @@ export interface TimelineItem {
 
 export interface PlannerResult {
   deterministic: true;
-  classification: "transition_ds" | "incoming_fixed_period" | "fixed_period_reentry" | "manual_review";
+  classification:
+    | "transition_ds"
+    | "incoming_fixed_period"
+    | "change_of_status_fixed_period"
+    | "fixed_period_reentry"
+    | "manual_review";
   status: ResultStatus;
   headline: string;
   summary: string;
   effectiveDate: DateString;
   transitionCapDate: DateString;
+  activityEnd?: DateString;
   coverageEnd?: DateString;
+  i94AdmitUntilDate?: DateString;
   departurePeriodDays?: number;
   latestDepartureDate?: DateString;
+  extensionPlanningDate?: DateString;
+  extensionFilingDeadline?: DateString;
   extensionNeededBy?: DateString;
   i765TransitionDeadline?: DateString;
   appliedRules: AppliedRule[];

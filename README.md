@@ -1,44 +1,56 @@
-# F-1 Fixed-Period Planner
+# F-1 Stay Map
 
-Build Week prototype for turning DHS's July 17, 2026 fixed-period admission rule into a student-facing scenario planner.
+F-1 Stay Map is an OpenAI Build Week app that turns DHS's July 17, 2026 duration-of-status final rule into a personal, source-linked planning experience for F-1 students.
 
-The core calculator is deterministic: the same confirmed inputs produce the same dates, warnings, source citations, and follow-up questions without calling an AI model. OpenAI is used only for optional plain-language explanation and follow-up drafting.
+Students can tell their story by voice or text, or answer a progressive interview. The app shows what it understands, updates a personal impact map as facts arrive, draws the relevant dates on visual timelines, and produces a complete advisor-style report.
 
-Safety bar: the app should give every source-backed partial result it can, then ask for the exact missing fact that would sharpen or change the answer. It should never present a guessed date or green status.
+## Safety Architecture
+
+The legal/date engine is deterministic. The same confirmed facts always produce the same dates, warnings, follow-up questions, and source links without asking a model to calculate a legal result.
+
+- GPT-5.6 Luna extracts candidate facts from a student's narrative.
+- The student can review and change those facts through the same guided flow.
+- The deterministic TypeScript engine calculates the result and cites the rule.
+- The server recalculates the result before GPT-5.6 Sol writes the final advisor report.
+- The report model may explain verified output; it may not alter a date, classification, or legal consequence.
+
+The app gives every supported partial result it can, identifies contradictions before continuing, and asks for the exact missing fact that would change the answer. It does not invent dates or convert ambiguous numeric dates such as `6/2/2029`.
 
 ## Local Setup
 
 ```bash
 npm install
-npm run dev
-```
-
-Use Netlify Dev when testing server functions such as `/api/explain` or `/api/intake`:
-
-```bash
 npm run dev:netlify
 ```
 
-For the OpenAI explanation and structured-intake endpoints, set:
+Netlify Dev serves both the Vite app and `/api/intake` and `/api/explain` at `http://localhost:8888`.
+
+Create an ignored `.env.local` from `.env.example`:
 
 ```bash
 OPENAI_API_KEY=...
-OPENAI_MODEL=gpt-5.6-terra
+OPENAI_MODEL=gpt-5.6-sol
 OPENAI_INTAKE_MODEL=gpt-5.6-luna
 ```
 
-The submitted hackathon runtime is OpenAI-only plus a deterministic local rule engine. Henry/Chatbase may remain a private research aid, but it is not part of the submitted app path.
+Run the verification suite with:
+
+```bash
+npm test
+npm run build
+```
 
 ## Scope
 
-- F-1 first, including current D/S students and prospective students entering under fixed-period admission.
-- J-1 and M-1 are intentionally outside the first calculator module.
-- CPT, transfers, program changes, OPT, STEM OPT, travel, and pending extension scenarios are modeled as timing flags where the first-pass rule engine has enough source support.
-- Legal conclusions are never delegated to the model. AI output may extract candidate facts, explain the deterministic result, or request missing facts.
+- Current D/S F-1 students who are in the United States in valid F-1 status on September 15, 2026.
+- Incoming F-1 students and people changing to F-1 status after the effective date.
+- Travel and reentry comparisons, OPT and STEM OPT transition treatment, CPT timing, extensions of stay, school transfers, program changes, same/lower-level study, F-2 dependents, and unusual early-end cases.
+- J-1 and M-1 are outside this app's first module.
 
-## Source Base
+Henry/Chatbase is a private research cross-check only. The submitted runtime is OpenAI plus the deterministic local engine and public-source rule registry.
 
-- Federal Register final rule, published July 17, 2026, effective September 15, 2026.
-- Local source copy used during setup: `/Users/davidmaxon/Documents/New project/D:S Rule app/New D:S Rules.pdf`.
+## Sources
 
-This is not legal advice. It is a planning and issue-spotting tool that should surface uncertainty instead of hiding it.
+The primary authority is the [Federal Register final rule](https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant), published July 17, 2026 and effective September 15, 2026. The app also links to the public [NAFSA overview](https://www.nafsa.org/regulatory-information/dhs-final-rule-ending-duration-status) and relevant USCIS material. Each result card links to the closest available paragraph anchor in the rule.
+
+This is a planning and issue-spotting tool, not legal advice. Because implementation guidance, fees, and agency practice can change, public release still requires a final source and advisor review.

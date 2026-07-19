@@ -462,3 +462,55 @@ Each entry should capture:
 - Decide how much source-chip linking belongs on the live cards versus the details drawer once the final UI package lands.
 - Add a richer voice-first architecture where interim speech extraction updates understood facts/cards in real time without requiring a separate “Draft facts” button.
 - Add a better CPT sub-flow if the user needs actual CPT start/end timing, employer authorization, or pending-extension status checked.
+
+## 2026-07-19
+
+### GPT-5.6 End-to-End Audit and Rebuild
+
+**Research**
+
+- Audited every modeled branch against the July 17, 2026 Federal Register rule, using exact Federal Register paragraph anchors wherever available.
+- Cross-checked difficult questions with David's clean Henry F-1 corpus as a private research aid, while keeping the final rule and public agency sources authoritative.
+- Identified a material timing issue in the earlier engine: the ordinary four-year maximum is calculated from the Form I-20 program start date, not the date of physical admission or return.
+- Confirmed that a fixed-period I-94 admit-until date already includes the final 30 days; a calculator must not add another 30 days to an actual I-94 date.
+- Rechecked extension timing, OPT/STEM transition deadlines, CPT work continuation, academic-mobility restrictions and possible delay authority, shorter program limits, F-2 treatment, and early-end periods.
+- Rechecked current USCIS Form I-539 fees and premium-processing language. The supported current general fee is $420 online or $470 on paper; biometrics may be required, but a separate universal $85 fee is not supported.
+
+**Decisions**
+
+- Make the rule engine, not the language model, the sole calculator of dates and legal classifications.
+- Recalculate the scenario inside `/api/explain` so browser-supplied result text cannot become the model's authority.
+- Use GPT-5.6 Luna for conservative structured story extraction and GPT-5.6 Sol for the final advisor narrative.
+- Remove the Draft Facts and Apply Understood Facts interaction. Story extraction now runs automatically, updates the personal impact cards, and leads into the same editable interview.
+- Use deterministic labels in the visible "What I understand" stream so internal model phrasing cannot leak into the student experience.
+- Keep one active guided question at a time, with no visible preselection and an explicit prompt that answering reveals the next question.
+- Treat contradictions as requests for clarification. Preserve supported partial information but do not allow a final advisor report until the conflict is resolved.
+- Restore timelines as a primary result surface: horizontal on desktop, vertical on mobile, and side-by-side alternatives for stay-versus-return comparisons.
+- Keep each live impact card specific to the student's facts and link its source chip to the closest rule paragraph.
+- Keep Henry/Chatbase out of the submitted runtime and use only public or David-authored material in the project.
+
+**Codex Assistance**
+
+- Performed the full source, code, test, copy, accessibility, API, and browser audit.
+- Rewrote the deterministic engine around separate activity-end, I-94, extension-planning, and filing-deadline concepts.
+- Expanded the regression matrix from 23 to 39 source-linked cases and corrected the travel, OPT/STEM, CPT, academic, fixed-period, and early-end branches.
+- Rebuilt the React experience around the sparse welcome, story-first intake, progressive interview, live impact cards, overview article, uncommon-facts drawer, visual timelines, and complete advisor report.
+- Hardened both Netlify functions with strict structured outputs, input limits, prompt-injection boundaries, server-side result recomputation, `store: false`, and direct student-language requirements.
+- Verified the real APIs with GPT-5.6 Luna and GPT-5.6 Sol, including a long incoming graduate case.
+- Tested the primary experience in the in-app browser on desktop and at 390 x 844 mobile dimensions, including the date-entry bug, contradiction path, visual timeline transformation, and no-horizontal-overflow check.
+- Created `docs/AUDIT_2026-07-19.md` so the legal corrections, product decisions, Codex contribution, verification evidence, and release safeguards are preserved for Build Week judging.
+
+**Verification**
+
+- `tsc --noEmit`: passed.
+- Vitest: 39/39 passed.
+- Production Vite build: passed.
+- `/api/intake`: live HTTP 200 from `gpt-5.6-luna`.
+- `/api/explain`: live HTTP 200 from `gpt-5.6-sol`.
+- Desktop and mobile browser checks: passed for the audited flows.
+
+**Open Questions**
+
+- Monitor whether DHS or SEVP delays the academic-mobility restrictions before September 15, 2026.
+- Add public-demo rate and spending controls before broad distribution.
+- Decide on production transcription, multilingual review, and document-assisted intake after the core calculator is advisor-reviewed.

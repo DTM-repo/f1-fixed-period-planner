@@ -1,74 +1,79 @@
 # Rule Matrix
 
-Core safety rule: the app should give every source-backed result it can from confirmed facts, then mark the exact fact that would sharpen or change the answer. It should never present a guessed date or green status.
+Last verified against the July 17, 2026 final rule: July 19, 2026.
 
-Date input rule: student-entered dates should use an explicit month name, day, and year. Numeric slash/dot dates are treated as a confirmation question because date order varies by country. Browser date-picker values may still be stored internally as `YYYY-MM-DD`.
+Core safety rule: calculate only from confirmed facts and modeled rule text. Preserve every result that remains valid when another fact is missing. Stop a final report when answers conflict, but explain what needs clarification instead of returning a dead end.
 
-## F-1 D/S Transition Cohort
+Date rule: student-facing controls require Month, Day, and Year. Narrative intake accepts explicit month-name or ISO dates and does not guess the order of numeric dates such as `6/2/2029`.
 
-Inputs:
+## Current F-1 Students Under D/S
 
-- In the United States on September 15, 2026.
-- Properly maintaining F-1 status on September 15, 2026.
-- Current I-94 admission basis is D/S.
-- Active I-20 program end date on September 15, 2026.
-- EAD end date on September 15, 2026, if any.
+Required facts:
 
-Current deterministic output:
+- In the United States in valid F-1 status on September 15, 2026.
+- D/S on the I-94. This is the assumed current-student norm, with a visible correction path for a dated I-94.
+- I-20 program end date in effect on September 15, 2026.
+- EAD end date in effect on that date when approved OPT or STEM OPT applies.
 
-- Status end is the later of the effective-date I-20 program end or EAD end.
-- That date is capped at September 15, 2030.
-- F-1 departure period is 60 days after the calculated end.
-- A later transfer, program change, CPT plan, or target program end creates an extension-planning flag.
-- If the student travels after the effective date, the app should compare the stay-put D/S transition branch with the ordinary fixed-period return branch. The return branch uses the fixed-period 30-day post-period.
+Deterministic result:
 
-## Incoming or Readmitted F-1
+- The old-rule study or training period ends on the later active I-20 or qualifying EAD date, capped at September 15, 2030.
+- The transition F-1 preparation-for-departure period is 60 days after that date.
+- A program or approved training plan beyond the protected date produces an extension-of-stay plan, not a guessed approval.
+- Travel after the effective date is a separate fixed-period return alternative. The app compares staying in the United States with returning; it does not claim that travel preserves D/S or automatically starts four new years.
 
-Inputs:
+## Incoming, Readmitted, or Change-of-Status F-1
 
-- F-1 admission or re-entry after September 15, 2026.
-- I-20 program end date used for admission.
-- Admission/re-entry date if testing a post-effective-date return.
+Required facts:
 
-Current deterministic output:
+- I-20 program start and end dates.
+- Planned entry date for an initial admission or return.
+- Actual I-94 admit-until date once CBP has issued it.
 
-- Admission end is the shorter of the I-20 program end or four years from admission.
-- Fixed-period F-1 departure/maintain-status period is 30 days after the admit-until date.
-- Program dates beyond that period create an extension-planning flag.
-- Post-completion OPT/STEM OPT admission after the effective date surfaces the ordinary fixed-period context, then asks for EAD, pending I-765, DSO recommendation, and return facts needed to sharpen the OPT/STEM return branch.
+Deterministic result:
 
-## Transition OPT/STEM OPT
+- The ordinary maximum study or training period is measured from the Form I-20 program start date, not the day of entry.
+- The study or training period is the earlier of the applicable program limit and I-20 end date.
+- The projected I-94 date includes the final 30 days. The app never adds a second 30-day period to an actual I-94 date.
+- Entry more than 30 days before the I-20 start is flagged.
+- English-language training uses a 24-month maximum; public high school uses a 12-month aggregate maximum.
+- Change of status inside the United States leads to the fixed-period system. Departure while that request is pending is separately warned because it can abandon the request.
 
-Inputs:
+## Extension of Stay
 
-- OPT/STEM posture.
-- I-765 filing date.
-- Travel before filing.
+- The app separates the date to begin planning, the end of authorized study or training, and the last day USCIS may receive a timely Form I-539.
+- A complete filing needs an endorsed I-20, supporting financial evidence, the filing fee, and any biometrics USCIS requires.
+- Current general fees are displayed as $420 online or $470 by paper, with a linked USCIS source.
+- Premium processing is not promised for this extension category.
+- The app never predicts USCIS approval.
 
-Current deterministic output:
+## OPT and STEM OPT Transition
 
-- Filing on or before March 18, 2027 is flagged as inside the transition window.
-- Travel before filing is flagged for manual review.
-- STEM OPT filings must also be on or before the current OPT EAD end date.
-- Approved OPT/STEM OPT results show the I-20-based transition dates already available and explain how the EAD end date changes the branch.
+- A qualifying post-completion OPT filing must be within the ordinary filing period, by March 18, 2027, and within the transition departure period.
+- STEM OPT also requires the current EAD end date and a filing no later than that date.
+- An approved EAD end date can control the protected training end, followed by the transition 60-day period.
+- A missing EAD date does not erase the known I-20 timeline; the app shows the partial result and asks for the EAD date.
 
-## Pending Extension and Travel
+## Academic Mobility
 
-Inputs:
+- Undergraduate school or program changes during the first academic year are blocked unless the rule's exception process applies.
+- Graduate program changes and graduate school transfers are separate rules: program changes are prohibited; a transfer requires an SEVP extenuating-circumstances exception.
+- Starting another program at the same or a lower education level after a covered completion is flagged.
+- Every academic-mobility result notes DHS authority to delay or suspend these restrictions through September 14, 2028; the deployment must keep that implementation status current.
 
-- Whether an I-539 is pending when the student departs.
-- Whether return seeks the balance of the prior admission or a longer admission.
+## CPT, Travel, and Unusual Endings
 
-Current deterministic output:
+- The rule did not eliminate Day One CPT or rewrite substantive CPT eligibility.
+- If a complete I-539 is received before the study period ends, already-authorized work may continue for up to 240 days while the extension is pending.
+- Filing only during the final 30-day period does not preserve or start CPT while the extension remains pending.
+- Automatic visa revalidation and a pending-I-539 return for a longer period are routed to explicit caution rather than an ordinary projection.
+- F-2 dependents are included in the extension plan.
+- Early completion uses 30 days, authorized withdrawal uses 15 days, and a status violation receives no departure period.
 
-- Same-period return and longer-period return are separated.
-- Longer-period return while extension is pending is flagged as higher risk.
+## Outside the Current Module
 
-## Not Yet Modeled as Legal Conclusions
-
-- Full CPT eligibility.
-- Change of level details.
-- M-1 rule branch.
-- J-1 categories and non-student exchange visitor cases.
+- M-1 and J-1 calculations.
+- A full CPT eligibility determination or employer-specific authorization review.
 - SEVIS transaction instructions.
-- Attorney-facing filing packet generation.
+- Visa issuance predictions, port-of-entry predictions, and USCIS approval predictions.
+- Filing packet or legal representation services.

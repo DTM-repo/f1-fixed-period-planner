@@ -45,6 +45,8 @@ Recommended app shape:
 - Deterministic engine: calculate dates, warnings, citations, and scenario comparisons from confirmed facts.
 - Henry/Chatbase: keep as a private research aid only. The submitted hackathon runtime should be OpenAI-only plus the deterministic engine so the project story stays clean and squarely tied to GPT-5.6/Codex.
 
+Audit note, July 19, 2026: the clean Henry corpus was used to cross-check difficult regulatory questions during the end-to-end audit. No Henry response was copied into runtime logic, and the public final rule and agency sources remained authoritative. The production functions do not call Chatbase.
+
 Hackathon-safe source priority:
 
 - Federal Register final rule, eCFR, DHS, ICE, SEVP, USCIS, DOS, and other public government materials.

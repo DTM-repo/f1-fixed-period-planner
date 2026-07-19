@@ -1,21 +1,26 @@
 import {
   AlertTriangle,
   ArrowLeft,
-  CalendarClock,
+  ArrowRight,
+  CalendarDays,
+  Check,
   CheckCircle2,
+  ChevronDown,
+  CircleHelp,
+  ExternalLink,
   FileText,
-  HelpCircle,
   Info,
+  Keyboard,
   Mic,
+  Pencil,
   RefreshCw,
+  RotateCcw,
   Sparkles,
-  Square,
-  Wand2
+  Square
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExplanationResponse } from "./ai/explanationPayload";
 import type { IntakeCandidateFact, IntakeExtractionResponse, IntakeFactField } from "./ai/intakePayload";
-import { buildLocalExplanation } from "./ai/localExplanation";
 import { DEFAULT_SCENARIO } from "./content/demoScenarios";
 import { calculateScenario, DEFAULT_EFFECTIVE_DATE } from "./engine/calculateScenario";
 import { compareDates, formatDate, isValidDateString } from "./engine/dateMath";
@@ -26,31 +31,21 @@ import type {
   Finding,
   NextProgramLevelPlan,
   OptStage,
-  ReentryBasis,
+  ProgramType,
   StartingPosition,
   StudentScenario,
+  TimelineItem,
   TravelPosture,
   YesNoUnknown
 } from "./engine/types";
 import { SOURCE_INDEX } from "./sources/sourceIndex";
 
-type SpeechRecognitionResultItem = {
-  transcript: string;
-};
-
-type SpeechRecognitionResult = {
-  isFinal: boolean;
-  0: SpeechRecognitionResultItem;
-};
-
+type SpeechRecognitionResultItem = { transcript: string };
+type SpeechRecognitionResult = { isFinal: boolean; 0: SpeechRecognitionResultItem };
 type SpeechRecognitionEventLike = {
   resultIndex: number;
-  results: {
-    length: number;
-    [index: number]: SpeechRecognitionResult;
-  };
+  results: { length: number; [index: number]: SpeechRecognitionResult };
 };
-
 type SpeechRecognitionLike = {
   continuous: boolean;
   interimResults: boolean;
@@ -61,7 +56,6 @@ type SpeechRecognitionLike = {
   start: () => void;
   stop: () => void;
 };
-
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
 declare global {
@@ -71,2217 +65,1064 @@ declare global {
   }
 }
 
-const yesNoOptions: Array<{ value: YesNoUnknown; label: string }> = [
+type Experience = "welcome" | "story" | "interview";
+type Page = "planner" | "overview";
+type IntakeState = "idle" | "loading" | "ready" | "failed";
+type ReportState = "idle" | "loading" | "ready" | "failed";
+type QuestionKind = "choice" | "date";
+
+interface Choice {
+  value: string;
+  label: string;
+  description?: string;
+}
+
+interface Question {
+  id: string;
+  eyebrow: string;
+  prompt: string;
+  help?: string;
+  kind: QuestionKind;
+  choices?: Choice[];
+  value?: string;
+  answerLabel?: string;
+  allowUnknownDate?: boolean;
+}
+
+const yesNoUnknown: Choice[] = [
   { value: "yes", label: "Yes" },
   { value: "no", label: "No" },
   { value: "unknown", label: "I do not know yet" }
 ];
 
-const startingPositionLabels: Record<StartingPosition, string> = {
-  current_ds_inside_us: "F-1 before Sep. 15",
-  prospective_outside_us: "Entering after Sep. 15",
-  readmitted_fixed_period: "Returning after Sep. 15",
-  transfer_or_program_change: "Transfer or change",
-  unknown: "Not sure"
-};
-
-const admissionBasisLabels: Record<AdmissionBasis, string> = {
-  duration_of_status: "D/S / no end date",
-  fixed_period: "I-94 has an end date",
-  unknown: "Not sure"
-};
-
-const optLabels: Record<OptStage, string> = {
-  none: "No OPT/STEM plan yet",
-  pre_completion: "Pre-completion OPT",
-  post_completion_not_filed: "Post-completion OPT, not filed",
-  post_completion_pending: "Post-completion OPT, pending",
-  post_completion_approved: "Post-completion OPT, approved",
-  stem_not_filed: "STEM OPT, not filed",
-  stem_pending: "STEM OPT, pending",
-  stem_approved: "STEM OPT, approved"
-};
-
-const travelLabels: Record<TravelPosture, string> = {
-  none: "No travel planned",
-  planned: "Planning to travel",
-  completed: "Already traveled",
-  automatic_visa_revalidation: "Automatic visa revalidation",
-  unknown: "Not sure"
-};
-
-const reentryLabels: Record<ReentryBasis, string> = {
-  same_i20_balance: "Return for the same I-20",
-  new_f1_admission: "Regular F-1 return",
-  longer_program_i20: "Return with longer I-20",
-  automatic_visa_revalidation: "Automatic visa revalidation",
-  unknown: "Not sure"
-};
-
-const cptLabels: Record<CptPlan, string> = {
-  none: "No CPT plan",
-  before_admission_end: "CPT before calculated end",
-  after_admission_end: "CPT after calculated end",
-  unknown: "Not sure"
-};
-
-const educationLevelLabels: Record<EducationLevel, string> = {
-  undergraduate: "Undergraduate",
-  graduate: "Graduate",
-  other: "Other program type",
-  unknown: "I do not know yet"
-};
-
-const nextProgramLevelLabels: Record<NextProgramLevelPlan, string> = {
-  higher: "A higher level",
-  same_or_lower: "Same or lower level",
-  not_planning: "No next program planned",
-  unknown: "I do not know yet"
-};
-
-const factFieldLabels: Record<IntakeFactField, string> = {
-  startingPosition: "starting point",
-  admissionBasis: "what the I-94 shows",
+const factLabels: Record<IntakeFactField, string> = {
+  startingPosition: "How you will become F-1",
+  admissionBasis: "What your I-94 says",
   i94AdmitUntilDate: "I-94 admit-until date",
-  inUsOnEffectiveDate: "U.S. location on the rule date",
-  maintainingStatusOnEffectiveDate: "status on the rule date",
-  programEndOnEffectiveDate: "I-20 end on the rule date",
-  currentProgramEndDate: "program end date",
-  eadEndOnEffectiveDate: "EAD end on the rule date",
-  currentEadEndDate: "EAD end date",
-  optStage: "OPT/STEM situation",
+  inUsOnEffectiveDate: "In the U.S. in valid F-1 status on September 15, 2026",
+  maintainingStatusOnEffectiveDate: "Valid F-1 status on September 15, 2026",
+  departBeforeEffectiveDate: "Leaving before September 15, 2026",
+  programStartDate: "I-20 program start date",
+  programEndOnEffectiveDate: "I-20 end date on September 15, 2026",
+  currentProgramEndDate: "Current I-20 end date",
+  eadEndOnEffectiveDate: "EAD end date on September 15, 2026",
+  currentEadEndDate: "Current EAD end date",
+  optIntent: "OPT or STEM OPT plan",
+  optStage: "OPT or STEM OPT stage",
   optFilingDate: "I-765 filing date",
-  travelPosture: "travel plan",
-  reentryDate: "return/admission date",
-  reentryBasis: "return basis",
-  pendingExtensionOnDeparture: "pending I-539 travel",
-  transferOrProgramChange: "transfer/program change",
-  educationLevel: "education level",
-  nextProgramLevelPlan: "next program level",
+  travelPosture: "Travel plan",
+  reentryDate: "Entry or return date",
+  reentryBasis: "Return documents",
+  pendingExtensionOnDeparture: "Pending I-539 during travel",
+  transferOrProgramChange: "School or program change",
+  schoolTransferPlan: "School transfer plan",
+  academicProgramChangePlan: "Program change plan",
+  educationLevel: "Education level",
+  programType: "Program type",
+  firstAcademicYearCompleted: "First academic year completed",
+  nextProgramLevelPlan: "Later program level",
+  dsoRecommendedOpt: "DSO OPT recommendation",
+  hasF2Dependents: "F-2 dependents",
+  earlyEndSituation: "Early end or withdrawal",
+  earlyEndDate: "Actual end date",
+  returningAfterEffectiveDate: "Return after September 15, 2026",
   cptPlan: "CPT timing"
 };
 
-const draftFields = Object.keys(factFieldLabels) as IntakeFactField[];
-
-function describeDraftChanges(before: StudentScenario, after: StudentScenario): string[] {
-  return draftFields.flatMap((field) => (before[field] !== after[field] ? [factFieldLabels[field]] : []));
-}
-
-const enumFactValues: Partial<Record<IntakeFactField, readonly string[]>> = {
-  startingPosition: Object.keys(startingPositionLabels),
-  admissionBasis: Object.keys(admissionBasisLabels),
-  inUsOnEffectiveDate: yesNoOptions.map((option) => option.value),
-  maintainingStatusOnEffectiveDate: yesNoOptions.map((option) => option.value),
-  optStage: Object.keys(optLabels),
-  travelPosture: Object.keys(travelLabels),
-  reentryBasis: Object.keys(reentryLabels),
-  pendingExtensionOnDeparture: yesNoOptions.map((option) => option.value),
-  transferOrProgramChange: yesNoOptions.map((option) => option.value),
-  educationLevel: Object.keys(educationLevelLabels),
-  nextProgramLevelPlan: Object.keys(nextProgramLevelLabels),
-  cptPlan: Object.keys(cptLabels)
-};
-
-const dateFactFields = new Set<IntakeFactField>([
+const dateFacts = new Set<IntakeFactField>([
   "i94AdmitUntilDate",
+  "programStartDate",
   "programEndOnEffectiveDate",
   "currentProgramEndDate",
   "eadEndOnEffectiveDate",
   "currentEadEndDate",
   "optFilingDate",
-  "reentryDate"
+  "reentryDate",
+  "earlyEndDate"
 ]);
 
-function isSupportedFactValue(fact: IntakeCandidateFact): boolean {
-  if (dateFactFields.has(fact.field)) {
-    return isValidDateString(fact.value);
-  }
+const allowedFactValues: Partial<Record<IntakeFactField, readonly string[]>> = {
+  startingPosition: ["current_ds_inside_us", "prospective_outside_us", "change_status_inside_us", "readmitted_fixed_period", "transfer_or_program_change", "unknown"],
+  admissionBasis: ["duration_of_status", "fixed_period", "unknown"],
+  inUsOnEffectiveDate: ["yes", "no", "unknown"],
+  maintainingStatusOnEffectiveDate: ["yes", "no", "unknown"],
+  departBeforeEffectiveDate: ["yes", "no", "unknown"],
+  optStage: ["none", "pre_completion", "post_completion_not_filed", "post_completion_pending", "post_completion_approved", "stem_not_filed", "stem_pending", "stem_approved"],
+  travelPosture: ["none", "planned", "completed", "automatic_visa_revalidation", "unknown"],
+  reentryBasis: ["same_i20_balance", "new_f1_admission", "longer_program_i20", "automatic_visa_revalidation", "unknown"],
+  pendingExtensionOnDeparture: ["yes", "no", "unknown"],
+  transferOrProgramChange: ["yes", "no", "unknown"],
+  schoolTransferPlan: ["yes", "no", "unknown"],
+  academicProgramChangePlan: ["yes", "no", "unknown"],
+  optIntent: ["yes", "no", "unknown"],
+  educationLevel: ["undergraduate", "graduate", "other", "unknown"],
+  programType: ["college_or_university", "english_language_training", "public_high_school", "private_high_school", "other", "unknown"],
+  firstAcademicYearCompleted: ["yes", "no", "unknown"],
+  nextProgramLevelPlan: ["higher", "same_or_lower", "not_planning", "unknown"],
+  dsoRecommendedOpt: ["yes", "no", "unknown"],
+  hasF2Dependents: ["yes", "no", "unknown"],
+  earlyEndSituation: ["none", "completed_early", "authorized_withdrawal", "status_violation", "unknown"],
+  returningAfterEffectiveDate: ["yes", "no", "unknown"],
+  cptPlan: ["none", "before_admission_end", "after_admission_end", "unknown"]
+};
 
-  return enumFactValues[fact.field]?.includes(fact.value) ?? false;
+const factValueLabels: Partial<Record<IntakeFactField, Record<string, string>>> = {
+  startingPosition: {
+    current_ds_inside_us: "Current F-1 student in the U.S.",
+    prospective_outside_us: "Enter the U.S. in F-1 status",
+    change_status_inside_us: "Change to F-1 status inside the U.S.",
+    readmitted_fixed_period: "Return to the U.S. in F-1 status",
+    transfer_or_program_change: "School or program change",
+    unknown: "Not yet known"
+  },
+  admissionBasis: { duration_of_status: "D/S", fixed_period: "A date", unknown: "Not yet known" },
+  inUsOnEffectiveDate: { yes: "Yes", no: "No", unknown: "Not yet known" },
+  maintainingStatusOnEffectiveDate: { yes: "Yes", no: "No", unknown: "Not yet known" },
+  departBeforeEffectiveDate: { yes: "Yes", no: "No", unknown: "Not yet known" },
+  educationLevel: { undergraduate: "Undergraduate", graduate: "Graduate", other: "Another level", unknown: "Not yet known" },
+  programType: {
+    college_or_university: "College or university",
+    english_language_training: "English-language training",
+    public_high_school: "Public high school",
+    private_high_school: "Private high school",
+    other: "Another F-1 program",
+    unknown: "Not yet known"
+  },
+  travelPosture: { none: "No travel planned", planned: "Travel planned", completed: "Already returned", automatic_visa_revalidation: "Automatic visa revalidation", unknown: "Not yet known" },
+  firstAcademicYearCompleted: { yes: "Yes", no: "No", unknown: "Not yet known" },
+  nextProgramLevelPlan: { higher: "Higher level", same_or_lower: "Same or lower level", not_planning: "No later program planned", unknown: "Not yet known" },
+  dsoRecommendedOpt: { yes: "Yes", no: "No", unknown: "Not yet known" },
+  hasF2Dependents: { yes: "Yes", no: "No", unknown: "Not yet known" },
+  earlyEndSituation: { none: "No", completed_early: "Completed early", authorized_withdrawal: "Authorized withdrawal", status_violation: "Possible status violation", unknown: "Not yet known" },
+  cptPlan: { none: "No CPT", before_admission_end: "CPT before the study period ends", after_admission_end: "CPT near or after the study period ends", unknown: "Timing not yet known" }
+};
+
+function supportedFact(fact: IntakeCandidateFact): boolean {
+  if (dateFacts.has(fact.field)) return isValidDateString(fact.value);
+  return allowedFactValues[fact.field]?.includes(fact.value) ?? false;
 }
 
-function factDisplayValue(fact: IntakeCandidateFact): string {
-  if (dateFactFields.has(fact.field) && isValidDateString(fact.value)) {
-    return formatDate(fact.value);
-  }
-
-  const labelMap: Partial<Record<IntakeFactField, Record<string, string>>> = {
-    startingPosition: startingPositionLabels,
-    admissionBasis: admissionBasisLabels,
-    optStage: optLabels,
-    travelPosture: travelLabels,
-    reentryBasis: reentryLabels,
-    educationLevel: educationLevelLabels,
-    nextProgramLevelPlan: nextProgramLevelLabels,
-    cptPlan: cptLabels
-  };
-
-  if (fact.field === "inUsOnEffectiveDate" || fact.field === "maintainingStatusOnEffectiveDate" || fact.field === "pendingExtensionOnDeparture" || fact.field === "transferOrProgramChange") {
-    return yesNoOptions.find((option) => option.value === fact.value)?.label ?? fact.value;
-  }
-
-  return labelMap[fact.field]?.[fact.value] ?? fact.value;
+function usableFacts(facts: IntakeCandidateFact[]): IntakeCandidateFact[] {
+  return facts.filter((fact) => fact.confidence !== "low" && fact.value !== "unknown" && supportedFact(fact));
 }
 
-function readyFacts(facts: IntakeCandidateFact[]): IntakeCandidateFact[] {
-  return facts.filter((fact) => fact.confidence !== "low" && fact.value !== "unknown" && isSupportedFactValue(fact));
+function displayFactValue(fact: IntakeCandidateFact): string {
+  if (dateFacts.has(fact.field) && isValidDateString(fact.value)) return formatDate(fact.value);
+  if (fact.value === "yes") return "Yes";
+  if (fact.value === "no") return "No";
+  if (fact.value === "unknown") return "Not yet known";
+  return factValueLabels[fact.field]?.[fact.value] ?? fact.value.replaceAll("_", " ");
 }
 
-function scenarioWithFacts(current: StudentScenario, facts: IntakeCandidateFact[]): StudentScenario {
-  let next: StudentScenario = { ...current };
-  for (const fact of readyFacts(facts)) {
-    if (fact.field === "startingPosition") {
-      const value = fact.value as StartingPosition;
-      next = {
-        ...next,
-        startingPosition: value,
-        admissionBasis:
-          value === "current_ds_inside_us"
-            ? next.admissionBasis === "fixed_period"
-              ? next.admissionBasis
-              : "duration_of_status"
-            : value === "prospective_outside_us"
-              ? "fixed_period"
-              : next.admissionBasis,
-        inUsOnEffectiveDate: value === "prospective_outside_us" ? "no" : next.inUsOnEffectiveDate,
-        travelPosture: next.travelPosture ?? "unknown",
-        returningAfterEffectiveDate: next.returningAfterEffectiveDate ?? "unknown",
-        optIntent: next.optIntent ?? "unknown",
-        schoolTransferPlan: next.schoolTransferPlan ?? "unknown",
-        academicProgramChangePlan: next.academicProgramChangePlan ?? "unknown"
-      };
-      continue;
-    }
-
-    if (fact.field === "admissionBasis") {
-      next = {
-        ...next,
-        admissionBasis: fact.value as AdmissionBasis,
-        i94AdmitUntilDate: fact.value === "fixed_period" ? next.i94AdmitUntilDate : undefined
-      };
-      continue;
-    }
-
-    if (fact.field === "travelPosture") {
-      const value = fact.value as TravelPosture;
-      next = {
-        ...next,
-        travelPosture: value,
-        returningAfterEffectiveDate: value === "none" ? "no" : next.returningAfterEffectiveDate ?? "unknown",
-        reentryDate: value === "none" ? undefined : next.reentryDate,
-        reentryBasis: value === "none" ? "unknown" : next.reentryBasis,
-        pendingExtensionOnDeparture: value === "none" ? "no" : next.pendingExtensionOnDeparture
-      };
-      continue;
-    }
-
-    if (fact.field === "reentryDate") {
-      next = {
-        ...next,
-        reentryDate: fact.value,
-        travelPosture: next.travelPosture === "none" || next.travelPosture === "unknown" ? "planned" : next.travelPosture,
-        returningAfterEffectiveDate: compareDates(fact.value, next.effectiveDate ?? DEFAULT_EFFECTIVE_DATE) > 0 ? "yes" : "no"
-      };
-      continue;
-    }
-
-    if (fact.field === "optStage") {
-      next = {
-        ...next,
-        optStage: fact.value as OptStage,
-        optIntent: fact.value === "none" ? "no" : "yes"
-      };
-      continue;
-    }
-
-    next = {
-      ...next,
-      [fact.field]: fact.value
-    } as StudentScenario;
+function mergeFacts(current: StudentScenario, facts: IntakeCandidateFact[]): StudentScenario {
+  let next = { ...current } as StudentScenario;
+  for (const fact of usableFacts(facts)) {
+    next = { ...next, [fact.field]: fact.value } as StudentScenario;
+    if (fact.field === "optStage") next.optIntent = fact.value === "none" ? "no" : "yes";
   }
-
-  if (isCurrentTrack(next)) {
-    next = {
-      ...next,
-      admissionBasis: next.admissionBasis === "unknown" ? "duration_of_status" : next.admissionBasis,
-      programEndOnEffectiveDate: next.programEndOnEffectiveDate ?? next.currentProgramEndDate,
-      currentProgramEndDate: next.currentProgramEndDate ?? next.programEndOnEffectiveDate
-    };
+  if (next.inUsOnEffectiveDate === "yes") {
+    next.startingPosition = "current_ds_inside_us";
+    next.maintainingStatusOnEffectiveDate = "yes";
+    if (next.admissionBasis === "unknown") next.admissionBasis = "duration_of_status";
+    next.programEndOnEffectiveDate ??= next.currentProgramEndDate;
+    next.currentProgramEndDate ??= next.programEndOnEffectiveDate;
   }
-
-  if (next.reentryDate && hasTravelPlan(next)) {
-    next = {
-      ...next,
-      returningAfterEffectiveDate: compareDates(next.reentryDate, next.effectiveDate ?? DEFAULT_EFFECTIVE_DATE) > 0 ? "yes" : "no"
-    };
+  if (next.inUsOnEffectiveDate === "no" && next.startingPosition === "unknown") {
+    next.startingPosition = "prospective_outside_us";
+    next.admissionBasis = "fixed_period";
   }
-
-  return {
-    ...next,
-    narrative: current.narrative
-  };
+  if (next.currentProgramEndDate && next.startingPosition === "current_ds_inside_us") {
+    next.programEndOnEffectiveDate ??= next.currentProgramEndDate;
+  }
+  return { ...next, narrative: current.narrative };
 }
 
-const monthOptions = [
-  { value: "1", label: "January" },
-  { value: "2", label: "February" },
-  { value: "3", label: "March" },
-  { value: "4", label: "April" },
-  { value: "5", label: "May" },
-  { value: "6", label: "June" },
-  { value: "7", label: "July" },
-  { value: "8", label: "August" },
-  { value: "9", label: "September" },
-  { value: "10", label: "October" },
-  { value: "11", label: "November" },
-  { value: "12", label: "December" }
+function isCurrent(scenario: StudentScenario): boolean {
+  return scenario.startingPosition === "current_ds_inside_us";
+}
+
+function isFuture(scenario: StudentScenario): boolean {
+  return scenario.startingPosition === "prospective_outside_us" || scenario.startingPosition === "change_status_inside_us";
+}
+
+function optKind(stage: OptStage): "regular" | "stem" {
+  return stage.startsWith("stem") ? "stem" : "regular";
+}
+
+function optStatus(stage: OptStage): "not_filed" | "pending" | "approved" {
+  if (stage.endsWith("pending")) return "pending";
+  if (stage.endsWith("approved")) return "approved";
+  return "not_filed";
+}
+
+function optStage(kind: string, status: string): OptStage {
+  return `${kind === "stem" ? "stem" : "post_completion"}_${status}` as OptStage;
+}
+
+const questionOrder = [
+  "presence",
+  "futureMethod",
+  "entryDate",
+  "departBeforeRule",
+  "programStart",
+  "programEnd",
+  "programType",
+  "educationLevel",
+  "optIntent",
+  "optKind",
+  "optStatus",
+  "dsoRecommendation",
+  "optFilingDate",
+  "eadEndDate",
+  "travelIntent",
+  "returnAfterRule",
+  "returnDate",
+  "travelProgramStart",
+  "schoolTransfer",
+  "programChange",
+  "firstAcademicYear",
+  "nextProgram",
+  "cptIntent",
+  "cptTiming"
 ];
 
-interface DateParts {
-  month: string;
-  day: string;
-  year: string;
-}
+function buildQuestions(scenario: StudentScenario, answered: Set<string>): Question[] {
+  const questions: Question[] = [
+    {
+      id: "presence",
+      eyebrow: "First, one date",
+      prompt: "Will you be in the United States in valid F-1 status on September 15, 2026?",
+      help: "This one answer decides whether the old D/S rules can continue for you.",
+      kind: "choice",
+      choices: yesNoUnknown,
+      value: scenario.inUsOnEffectiveDate,
+      answerLabel: factValueLabels.inUsOnEffectiveDate?.[scenario.inUsOnEffectiveDate]
+    }
+  ];
+  if (!answered.has("presence")) return questions;
 
-type AnswerField = keyof StudentScenario | "startingPoint" | "optKind" | "optStatus";
-
-function datePartsFromValue(value?: string): DateParts {
-  const match = value?.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  return {
-    month: match ? String(Number(match[2])) : "",
-    day: match ? String(Number(match[3])) : "",
-    year: match ? match[1] : ""
-  };
-}
-
-function dateValueFromParts(parts: DateParts): string | undefined {
-  const empty = !parts.month && !parts.day && !parts.year;
-  if (empty) {
-    return undefined;
-  }
-  if (!parts.month || !parts.day || !/^\d{4}$/.test(parts.year)) {
-    return undefined;
-  }
-
-  const value = `${parts.year}-${parts.month.padStart(2, "0")}-${parts.day.padStart(2, "0")}`;
-  return isValidDateString(value) ? value : undefined;
-}
-
-function SelectField<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-  answered = true
-}: {
-  label: string;
-  value: T;
-  options: Record<T, string>;
-  onChange: (value: T) => void;
-  answered?: boolean;
-}) {
-  return (
-    <label className={`field select-field${answered ? "" : " needs-answer"}`}>
-      <span>{label}</span>
-      <select value={answered ? value : ""} onChange={(event) => onChange(event.currentTarget.value as T)}>
-        {!answered && (
-          <option value="" disabled>
-            Choose one
-          </option>
-        )}
-        {Object.entries(options).map(([optionValue, optionLabel]) => (
-          <option key={optionValue} value={optionValue}>
-            {optionLabel as string}
-          </option>
-        ))}
-      </select>
-      {!answered && <small className="answer-prompt">Please answer to receive the next question.</small>}
-    </label>
-  );
-}
-
-function DateField({
-  label,
-  value,
-  onChange
-}: {
-  label: string;
-  value?: string;
-  onChange: (value: string | undefined) => void;
-}) {
-  const [parts, setParts] = useState(() => datePartsFromValue(value));
-
-  useEffect(() => {
-    setParts(datePartsFromValue(value));
-  }, [value]);
-
-  function updatePart(part: keyof DateParts, nextValue: string) {
-    const nextParts = { ...parts, [part]: nextValue };
-    setParts(nextParts);
-
-    const complete = Boolean(nextParts.month && nextParts.day && /^\d{4}$/.test(nextParts.year));
-    const empty = !nextParts.month && !nextParts.day && !nextParts.year;
-    if (empty) {
-      onChange(undefined);
-    } else if (complete) {
-      const nextValue = dateValueFromParts(nextParts);
-      if (nextValue) {
-        onChange(nextValue);
+  if (scenario.inUsOnEffectiveDate === "no") {
+    questions.push({
+      id: "futureMethod",
+      eyebrow: "How you will become F-1",
+      prompt: "After September 15, how do you expect to get F-1 status?",
+      kind: "choice",
+      choices: [
+        { value: "prospective_outside_us", label: "Enter the U.S. in F-1 status" },
+        { value: "change_status_inside_us", label: "Change status inside the U.S." },
+        { value: "unknown", label: "I do not know yet" }
+      ],
+      value: scenario.startingPosition,
+      answerLabel: factValueLabels.startingPosition?.[scenario.startingPosition]
+    });
+    if (!answered.has("futureMethod")) return questions;
+    if (scenario.startingPosition === "prospective_outside_us") {
+      questions.push({
+        id: "entryDate",
+        eyebrow: "Your F-1 entry",
+        prompt: scenario.departBeforeEffectiveDate === "yes"
+          ? "When will you next enter the United States in F-1 status after September 15, 2026?"
+          : "When do you expect to enter the United States in F-1 status?",
+        help: "Use the month name, day, and year so the date cannot be read in the wrong order.",
+        kind: "date",
+        value: scenario.reentryDate,
+        answerLabel: scenario.reentryDate ? formatDate(scenario.reentryDate) : "I do not know yet",
+        allowUnknownDate: true
+      });
+      if (!answered.has("entryDate")) return questions;
+      if (scenario.reentryDate && isValidDateString(scenario.reentryDate) && compareDates(scenario.reentryDate, DEFAULT_EFFECTIVE_DATE) <= 0) {
+        questions.push({
+          id: "departBeforeRule",
+          eyebrow: "These dates need clarification",
+          prompt: "Will you leave the United States before September 15, 2026?",
+          help: "You said you will not be here in valid F-1 status on September 15, but your entry date is before that day.",
+          kind: "choice",
+          choices: yesNoUnknown,
+          value: scenario.departBeforeEffectiveDate,
+          answerLabel: factValueLabels.departBeforeEffectiveDate?.[scenario.departBeforeEffectiveDate ?? "unknown"]
+        });
+        if (!answered.has("departBeforeRule")) return questions;
       }
     }
   }
 
-  return (
-    <label className="field date-field">
-      <span>{label}</span>
-      <div className="date-triplet">
-        <select aria-label={`${label} month`} value={parts.month} onChange={(event) => updatePart("month", event.currentTarget.value)}>
-          <option value="">Month</option>
-          {monthOptions.map((month) => (
-            <option key={month.value} value={month.value}>
-              {month.label}
-            </option>
-          ))}
-        </select>
-        <input
-          aria-label={`${label} day`}
-          inputMode="numeric"
-          min="1"
-          max="31"
-          placeholder="Day"
-          type="number"
-          value={parts.day}
-          onChange={(event) => updatePart("day", event.currentTarget.value)}
-        />
-        <input
-          aria-label={`${label} year`}
-          inputMode="numeric"
-          min="2020"
-          max="2040"
-          placeholder="Year"
-          type="number"
-          value={parts.year}
-          onChange={(event) => updatePart("year", event.currentTarget.value)}
-        />
-      </div>
-    </label>
-  );
+  if (isFuture(scenario)) {
+    questions.push({ id: "programStart", eyebrow: "Your I-20", prompt: "What program start date will be on your I-20?", kind: "date", value: scenario.programStartDate, answerLabel: scenario.programStartDate ? formatDate(scenario.programStartDate) : "I do not know yet", allowUnknownDate: true });
+    if (!answered.has("programStart")) return questions;
+  }
+
+  questions.push({
+    id: "programEnd",
+    eyebrow: "Your I-20",
+    prompt: isCurrent(scenario)
+      ? "What program end date do you expect to have on your I-20 on September 15, 2026?"
+      : "What program end date will be on your I-20?",
+    kind: "date",
+    value: isCurrent(scenario) ? scenario.programEndOnEffectiveDate : scenario.currentProgramEndDate,
+    answerLabel: (isCurrent(scenario) ? scenario.programEndOnEffectiveDate : scenario.currentProgramEndDate)
+      ? formatDate((isCurrent(scenario) ? scenario.programEndOnEffectiveDate : scenario.currentProgramEndDate)!)
+      : "I do not know yet",
+    allowUnknownDate: true
+  });
+  if (!answered.has("programEnd")) return questions;
+
+  if (isFuture(scenario)) {
+    questions.push({
+      id: "programType",
+      eyebrow: "Program type",
+      prompt: "What kind of F-1 program will this be?",
+      kind: "choice",
+      choices: [
+        { value: "college_or_university", label: "College or university" },
+        { value: "english_language_training", label: "English-language training" },
+        { value: "public_high_school", label: "Public high school" },
+        { value: "private_high_school", label: "Private high school" },
+        { value: "other", label: "Another F-1 program" },
+        { value: "unknown", label: "I do not know yet" }
+      ],
+      value: scenario.programType,
+      answerLabel: factValueLabels.programType?.[scenario.programType ?? "unknown"]
+    });
+    if (!answered.has("programType")) return questions;
+  }
+
+  questions.push({
+    id: "educationLevel",
+    eyebrow: "Education level",
+    prompt: "Is your program undergraduate or graduate level?",
+    kind: "choice",
+    choices: [
+      { value: "undergraduate", label: "Undergraduate" },
+      { value: "graduate", label: "Graduate" },
+      { value: "other", label: "Another level" },
+      { value: "unknown", label: "I do not know yet" }
+    ],
+    value: scenario.educationLevel,
+    answerLabel: factValueLabels.educationLevel?.[scenario.educationLevel ?? "unknown"]
+  });
+  if (!answered.has("educationLevel")) return questions;
+
+  questions.push({
+    id: "optIntent",
+    eyebrow: "Work after your program",
+    prompt: "Are you planning to apply for post-completion OPT or STEM OPT?",
+    kind: "choice",
+    choices: yesNoUnknown,
+    value: scenario.optIntent,
+    answerLabel: factValueLabels.inUsOnEffectiveDate?.[scenario.optIntent ?? "unknown"]
+  });
+  if (!answered.has("optIntent")) return questions;
+
+  if (scenario.optIntent === "yes") {
+    questions.push({ id: "optKind", eyebrow: "OPT type", prompt: "Which type are you planning?", kind: "choice", choices: [{ value: "regular", label: "Regular post-completion OPT" }, { value: "stem", label: "STEM OPT extension" }], value: optKind(scenario.optStage), answerLabel: optKind(scenario.optStage) === "stem" ? "STEM OPT extension" : "Regular post-completion OPT" });
+    if (!answered.has("optKind")) return questions;
+    questions.push({ id: "optStatus", eyebrow: "OPT progress", prompt: "Where are you in the application process?", kind: "choice", choices: [{ value: "not_filed", label: "I have not filed" }, { value: "pending", label: "USCIS is reviewing it" }, { value: "approved", label: "It is approved" }], value: optStatus(scenario.optStage), answerLabel: { not_filed: "Not filed", pending: "Pending", approved: "Approved" }[optStatus(scenario.optStage)] });
+    if (!answered.has("optStatus")) return questions;
+    if (!scenario.optStage.endsWith("approved")) {
+      questions.push({ id: "dsoRecommendation", eyebrow: "School recommendation", prompt: "Has your DSO recommended this OPT in SEVIS?", kind: "choice", choices: yesNoUnknown, value: scenario.dsoRecommendedOpt, answerLabel: factValueLabels.dsoRecommendedOpt?.[scenario.dsoRecommendedOpt ?? "unknown"] });
+      if (!answered.has("dsoRecommendation")) return questions;
+      questions.push({ id: "optFilingDate", eyebrow: "I-765 timing", prompt: "When did you file, or when do you plan to file, Form I-765?", kind: "date", value: scenario.optFilingDate, answerLabel: scenario.optFilingDate ? formatDate(scenario.optFilingDate) : "I do not know yet", allowUnknownDate: true });
+      if (!answered.has("optFilingDate")) return questions;
+    } else {
+      questions.push({ id: "eadEndDate", eyebrow: "Your EAD", prompt: "What expiration date is on your EAD?", kind: "date", value: scenario.currentEadEndDate, answerLabel: scenario.currentEadEndDate ? formatDate(scenario.currentEadEndDate) : "I do not know yet", allowUnknownDate: true });
+      if (!answered.has("eadEndDate")) return questions;
+    }
+  }
+
+  if (isCurrent(scenario)) {
+    questions.push({
+      id: "travelIntent",
+      eyebrow: "Travel",
+      prompt: "Are you planning to travel outside the United States?",
+      kind: "choice",
+      choices: [{ value: "planned", label: "Yes" }, { value: "none", label: "No" }, { value: "unknown", label: "I do not know yet" }],
+      value: scenario.travelPosture,
+      answerLabel: factValueLabels.travelPosture?.[scenario.travelPosture]
+    });
+    if (!answered.has("travelIntent")) return questions;
+    if (scenario.travelPosture === "planned" || scenario.travelPosture === "completed") {
+      questions.push({ id: "returnAfterRule", eyebrow: "Return timing", prompt: "Will you return to the United States after September 15, 2026?", kind: "choice", choices: yesNoUnknown, value: scenario.returningAfterEffectiveDate, answerLabel: factValueLabels.inUsOnEffectiveDate?.[scenario.returningAfterEffectiveDate ?? "unknown"] });
+      if (!answered.has("returnAfterRule")) return questions;
+      if (scenario.returningAfterEffectiveDate === "yes") {
+        questions.push({ id: "returnDate", eyebrow: "Return date", prompt: "When do you expect to return?", kind: "date", value: scenario.reentryDate, answerLabel: scenario.reentryDate ? formatDate(scenario.reentryDate) : "I do not know yet", allowUnknownDate: true });
+        if (!answered.has("returnDate")) return questions;
+        questions.push({ id: "travelProgramStart", eyebrow: "Your I-20", prompt: "What program start date is printed on the I-20 you will use to return?", help: "This date, not the day you return, sets the normal four-year maximum.", kind: "date", value: scenario.programStartDate, answerLabel: scenario.programStartDate ? formatDate(scenario.programStartDate) : "I do not know yet", allowUnknownDate: true });
+        if (!answered.has("travelProgramStart")) return questions;
+      }
+    }
+  }
+
+  questions.push({ id: "schoolTransfer", eyebrow: "School plans", prompt: "Are you planning to transfer to a different school?", kind: "choice", choices: yesNoUnknown, value: scenario.schoolTransferPlan, answerLabel: factValueLabels.inUsOnEffectiveDate?.[scenario.schoolTransferPlan ?? "unknown"] });
+  if (!answered.has("schoolTransfer")) return questions;
+  questions.push({ id: "programChange", eyebrow: "Program plans", prompt: "Are you planning to change your major or education level during this program?", kind: "choice", choices: yesNoUnknown, value: scenario.academicProgramChangePlan, answerLabel: factValueLabels.inUsOnEffectiveDate?.[scenario.academicProgramChangePlan ?? "unknown"] });
+  if (!answered.has("programChange")) return questions;
+
+  if (scenario.educationLevel === "undergraduate" && (scenario.schoolTransferPlan === "yes" || scenario.academicProgramChangePlan === "yes")) {
+    questions.push({ id: "firstAcademicYear", eyebrow: "First academic year", prompt: "Will you have completed one academic year before the transfer or program change?", kind: "choice", choices: yesNoUnknown, value: scenario.firstAcademicYearCompleted, answerLabel: factValueLabels.firstAcademicYearCompleted?.[scenario.firstAcademicYearCompleted ?? "unknown"] });
+    if (!answered.has("firstAcademicYear")) return questions;
+  }
+
+  questions.push({
+    id: "nextProgram",
+    eyebrow: "A later program",
+    prompt: "After this program, are you considering another U.S. program at the same education level or a lower level?",
+    kind: "choice",
+    choices: [{ value: "same_or_lower", label: "Yes" }, { value: "not_planning", label: "No" }, { value: "higher", label: "Only a higher level" }, { value: "unknown", label: "I do not know yet" }],
+    value: scenario.nextProgramLevelPlan,
+    answerLabel: factValueLabels.nextProgramLevelPlan?.[scenario.nextProgramLevelPlan ?? "unknown"]
+  });
+  if (!answered.has("nextProgram")) return questions;
+
+  questions.push({ id: "cptIntent", eyebrow: "Work during your program", prompt: "Are you planning to use CPT?", kind: "choice", choices: yesNoUnknown, value: scenario.cptPlan === "none" ? "no" : scenario.cptPlan === "unknown" ? "unknown" : "yes", answerLabel: scenario.cptPlan === "none" ? "No" : scenario.cptPlan === "unknown" ? "I do not know yet" : "Yes" });
+  if (!answered.has("cptIntent")) return questions;
+  if (scenario.cptPlan !== "none" && scenario.cptPlan !== "unknown") {
+    questions.push({
+      id: "cptTiming",
+      eyebrow: "CPT timing",
+      prompt: "Could you still be using CPT when your protected study period ends?",
+      help: "This decides whether filing early is needed to avoid a break in authorized work.",
+      kind: "choice",
+      choices: [{ value: "after_admission_end", label: "Yes" }, { value: "before_admission_end", label: "No" }, { value: "unknown", label: "I do not know yet" }],
+      value: scenario.cptPlan,
+      answerLabel: factValueLabels.cptPlan?.[scenario.cptPlan]
+    });
+  }
+  return questions;
 }
 
-function Segmented<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-  answered = true
-}: {
-  label: string;
-  value: T;
-  options: Array<{ value: T; label: string }>;
-  onChange: (value: T) => void;
-  answered?: boolean;
-}) {
+const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+function DateAnswer({ value, onComplete, onUnknown }: { value?: string; onComplete: (value: string) => void; onUnknown?: () => void }) {
+  const initial = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const [month, setMonth] = useState(initial ? String(Number(initial[2])) : "");
+  const [day, setDay] = useState(initial ? String(Number(initial[3])) : "");
+  const [year, setYear] = useState(initial?.[1] ?? "");
+  const [error, setError] = useState("");
+  const onCompleteRef = useRef(onComplete);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
+  useEffect(() => {
+    if (!month || !day || year.length !== 4) return;
+    const candidate = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    if (isValidDateString(candidate)) {
+      setError("");
+      onCompleteRef.current(candidate);
+    } else {
+      setError("That is not a calendar date. Check the day, month, and year.");
+    }
+  }, [month, day, year]);
+
   return (
-    <div className={`field segmented-field${answered ? "" : " needs-answer"}`}>
-      <span>{label}</span>
-      <div className="segmented" role="group" aria-label={label}>
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            aria-pressed={answered && value === option.value}
-            onClick={() => onChange(option.value)}
-          >
-            {option.label}
-          </button>
-        ))}
+    <div className="date-answer">
+      <div className="date-fields">
+        <label>
+          <span>Month</span>
+          <select value={month} onChange={(event) => setMonth(event.currentTarget.value)}>
+            <option value="">Select month</option>
+            {months.map((label, index) => <option key={label} value={index + 1}>{label}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>Day</span>
+          <input inputMode="numeric" autoComplete="off" value={day} onChange={(event) => setDay(event.currentTarget.value.replace(/\D/g, "").slice(0, 2))} placeholder="Day" aria-label="Day" />
+        </label>
+        <label>
+          <span>Year</span>
+          <input inputMode="numeric" autoComplete="off" value={year} onChange={(event) => setYear(event.currentTarget.value.replace(/\D/g, "").slice(0, 4))} placeholder="Year" aria-label="Year" />
+        </label>
       </div>
-      {!answered && <small className="answer-prompt">Please answer to receive the next question.</small>}
+      {error && <p className="field-error" role="alert">{error}</p>}
+      {onUnknown && <button type="button" className="text-action" onClick={onUnknown}>I do not know this date yet</button>}
     </div>
   );
 }
 
-function findingIcon(tone: Finding["tone"]) {
-  if (tone === "good") {
-    return <CheckCircle2 aria-hidden="true" />;
-  }
-  if (tone === "question") {
-    return <HelpCircle aria-hidden="true" />;
-  }
-  return <AlertTriangle aria-hidden="true" />;
-}
-
-type PlannerView = ReturnType<typeof calculateScenario>;
-type ImpactTone = "good" | "info" | "warning" | "question" | "danger";
-
-interface ImpactCard {
-  title: string;
-  detail: string;
-  tone: ImpactTone;
-  sourceIds?: string[];
-}
-
-interface AdvisoryItem {
-  title: string;
-  body: string;
-  tone: ImpactTone;
-  sourceIds: string[];
-}
-
-interface StudentOutcome {
-  eyebrow: string;
-  title: string;
-  detail: string;
-  tone: "good" | "manual" | "warning";
-}
-
-interface StudentTimelineEvent {
-  label: string;
-  date?: string;
-  detail: string;
-  tone: ImpactTone;
-}
-
-interface StudentTimeline {
-  title: string;
-  detail: string;
-  events: StudentTimelineEvent[];
-}
-
-const yesNoOnlyOptions: Array<{ value: YesNoUnknown; label: string }> = [
-  { value: "no", label: "No" },
-  { value: "yes", label: "Yes" }
-];
-
-const planningOptions: Array<{ value: YesNoUnknown; label: string }> = [
-  { value: "no", label: "No" },
-  { value: "yes", label: "Yes" },
-  { value: "unknown", label: "I do not know yet" }
-];
-
-const pathOptions: Array<{ value: StartingPosition; label: string }> = [
-  { value: "current_ds_inside_us", label: "Yes" },
-  { value: "prospective_outside_us", label: "No" },
-  { value: "unknown", label: "I do not know yet" }
-];
-
-const i94Options: Array<{ value: AdmissionBasis; label: string }> = [
-  { value: "duration_of_status", label: "It says D/S" },
-  { value: "fixed_period", label: "It has a date" },
-  { value: "unknown", label: "Not sure" }
-];
-
-const travelDecisionOptions: Array<{ value: TravelPosture; label: string }> = [
-  { value: "none", label: "No" },
-  { value: "planned", label: "Yes" },
-  { value: "unknown", label: "I do not know yet" }
-];
-
-const returnAfterRuleOptions: Array<{ value: YesNoUnknown; label: string }> = [
-  { value: "yes", label: "Yes" },
-  { value: "no", label: "No" },
-  { value: "unknown", label: "I do not know yet" }
-];
-
-type OptKind = "regular" | "stem";
-type OptFilingStatus = "not_filed" | "pending" | "approved";
-
-const optKindOptions: Array<{ value: OptKind; label: string }> = [
-  { value: "regular", label: "Regular OPT" },
-  { value: "stem", label: "STEM OPT" }
-];
-
-const optStatusOptions: Array<{ value: OptFilingStatus; label: string }> = [
-  { value: "not_filed", label: "Not filed yet" },
-  { value: "pending", label: "Filed, waiting" },
-  { value: "approved", label: "Approved" }
-];
-
-const educationLevelOptions: Array<{ value: EducationLevel; label: string }> = [
-  { value: "undergraduate", label: "Undergraduate" },
-  { value: "graduate", label: "Graduate" },
-  { value: "other", label: "Other" },
-  { value: "unknown", label: "I do not know yet" }
-];
-
-const nextProgramLevelOptions: Array<{ value: NextProgramLevelPlan; label: string }> = [
-  { value: "not_planning", label: "No next program planned" },
-  { value: "higher", label: "A higher level" },
-  { value: "same_or_lower", label: "Same or lower level" },
-  { value: "unknown", label: "I do not know yet" }
-];
-
-function isCurrentTrack(scenario: StudentScenario): boolean {
-  return scenario.startingPosition === "current_ds_inside_us" || scenario.startingPosition === "transfer_or_program_change";
-}
-
-function hasTravelPlan(scenario: StudentScenario): boolean {
-  return scenario.travelPosture === "planned" || scenario.travelPosture === "completed" || scenario.travelPosture === "automatic_visa_revalidation";
-}
-
-function needsOptDate(stage: OptStage): boolean {
-  return stage !== "none" && stage !== "pre_completion";
-}
-
-function hasApprovedOpt(stage: OptStage): boolean {
-  return stage === "post_completion_approved" || stage === "stem_approved";
-}
-
-function programEndBeforeRuleStarts(scenario: StudentScenario): boolean {
-  return Boolean(scenario.programEndOnEffectiveDate && compareDates(scenario.programEndOnEffectiveDate, DEFAULT_EFFECTIVE_DATE) < 0);
-}
-
-function programRunsPastCoverage(scenario: StudentScenario, result: PlannerView): boolean {
-  const testedEnd = scenario.currentProgramEndDate ?? scenario.programEndOnEffectiveDate;
-  return Boolean(result.coverageEnd && testedEnd && compareDates(testedEnd, result.coverageEnd) > 0);
-}
-
-function travelCanExtendTimeline(result: PlannerView, travelResult: PlannerView | null): boolean {
-  return Boolean(result.coverageEnd && travelResult?.coverageEnd && compareDates(travelResult.coverageEnd, result.coverageEnd) > 0);
-}
-
-function hasContradiction(result: PlannerView): boolean {
-  return result.findings.some((finding) => finding.id.includes("contradiction"));
-}
-
-function hasFutureEntryDateContradiction(scenario: StudentScenario): boolean {
-  return Boolean(
-    scenario.startingPosition === "prospective_outside_us" &&
-      scenario.inUsOnEffectiveDate === "no" &&
-      scenario.reentryDate &&
-      compareDates(scenario.reentryDate, scenario.effectiveDate ?? DEFAULT_EFFECTIVE_DATE) <= 0
-  );
-}
-
-function optKindFromStage(stage: OptStage): OptKind {
-  return stage.startsWith("stem") ? "stem" : "regular";
-}
-
-function optStatusFromStage(stage: OptStage): OptFilingStatus {
-  if (stage.endsWith("pending")) {
-    return "pending";
-  }
-  if (stage.endsWith("approved")) {
-    return "approved";
-  }
-  return "not_filed";
-}
-
-function optStageFromParts(kind: OptKind, status: OptFilingStatus): OptStage {
-  if (kind === "stem") {
-    return status === "approved" ? "stem_approved" : status === "pending" ? "stem_pending" : "stem_not_filed";
-  }
-
-  return status === "approved" ? "post_completion_approved" : status === "pending" ? "post_completion_pending" : "post_completion_not_filed";
-}
-
-function combinePlanAnswers(first?: YesNoUnknown, second?: YesNoUnknown): YesNoUnknown {
-  if (first === "yes" || second === "yes") {
-    return "yes";
-  }
-  if (first === "unknown" || second === "unknown") {
-    return "unknown";
-  }
-  return "no";
-}
-
-function sortEvents(events: StudentTimelineEvent[]): StudentTimelineEvent[] {
-  return [...events].sort((left, right) => {
-    if (!left.date && !right.date) {
-      return 0;
-    }
-    if (!left.date) {
-      return 1;
-    }
-    if (!right.date) {
-      return -1;
-    }
-    return compareDates(left.date, right.date);
-  });
-}
-
-function SourceChips({ result, sourceIds }: { result: PlannerView; sourceIds: string[] }) {
+function QuestionCard({ question, onAnswer, onDate, onUnknownDate }: { question: Question; onAnswer: (value: string) => void; onDate: (value: string) => void; onUnknownDate: () => void }) {
   return (
-    <span className="source-chips" aria-label="Sources">
-      {sourceIds.map((sourceId) => {
-        const citation = result.citations.find((item) => item.id === sourceId) ?? SOURCE_INDEX[sourceId];
-        return citation ? (
-          <a key={sourceId} href={citation.url} target="_blank" rel="noreferrer" title={citation.locator}>
-            {sourceId}
-          </a>
-        ) : (
-          <span key={sourceId}>{sourceId}</span>
-        );
-      })}
-    </span>
-  );
-}
-
-function WhatHappenedPage({ result }: { result: PlannerView }) {
-  const changes: AdvisoryItem[] = [
-    {
-      title: "F-1 entries and reentries get fixed I-94 end dates",
-      body:
-        "Starting September 15, 2026, F-1 students entering or reentering the United States are admitted until a fixed date tied to the I-20 or training period, with a four-year cap.",
-      tone: "info",
-      sourceIds: ["8CFR-214-1-A4"]
-    },
-    {
-      title: "The after-program period drops from 60 days to 30 days",
-      body:
-        "New fixed-period F-1 admissions have 30 days after the fixed end date to leave the United States or take another immigration step. Current D/S transition students can still have the 60-day F-1 period on the old-rule path.",
-      tone: "warning",
-      sourceIds: ["8CFR-214-1-M1", "8CFR-214-2-F5V"]
-    },
-    {
-      title: "Current D/S students get transition protection, but not forever",
-      body:
-        "If you are a valid F-1 student in the United States on September 15, 2026 and your I-94 says D/S, the old D/S rules can keep covering this stay until the I-20 or EAD date in place then, capped at September 15, 2030.",
-      tone: "good",
-      sourceIds: ["8CFR-214-1-M1"]
-    },
-    {
-      title: "OPT, STEM OPT, transfers, and program changes now need closer timing checks",
-      body:
-        "The rule adds special transition treatment for certain early OPT/STEM OPT filings, while also tightening school transfers, graduate program changes, and same-level or lower-level next programs.",
-      tone: "warning",
-      sourceIds: ["8CFR-214-1-M1-OPT", "8CFR-214-2-F5II"]
-    }
-  ];
-
-  return (
-    <main className="overview-page" id="what-happened">
-      <article className="overview-article">
-        <p className="eyebrow">What happened</p>
-        <h2>Major changes to duration of status for F-1 students</h2>
-        <p>
-          On July 17, 2026, the Department of Homeland Security released a final rule that ends the open-ended duration of status framework for many F-1 students. The rule takes effect on September 15, 2026. After that date, new F-1 entries and many reentries move to fixed admission periods with specific I-94 end dates.
-        </p>
-        <p>
-          The biggest question for any student is whether you will be a valid F-1 student inside the United States on September 15, 2026. If yes, the transition rules may keep your current stay under the old D/S system. If no, your next F-1 entry is analyzed under the new fixed-date system.
-        </p>
-        <div className="overview-links">
-          <a href="https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant" target="_blank" rel="noreferrer">
-            <FileText aria-hidden="true" />
-            DHS final rule
-          </a>
-          <a href="https://www.nafsa.org/regulatory-information/dhs-final-rule-ending-duration-status" target="_blank" rel="noreferrer">
-            <FileText aria-hidden="true" />
-            NAFSA overview
-          </a>
+    <section className="question-card" aria-labelledby={`question-${question.id}`}>
+      <p className="question-kicker">{question.eyebrow}</p>
+      <h2 id={`question-${question.id}`}>{question.prompt}</h2>
+      {question.help && <p className="question-help">{question.help}</p>}
+      {question.kind === "choice" ? (
+        <div className="choice-group">
+          {question.choices?.map((choice) => (
+            <button type="button" key={choice.value} onClick={() => onAnswer(choice.value)}>
+              <span>{choice.label}</span>
+              <ArrowRight aria-hidden="true" />
+            </button>
+          ))}
         </div>
-        <section>
-          <h3>Key changes at a glance</h3>
-          <div className="overview-grid">
-            {changes.map((item) => (
-              <article key={item.title} className={`overview-card ${item.tone}`}>
-                <strong>{item.title}</strong>
-                <p>{item.body}</p>
-                <SourceChips result={result} sourceIds={item.sourceIds} />
-              </article>
-            ))}
+      ) : (
+        <DateAnswer value={question.value} onComplete={onDate} onUnknown={question.allowUnknownDate ? onUnknownDate : undefined} />
+      )}
+      <p className="answer-prompt">Answer to receive the next question.</p>
+    </section>
+  );
+}
+
+function FindingIcon({ tone }: { tone: Finding["tone"] }) {
+  if (tone === "good") return <CheckCircle2 aria-hidden="true" />;
+  if (tone === "warning" || tone === "danger") return <AlertTriangle aria-hidden="true" />;
+  if (tone === "question") return <CircleHelp aria-hidden="true" />;
+  return <Info aria-hidden="true" />;
+}
+
+function SourceLink({ sourceId }: { sourceId: string }) {
+  const citation = SOURCE_INDEX[sourceId];
+  if (!citation) return null;
+  return (
+    <a className="source-link" href={citation.url} target="_blank" rel="noreferrer" title={citation.locator}>
+      Read the rule
+      <ExternalLink aria-hidden="true" />
+    </a>
+  );
+}
+
+function ImpactList({ result, provisional = false }: { result: ReturnType<typeof calculateScenario>; provisional?: boolean }) {
+  const visible = result.findings.filter((item) => !item.id.startsWith("date-"));
+  return (
+    <section className="impact-area" aria-live="polite">
+      <div className="impact-heading">
+        <div>
+          <p>{provisional ? "From what I understand so far" : "How this affects you"}</p>
+          <h2>{result.headline}</h2>
+        </div>
+        {provisional && <span>Draft</span>}
+      </div>
+      <p className="impact-summary">{result.summary}</p>
+      <div className="impact-list">
+        {visible.map((item) => (
+          <article key={item.id} className={`impact-item ${item.tone}`}>
+            <FindingIcon tone={item.tone} />
+            <div>
+              <h3>{item.title}</h3>
+              <p>{item.detail}</p>
+              {item.sourceIds[0] && <SourceLink sourceId={item.sourceIds[0]} />}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Timeline({ title, subtitle, events }: { title: string; subtitle: string; events: TimelineItem[] }) {
+  if (!events.length) return null;
+  return (
+    <section className="visual-timeline">
+      <header>
+        <CalendarDays aria-hidden="true" />
+        <div><h3>{title}</h3><p>{subtitle}</p></div>
+      </header>
+      <div className="timeline-track" style={{ "--event-count": events.length } as React.CSSProperties}>
+        {events.map((event, index) => (
+          <div className={`timeline-event ${event.tone}`} key={`${event.date}-${event.title}-${index}`}>
+            <time dateTime={event.date}>{formatDate(event.date)}</time>
+            <span className="timeline-dot" aria-hidden="true" />
+            <h4>{event.title}</h4>
+            <p>{event.detail}</p>
           </div>
-        </section>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function WhatHappened({ onBack }: { onBack: () => void }) {
+  return (
+    <main className="overview-page">
+      <button type="button" className="back-action" onClick={onBack}><ArrowLeft aria-hidden="true" /> Back to your answers</button>
+      <article>
+        <p className="article-kicker">Effective September 15, 2026</p>
+        <h1>Major changes to how long F-1 students may stay</h1>
+        <p className="article-deck">DHS has replaced the open-ended “duration of status” system with fixed periods of admission and a new USCIS extension process.</p>
+        <p>On July 17, 2026, the Department of Homeland Security published a final rule that changes the basic time structure of F-1 status. For most new admissions and changes to F-1 status beginning September 15, the I-94 will show a specific date instead of D/S.</p>
+        <h2>Current students receive transition protection</h2>
+        <p>If you are in the United States in valid F-1 status with D/S on September 15, 2026, you can remain under the old rules through the later I-20 or EAD end date in place that day, up to September 15, 2030, followed by 60 days. Leaving and returning after the rule begins moves you into the fixed-period system.</p>
+        <h2>New admissions receive a dated I-94</h2>
+        <p>The normal fixed period covers the I-20 program dates for no more than four years. The four-year maximum starts with the I-20 program start date, not the date you physically enter. The I-94 also includes 30 days after the study or training period, reducing the ordinary post-completion period from 60 days to 30.</p>
+        <h2>Longer plans may require Form I-539</h2>
+        <p>If your program or authorized training continues beyond the first fixed period, you may need to ask USCIS for an extension of stay. The filing can require a new DSO-endorsed I-20, financial evidence, a fee, and biometrics. USCIS must receive a timely filing by the I-94 date, but work authorization can be interrupted if the request arrives only during the final 30 days.</p>
+        <h2>School and program choices also change</h2>
+        <p>The rule adds limits on first-year undergraduate transfers and program changes, graduate transfers and changes of educational objective, and later programs at the same or a lower education level. DHS can delay these particular provisions through September 14, 2028 and must announce a delay publicly.</p>
+        <div className="article-links">
+          <a href={SOURCE_INDEX["FR-2026-FINAL-RULE"].url} target="_blank" rel="noreferrer"><FileText aria-hidden="true" /><span><strong>Read the official final rule</strong><small>Federal Register, July 17, 2026</small></span><ExternalLink aria-hidden="true" /></a>
+          <a href={SOURCE_INDEX["NAFSA-DS-FINAL-RULE-HUB"].url} target="_blank" rel="noreferrer"><Info aria-hidden="true" /><span><strong>Read NAFSA's public overview</strong><small>Regulatory analysis and updates</small></span><ExternalLink aria-hidden="true" /></a>
+        </div>
+        <p className="status-note">Rule status last checked July 19, 2026. A court order, congressional action, or DHS notice could change implementation.</p>
       </article>
     </main>
   );
 }
 
-function buildStudentOutcome(scenario: StudentScenario, result: PlannerView, travelResult: PlannerView | null): StudentOutcome {
-  if (scenario.startingPosition === "unknown") {
-    return {
-      eyebrow: "Start here",
-      title: "Answer one question to see what changes.",
-      detail: "The biggest split is whether you will be a valid F-1 student in the United States on September 15, 2026.",
-      tone: "manual"
-    };
-  }
-
-  const contradiction = result.findings.find((finding) => finding.id.includes("contradiction"));
-  if (contradiction) {
-    return {
-      eyebrow: "Check these answers",
-      title: "These answers do not fit together yet.",
-      detail: contradiction.detail,
-      tone: "warning"
-    };
-  }
-
-  if (isCurrentTrack(scenario)) {
-    const beyondProtectedPeriod = programRunsPastCoverage(scenario, result);
-
-    if (!scenario.programEndOnEffectiveDate) {
-      return {
-        eyebrow: "Valid F-1 in the U.S. on September 15",
-        title: "The new fixed-date I-94 does not automatically take over this stay.",
-        detail:
-          "Because you will be inside the U.S. in valid F-1 status on September 15, 2026, the old D/S rules may keep covering your current stay if your I-94 says D/S. Your I-20 date, travel, OPT/STEM, and school changes tell us how far that protection goes.",
-        tone: "good"
-      };
-    }
-
-    if (scenario.inUsOnEffectiveDate === "no" || scenario.maintainingStatusOnEffectiveDate === "no") {
-      return {
-        eyebrow: "Current F-1 student",
-        title: "Being outside the U.S. on September 15 changes the path.",
-        detail:
-          "The old-rule protection is for students who are physically in the U.S. when the rule starts. If you return after that date, your return may be treated as a new fixed-date F-1 admission.",
-        tone: "warning"
-      };
-    }
-
-    if (programEndBeforeRuleStarts(scenario) && scenario.optStage === "none" && !scenario.eadEndOnEffectiveDate) {
-      return {
-        eyebrow: "Before the new rule starts",
-        title: "Your I-20 ends before September 15, 2026.",
-        detail:
-          "This I-20 alone does not show that you will still be in F-1 status when the new rule starts. Tell us whether you will have OPT, STEM OPT, or a later I-20.",
-        tone: "manual"
-      };
-    }
-
-    if (result.coverageEnd && result.latestDepartureDate) {
-      return {
-        eyebrow: "If you do not travel",
-        title: beyondProtectedPeriod
-          ? "You are partly exempt, but not through the whole program."
-          : `You may stay under the old D/S rules until ${formatDate(result.coverageEnd)}.`,
-        detail: beyondProtectedPeriod
-          ? `The old-rule protection stops on ${formatDate(
-              result.coverageEnd
-            )}. If you need to study or train after that date, plan to file an extension of stay before the protected period ends.`
-          : `After that date, the F-1 period to leave the U.S. or take another immigration step runs through ${formatDate(
-              result.latestDepartureDate
-            )}.`,
-        tone: beyondProtectedPeriod ? "warning" : result.status === "ok" ? "good" : result.status === "manual" ? "manual" : "warning"
-      };
-    }
-
-    return {
-      eyebrow: "Need one more answer",
-      title: "We can show the effect once the missing date is clear.",
-      detail: result.followUpQuestions[0] ?? "Add the next answer in the question flow.",
-      tone: "manual"
-    };
-  }
-
-  if (!scenario.reentryDate) {
-    return {
-      eyebrow: "Future F-1 student",
-      title: "Enter the date you expect to enter the U.S.",
-      detail: "For students who enter after the rule starts, the U.S. entry date starts the fixed-date clock.",
-      tone: "manual"
-    };
-  }
-
-  if (!scenario.currentProgramEndDate) {
-    return {
-      eyebrow: "Future F-1 student",
-      title: "Enter the program end date on the I-20.",
-      detail: "The new rule compares that date with four years from U.S. entry.",
-      tone: "manual"
-    };
-  }
-
-  return {
-    eyebrow: "New fixed-date system",
-    title: result.coverageEnd ? `Your first fixed F-1 period would end on ${formatDate(result.coverageEnd)}.` : "One more date is needed.",
-    detail: result.latestDepartureDate
-      ? `After that, your 30-day F-1 grace period to leave the U.S. or take another immigration step runs through ${formatDate(result.latestDepartureDate)}.`
-      : "Add the missing date to see the full timeline.",
-    tone: result.status === "ok" ? "good" : result.status === "manual" ? "manual" : "warning"
-  };
-}
-
-function buildImpactCards(scenario: StudentScenario, result: PlannerView, travelResult: PlannerView | null): ImpactCard[] {
-  const contradiction = result.findings.find((finding) => finding.id.includes("contradiction"));
-  if (contradiction) {
-    return [
-      {
-        title: contradiction.title,
-        detail: contradiction.detail,
-        tone: "danger",
-        sourceIds: contradiction.sourceIds
-      }
-    ];
-  }
-
-  if (scenario.startingPosition === "unknown") {
-    return [
-      {
-        title: "Start with September 15, 2026",
-        detail: "Tell us whether you will be a valid F-1 student in the United States on the day the rule starts.",
-        tone: "question",
-        sourceIds: ["FR-2026-FINAL-RULE"]
-      }
-    ];
-  }
-
-  if (isCurrentTrack(scenario)) {
-    const cards: ImpactCard[] = [
-      {
-        title: "This stay may remain under the old D/S rules",
-        detail:
-          "Current F-1 students are not automatically switched to a fixed I-94 on September 15. If you are in the U.S. that day and your I-94 says D/S, this stay can remain in the old-rule path.",
-        tone: "good",
-        sourceIds: ["8CFR-214-1-M1"]
-      }
-    ];
-
-    if (scenario.inUsOnEffectiveDate === "no" || scenario.maintainingStatusOnEffectiveDate === "no") {
-      cards.push({
-        title: "The September 15 location answer changes this",
-        detail:
-          "The old-rule protection is for students physically in the U.S. when the rule starts. If you are outside the U.S. then, a later return may start a fixed-date admission instead.",
-        tone: "warning",
-        sourceIds: ["8CFR-214-1-M1", "8CFR-214-1-A4"]
-      });
-    }
-
-    if (!scenario.programEndOnEffectiveDate) {
-      cards.push({
-        title: "I-20 end date comes first",
-        detail: "The date on your current I-20 tells us how long the old-rule protection may last before travel, OPT/STEM, or a school change changes the answer.",
-        tone: "question",
-        sourceIds: ["8CFR-214-1-M1"]
-      });
-    } else if (programEndBeforeRuleStarts(scenario) && scenario.optStage === "none" && !scenario.eadEndOnEffectiveDate) {
-      cards.push({
-        title: "This I-20 ends before the new rule starts",
-        detail:
-          "If your F-1 status also ends before September 15, this new rule may not change that timeline. If you will have OPT, STEM OPT, or a later I-20, answer those next.",
-        tone: "question",
-        sourceIds: ["8CFR-214-1-M1"]
-      });
-    } else if (result.coverageEnd && result.latestDepartureDate) {
-      cards.push({
-        title: "If you do not travel",
-        detail: programRunsPastCoverage(scenario, result)
-          ? `The old-rule protection stops on ${formatDate(result.coverageEnd)}. If you need to study or train after that date, you need an extension-of-stay plan before the protected period ends.`
-          : `The old D/S rules may cover this path until ${formatDate(
-              result.coverageEnd
-            )}. The period to leave the U.S. or take another immigration step ends ${formatDate(result.latestDepartureDate)}.`,
-        tone: programRunsPastCoverage(scenario, result) ? "warning" : result.status === "ok" ? "good" : result.status === "manual" ? "question" : "warning",
-        sourceIds: ["8CFR-214-1-M1"]
-      });
-    }
-
-    if (hasTravelPlan(scenario)) {
-      const travelExtends = travelCanExtendTimeline(result, travelResult);
-      cards.push({
-        title: travelExtends ? "Travel may extend your F-1 timeline" : travelResult?.coverageEnd ? "Travel creates a second timeline" : "Travel needs a return date",
-        detail: travelResult?.coverageEnd
-          ? travelExtends
-            ? `If you stay in the U.S., this path reaches ${formatDate(result.coverageEnd)}. If you return on ${formatDate(
-                scenario.reentryDate
-              )}, the new fixed-date period may run through ${formatDate(
-                travelResult.coverageEnd
-              )}. That can be useful, but travel also creates visa and admission risk.`
-            : `If you return on ${formatDate(scenario.reentryDate)}, the new fixed-date system may run through ${formatDate(
-                travelResult.coverageEnd
-              )}, with 30 days after that.`
-          : "The return date matters because coming back after September 15 can start a new fixed-date I-94 period.",
-        tone: travelExtends ? "good" : travelResult?.coverageEnd ? "info" : "question",
-        sourceIds: ["8CFR-214-1-A4", "8CFR-214-2-F5V"]
-      });
-    } else {
-      cards.push({
-        title: "Travel can change the answer",
-        detail: "If you leave the U.S. and come back after September 15, your return may start a new fixed-date I-94 period.",
-        tone: "info",
-        sourceIds: ["8CFR-214-1-A4"]
-      });
-    }
-
-    if (needsOptDate(scenario.optStage)) {
-      cards.push({
-        title: "OPT or STEM OPT timing matters",
-        detail:
-          "The important facts are whether it is regular OPT or STEM OPT, whether you filed, whether it is approved, the filing date, EAD dates, and travel timing.",
-        tone: "warning",
-        sourceIds: ["8CFR-214-1-M1-OPT", "8CFR-214-2-F11"]
-      });
-    }
-
-    if (scenario.transferOrProgramChange === "yes") {
-      cards.push({
-        title: "A school transfer or program change needs its own check",
-        detail: "A later I-20 end date can run past the protected period. Add the new I-20 date before relying on the stay-in-the-U.S. timeline.",
-        tone: "warning",
-        sourceIds: ["8CFR-214-1-M1", "8CFR-214-2-F5II"]
-      });
-    }
-
-    if (scenario.educationLevel === "graduate") {
-      cards.push({
-        title: "Graduate program changes are prohibited during the program",
-        detail: "Because you selected graduate study, you cannot change your educational objective during the program under the new rule.",
-        tone: scenario.academicProgramChangePlan === "yes" ? "danger" : "warning",
-        sourceIds: ["8CFR-214-2-F5II"]
-      });
-      cards.push({
-        title: "Graduate transfers need an SEVP exception",
-        detail: "If you want to transfer schools during your graduate program, SEVP must authorize an exception for extenuating circumstances before you can rely on that transfer plan.",
-        tone: scenario.schoolTransferPlan === "yes" ? "danger" : "warning",
-        sourceIds: ["8CFR-214-2-F5II"]
-      });
-    } else if (scenario.educationLevel === "undergraduate") {
-      cards.push({
-        title: "Undergraduate transfers have a first-year limit",
-        detail: "Because you selected undergraduate study, you generally cannot transfer schools during your first academic year unless SEVP authorizes an exception.",
-        tone: scenario.schoolTransferPlan === "yes" ? "warning" : "info",
-        sourceIds: ["8CFR-214-2-F5II"]
-      });
-      cards.push({
-        title: "Undergraduate program changes have a first-year limit",
-        detail: "You generally cannot change your major or education level during your first academic year unless SEVP authorizes an exception.",
-        tone: scenario.academicProgramChangePlan === "yes" ? "warning" : "info",
-        sourceIds: ["8CFR-214-2-F5II"]
-      });
-    }
-
-    if (scenario.nextProgramLevelPlan === "same_or_lower") {
-      cards.push({
-        title: "Same-level or lower-level next program risk",
-        detail:
-          "The new rule generally blocks F-1 status for another program at the same or a lower education level after you complete a program after September 15, 2026.",
-        tone: "danger",
-        sourceIds: ["8CFR-214-2-F5II"]
-      });
-    }
-
-    if (scenario.cptPlan === "unknown") {
-      cards.push({
-        title: "CPT depends on timing and authorization",
-        detail:
-          "The rule does not eliminate Day One CPT or change basic CPT approval. The new issue is timing: if you need an extension of stay, filing before your F-1 period ends can protect already-authorized CPT for up to 240 days while the extension is pending. Filing only during the departure period after the F-1 period ends does not let CPT continue or start while you wait.",
-        tone: "question",
-        sourceIds: ["8CFR-214-2-F5VIII-CPT"]
-      });
-    }
-
-    return cards;
-  }
-
-  const cards: ImpactCard[] = [
-    {
-      title: "Fixed-period admission path",
-      detail:
-        "Because you will not be a valid F-1 student in the United States on September 15, 2026, your next F-1 entry is handled under the new fixed-date system. Your I-94 will have an end date tied to your I-20 program end, capped at four years from entry.",
-      tone: "info",
-      sourceIds: ["8CFR-214-1-A4"]
-    }
-  ];
-
-  if (!scenario.reentryDate) {
-    cards.push({
-      title: "Entry date starts the clock",
-      detail: "Add the expected U.S. entry date so we can place the four-year limit.",
-      tone: "question",
-      sourceIds: ["8CFR-214-1-A4"]
-    });
-  }
-
-  if (scenario.reentryDate && !scenario.currentProgramEndDate) {
-    cards.push({
-      title: "I-20 end date controls the comparison",
-      detail: "The new rule compares the I-20 end date with four years from the date you enter.",
-      tone: "question",
-      sourceIds: ["8CFR-214-1-A4"]
-    });
-  } else if (result.coverageEnd && result.latestDepartureDate) {
-    cards.push({
-      title: `Your first I-94 end date would be ${formatDate(result.coverageEnd)}`,
-      detail: `Based on your answers so far, your I-94 end date would be ${formatDate(
-        result.coverageEnd
-      )}. After that, you would have a 30-day F-1 grace period, down from the old 60 days, through ${formatDate(result.latestDepartureDate)}.`,
-      tone: result.status === "ok" ? "good" : result.status === "manual" ? "question" : "warning",
-      sourceIds: ["8CFR-214-1-A4", "8CFR-214-2-F5V"]
-    });
-  }
-
-  if (result.extensionNeededBy && scenario.currentProgramEndDate && result.coverageEnd) {
-    cards.push({
-      title: "Your program runs past your first fixed F-1 period",
-      detail: `Your program end date is ${formatDate(scenario.currentProgramEndDate)}, but your first fixed F-1 period would end ${formatDate(
-        result.coverageEnd
-      )}. To keep studying after that date, you would need to file an extension of stay before the I-94 period ends.`,
-      tone: "warning",
-      sourceIds: ["8CFR-214-1-A4", "USCIS-G1055-I539"]
-    });
-  }
-
-  if (scenario.educationLevel === "graduate") {
-    cards.push({
-      title: "Graduate program changes are prohibited during the program",
-      detail: "Because you selected graduate study, you cannot change your educational objective during the program under the new rule.",
-      tone: "warning",
-      sourceIds: ["8CFR-214-2-F5II"]
-    });
-    cards.push({
-      title: "Graduate transfers need an SEVP exception",
-      detail: "If you want to transfer schools during your graduate program, SEVP must authorize an exception for extenuating circumstances before you can rely on that transfer plan.",
-      tone: scenario.schoolTransferPlan === "yes" ? "danger" : "warning",
-      sourceIds: ["8CFR-214-2-F5II"]
-    });
-  } else if (scenario.educationLevel === "undergraduate") {
-    cards.push({
-      title: "Undergraduate transfers have a first-year limit",
-      detail: "Because you selected undergraduate study, you generally cannot transfer schools during your first academic year unless SEVP authorizes an exception.",
-      tone: "info",
-      sourceIds: ["8CFR-214-2-F5II"]
-    });
-    cards.push({
-      title: "Undergraduate program changes have a first-year limit",
-      detail: "You generally cannot change your major or education level during your first academic year unless SEVP authorizes an exception.",
-      tone: "info",
-      sourceIds: ["8CFR-214-2-F5II"]
-    });
-  }
-
-  if (scenario.nextProgramLevelPlan === "same_or_lower") {
-    cards.push({
-      title: "Same-level or lower-level next program risk",
-      detail: "The new rule generally blocks F-1 status for another program at the same or a lower education level after you complete a program after September 15, 2026.",
-      tone: "danger",
-      sourceIds: ["8CFR-214-2-F5II"]
-    });
-  }
-
-  if (scenario.cptPlan === "unknown") {
-    cards.push({
-      title: "CPT depends on timing and authorization",
-      detail:
-        "The rule does not eliminate Day One CPT or change basic CPT approval. The new issue is timing: if you need an extension of stay, filing before your F-1 period ends can protect already-authorized CPT for up to 240 days while the extension is pending. Filing only during the departure period after the F-1 period ends does not let CPT continue or start while you wait.",
-      tone: "question",
-      sourceIds: ["8CFR-214-2-F5VIII-CPT"]
-    });
-  }
-
-  return cards;
-}
-
-function ImpactCards({ cards, result }: { cards: ImpactCard[]; result: PlannerView }) {
-  return (
-    <div className="impact-grid">
-      {cards.map((card) => (
-        <article key={`${card.title}-${card.detail}`} className={`impact-card ${card.tone}`}>
-          <strong>{card.title}</strong>
-          <p>{card.detail}</p>
-          {card.sourceIds && <SourceChips result={result} sourceIds={card.sourceIds} />}
-        </article>
-      ))}
-    </div>
-  );
-}
-
-function buildStudentTimelines(scenario: StudentScenario, result: PlannerView, travelResult: PlannerView | null): StudentTimeline[] {
-  const timelines: StudentTimeline[] = [];
-
-  if (hasContradiction(result)) {
-    return timelines;
-  }
-
-  if (isCurrentTrack(scenario) && scenario.programEndOnEffectiveDate) {
-    const events: StudentTimelineEvent[] = [
-      {
-        label: "I-20 ends",
-        date: scenario.programEndOnEffectiveDate,
-        detail: "The program end date printed on your current I-20.",
-        tone: programEndBeforeRuleStarts(scenario) ? "warning" : "info"
-      },
-      {
-        label: "New rule starts",
-        date: result.effectiveDate,
-        detail: "This is the date when the new fixed-date system starts.",
-        tone: "info"
-      }
-    ];
-
-    if (result.coverageEnd) {
-      events.push({
-        label: programEndBeforeRuleStarts(scenario) ? "Current I-20 path ends" : "Old D/S period ends",
-        date: result.coverageEnd,
-        detail: programEndBeforeRuleStarts(scenario)
-          ? "This is before the new rule starts. We need to know what F-1 basis you will have on September 15."
-          : "This is the last day from the current I-20/EAD dates, unless another rule or extension changes it.",
-        tone: programEndBeforeRuleStarts(scenario) ? "warning" : "good"
-      });
-    }
-
-    if (result.latestDepartureDate) {
-      events.push({
-        label: "60-day period ends",
-        date: result.latestDepartureDate,
-        detail: "This is time to leave the U.S. or take another immigration step. It is not extra study or work time.",
-        tone: programEndBeforeRuleStarts(scenario) ? "warning" : "info"
-      });
-    }
-
-    timelines.push({
-      title: "If you do not leave the U.S.",
-      detail: programEndBeforeRuleStarts(scenario)
-        ? "This timeline explains why an I-20 ending before September 15 needs another F-1 fact."
-        : "This is the current-student path if you stay in the U.S. after the new rule starts.",
-      events: sortEvents(events)
-    });
-  }
-
-  if (isCurrentTrack(scenario) && hasTravelPlan(scenario) && scenario.returningAfterEffectiveDate === "yes") {
-    timelines.push({
-      title: "If you leave and return after September 15",
-      detail: "Coming back after the rule starts can create a new fixed-date I-94 period.",
-      events: sortEvents([
-        {
-          label: "You return to the U.S.",
-          date: scenario.reentryDate,
-          detail: "This return date starts the travel comparison.",
-          tone: scenario.reentryDate ? "info" : "question"
-        },
-        {
-          label: "New fixed period may end",
-          date: travelResult?.coverageEnd,
-          detail: "For a regular F-1 return, this is based on the I-20 end date or four years from return, whichever comes first.",
-          tone: travelResult?.coverageEnd ? "warning" : "question"
-        },
-        {
-          label: "30-day period ends",
-          date: travelResult?.latestDepartureDate,
-          detail: "For the new fixed-date system, the period after the fixed end date is 30 days.",
-          tone: travelResult?.latestDepartureDate ? "info" : "question"
-        }
-      ])
-    });
-  }
-
-  if (scenario.startingPosition === "prospective_outside_us" && scenario.reentryDate && scenario.currentProgramEndDate && result.coverageEnd) {
-    timelines.push({
-      title: "Your first F-1 entry after the new rule starts",
-      detail: "This is the new fixed-date system for future F-1 students.",
-      events: sortEvents([
-        {
-          label: "You enter the U.S.",
-          date: scenario.reentryDate,
-          detail: "This starts the fixed-date clock.",
-          tone: scenario.reentryDate ? "info" : "question"
-        },
-        {
-          label: "I-20 program ends",
-          date: scenario.currentProgramEndDate,
-          detail: "The program end date on the I-20 used for entry.",
-          tone: scenario.currentProgramEndDate ? "info" : "question"
-        },
-        {
-          label: "Fixed period may end",
-          date: result.coverageEnd,
-          detail: "This is the I-20 end date or four years from entry, whichever comes first.",
-          tone: result.coverageEnd ? "warning" : "question"
-        },
-        {
-          label: "30-day period ends",
-          date: result.latestDepartureDate,
-          detail: "This is time to leave the U.S. or take another immigration step.",
-          tone: result.latestDepartureDate ? "info" : "question"
-        }
-      ])
-    });
-  }
-
-  return timelines;
-}
-
-function StudentTimelines({
-  scenario,
-  result,
-  travelResult
-}: {
-  scenario: StudentScenario;
-  result: PlannerView;
-  travelResult: PlannerView | null;
-}) {
-  const timelines = buildStudentTimelines(scenario, result, travelResult);
-  if (!timelines.length) {
-    return null;
-  }
-
-  return (
-    <div className="student-timelines">
-      {timelines.map((timeline) => (
-        <article key={timeline.title} className="student-timeline">
-          <div>
-            <h3>{timeline.title}</h3>
-            <p>{timeline.detail}</p>
-          </div>
-          <ol>
-            {timeline.events.map((event) => (
-              <li key={`${event.label}-${event.date ?? "missing"}`} className={event.tone}>
-                <span>{formatDate(event.date)}</span>
-                <div>
-                  <strong>{event.label}</strong>
-                  <p>{event.detail}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </article>
-      ))}
-    </div>
-  );
-}
-
 export default function App() {
-  const [page, setPage] = useState<"planner" | "overview">(() => (window.location.hash === "#what-happened" ? "overview" : "planner"));
+  const [page, setPage] = useState<Page>(() => window.location.hash === "#what-happened" ? "overview" : "planner");
+  const [experience, setExperience] = useState<Experience>("welcome");
   const [scenario, setScenario] = useState<StudentScenario>(DEFAULT_SCENARIO);
-  const [answeredFields, setAnsweredFields] = useState<Partial<Record<AnswerField, boolean>>>({});
+  const [answered, setAnswered] = useState<Set<string>>(new Set());
+  const [intake, setIntake] = useState<IntakeExtractionResponse | null>(null);
+  const [intakeState, setIntakeState] = useState<IntakeState>("idle");
+  const [intakeNotice, setIntakeNotice] = useState("");
   const [recording, setRecording] = useState(false);
-  const [voiceNotice, setVoiceNotice] = useState("Voice input is ready.");
-  const [draftNotice, setDraftNotice] = useState("");
-  const [intakeExtraction, setIntakeExtraction] = useState<IntakeExtractionResponse | null>(null);
-  const [intakeState, setIntakeState] = useState<"idle" | "loading" | "failed" | "ready">("idle");
-  const [explanationState, setExplanationState] = useState<"idle" | "loading" | "failed" | "ready">("idle");
-  const [explanationText, setExplanationText] = useState("");
-  const [explanationModel, setExplanationModel] = useState("");
+  const [interimTranscript, setInterimTranscript] = useState("");
+  const [report, setReport] = useState<ExplanationResponse | null>(null);
+  const [reportState, setReportState] = useState<ReportState>("idle");
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
-  const result = useMemo(() => calculateScenario(scenario), [scenario]);
+  const reportAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    function syncPageWithHash() {
-      setPage(window.location.hash === "#what-happened" ? "overview" : "planner");
-    }
-
-    window.addEventListener("hashchange", syncPageWithHash);
-    return () => window.removeEventListener("hashchange", syncPageWithHash);
+    const onHash = () => setPage(window.location.hash === "#what-happened" ? "overview" : "planner");
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
   useEffect(() => {
-    setExplanationState("idle");
-    setExplanationText("");
-    setExplanationModel("");
+    reportAbortRef.current?.abort();
+    setReport(null);
+    setReportState("idle");
   }, [scenario]);
 
-  const travelResult = useMemo(() => {
-    if (!isCurrentTrack(scenario) || !hasTravelPlan(scenario) || !scenario.reentryDate) {
-      return null;
+  useEffect(() => {
+    if (experience !== "story") return;
+    const narrative = scenario.narrative?.trim() ?? "";
+    if (narrative.length < 12) {
+      setIntake(null);
+      setIntakeState("idle");
+      return;
     }
+    if (/\bN\d{10}\b/i.test(narrative)) {
+      setIntakeState("failed");
+      setIntakeNotice("Please remove the SEVIS ID before continuing. We do not need it.");
+      return;
+    }
+    let controller: AbortController | null = null;
+    const timer = window.setTimeout(async () => {
+      controller = new AbortController();
+      setIntakeState("loading");
+      setIntakeNotice("Listening for dates, plans, and documents...");
+      try {
+        const response = await fetch("/api/intake", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ narrative, currentScenario: scenario }),
+          signal: controller.signal
+        });
+        if (!response.ok) throw new Error(`Intake failed: ${response.status}`);
+        const body = await response.json() as IntakeExtractionResponse;
+        setIntake(body);
+        setIntakeState("ready");
+        setIntakeNotice("Your story has been read. Keep talking or typing to add more.");
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setIntakeState("failed");
+        setIntakeNotice("Your words are still here. Try again after checking the local AI connection.");
+      }
+    }, recording ? 1400 : 850);
+    return () => {
+      window.clearTimeout(timer);
+      controller?.abort();
+    };
+  }, [experience, recording, scenario.narrative]);
 
+  const draftScenario = useMemo(() => intake ? mergeFacts(scenario, intake.facts) : scenario, [intake, scenario]);
+  const activeScenario = experience === "story" ? draftScenario : scenario;
+  const result = useMemo(() => calculateScenario(activeScenario), [activeScenario]);
+  const travelResult = useMemo(() => {
+    if (!isCurrent(activeScenario) || activeScenario.returningAfterEffectiveDate !== "yes" || !activeScenario.reentryDate) return null;
     return calculateScenario({
-      ...scenario,
+      ...activeScenario,
       startingPosition: "readmitted_fixed_period",
       admissionBasis: "fixed_period",
       inUsOnEffectiveDate: "no",
       maintainingStatusOnEffectiveDate: "unknown"
     });
-  }, [scenario]);
-  const impactCards = useMemo(() => buildImpactCards(scenario, result, travelResult), [scenario, result, travelResult]);
-  const studentOutcome = useMemo(() => buildStudentOutcome(scenario, result, travelResult), [scenario, result, travelResult]);
-  const currentTrack = isCurrentTrack(scenario);
-  const futureTrack = scenario.startingPosition === "prospective_outside_us";
-  const pathChosen = scenario.startingPosition !== "unknown";
-  const septemberLocationAnswered = scenario.inUsOnEffectiveDate !== "unknown";
-  const travelAnswered = Boolean(answeredFields.travelPosture || scenario.travelPosture === "planned" || scenario.travelPosture === "none");
-  const returnAfterRuleAnswered = Boolean(
-    answeredFields.returningAfterEffectiveDate || scenario.returningAfterEffectiveDate === "yes" || scenario.returningAfterEffectiveDate === "no"
-  );
-  const travelStepResolved = Boolean(travelAnswered && (!hasTravelPlan(scenario) || returnAfterRuleAnswered));
-  const optReady = Boolean(scenario.programEndOnEffectiveDate && septemberLocationAnswered && travelStepResolved);
-  const optIntentAnswered = Boolean(answeredFields.optIntent || scenario.optIntent === "no" || scenario.optIntent === "yes");
-  const optKindAnswered = Boolean(answeredFields.optKind);
-  const optStatusAnswered = Boolean(answeredFields.optStatus);
-  const optBranchResolved = Boolean(!needsOptDate(scenario.optStage) || (optKindAnswered && optStatusAnswered));
-  const schoolPlanningReady = Boolean(optReady && optIntentAnswered && optBranchResolved);
-  const futureEntryContradiction = hasFutureEntryDateContradiction(scenario);
-  const blockingContradiction = hasContradiction(result);
-  const futureBasicsReady = Boolean(futureTrack && scenario.reentryDate && scenario.currentProgramEndDate && !futureEntryContradiction);
-  const educationAnswered = Boolean(answeredFields.educationLevel || (scenario.educationLevel && scenario.educationLevel !== "unknown"));
-  const transferAnswered = Boolean(answeredFields.schoolTransferPlan || (scenario.schoolTransferPlan && scenario.schoolTransferPlan !== "unknown"));
-  const programChangeAnswered = Boolean(answeredFields.academicProgramChangePlan || (scenario.academicProgramChangePlan && scenario.academicProgramChangePlan !== "unknown"));
-  const nextProgramAnswered = Boolean(answeredFields.nextProgramLevelPlan || (scenario.nextProgramLevelPlan && scenario.nextProgramLevelPlan !== "unknown"));
-  const futureOptAnswered = Boolean(answeredFields.optIntent || scenario.optIntent === "yes" || scenario.optIntent === "no");
+  }, [activeScenario]);
+  const questions = useMemo(() => buildQuestions(scenario, answered), [scenario, answered]);
+  const activeQuestion = questions.find((question) => !answered.has(question.id));
+  const completedQuestions = questions.filter((question) => answered.has(question.id));
+  const contradiction = result.findings.some((item) => item.id === "future-entry-before-effective-date-contradiction");
 
-  function markAnswered(field: AnswerField) {
-    setAnsweredFields((current) => ({ ...current, [field]: true }));
-  }
-
-  function update<K extends keyof StudentScenario>(key: K, value: StudentScenario[K]) {
-    setScenario((current) => ({ ...current, [key]: value }));
-    markAnswered(key);
-    setExplanationState("idle");
-    setExplanationText("");
-    setExplanationModel("");
-    if (key === "narrative") {
-      setIntakeExtraction(null);
-      setIntakeState("idle");
-    }
+  function navigateOverview(show: boolean) {
+    window.location.hash = show ? "what-happened" : "";
   }
 
   function patchScenario(patch: Partial<StudentScenario>) {
     setScenario((current) => ({ ...current, ...patch }));
-    setExplanationState("idle");
-    setExplanationText("");
-    setExplanationModel("");
   }
 
-  function chooseStudentPath(value: StartingPosition) {
-    markAnswered("startingPoint");
-    if (value === "current_ds_inside_us") {
-      setAnsweredFields({ startingPoint: true });
-      patchScenario({
-        startingPosition: "current_ds_inside_us",
-        admissionBasis: "duration_of_status",
-        inUsOnEffectiveDate: "yes",
-        maintainingStatusOnEffectiveDate: "yes",
-        i94AdmitUntilDate: undefined,
-        travelPosture: "unknown",
-        returningAfterEffectiveDate: "unknown",
-        optIntent: "unknown",
-        optStage: "none",
-        schoolTransferPlan: "unknown",
-        academicProgramChangePlan: "unknown",
-        educationLevel: "unknown",
-        nextProgramLevelPlan: "unknown",
-        cptPlan: "none"
-      });
-      return;
+  function answer(question: Question, value: string) {
+    const patch: Partial<StudentScenario> = {};
+    switch (question.id) {
+      case "presence":
+        patch.inUsOnEffectiveDate = value as YesNoUnknown;
+        patch.startingPosition = value === "yes" ? "current_ds_inside_us" : value === "no" ? "prospective_outside_us" : "unknown";
+        patch.maintainingStatusOnEffectiveDate = value === "yes" ? "yes" : "unknown";
+        patch.admissionBasis = value === "yes" ? "duration_of_status" : value === "no" ? "fixed_period" : "unknown";
+        break;
+      case "futureMethod": patch.startingPosition = value as StartingPosition; patch.admissionBasis = "fixed_period"; break;
+      case "departBeforeRule":
+        patch.departBeforeEffectiveDate = value as YesNoUnknown;
+        if (value === "yes") patch.reentryDate = undefined;
+        if (value === "no") {
+          patch.inUsOnEffectiveDate = "yes";
+          patch.startingPosition = "current_ds_inside_us";
+          patch.maintainingStatusOnEffectiveDate = "yes";
+          patch.admissionBasis = "duration_of_status";
+        }
+        break;
+      case "programType": patch.programType = value as ProgramType; break;
+      case "educationLevel": patch.educationLevel = value as EducationLevel; break;
+      case "optIntent": patch.optIntent = value as YesNoUnknown; patch.optStage = value === "yes" ? "post_completion_not_filed" : "none"; break;
+      case "optKind": patch.optStage = optStage(value, optStatus(scenario.optStage)); break;
+      case "optStatus": patch.optStage = optStage(optKind(scenario.optStage), value); break;
+      case "dsoRecommendation": patch.dsoRecommendedOpt = value as YesNoUnknown; break;
+      case "travelIntent": patch.travelPosture = value as TravelPosture; patch.returningAfterEffectiveDate = value === "none" ? "no" : "unknown"; break;
+      case "returnAfterRule": patch.returningAfterEffectiveDate = value as YesNoUnknown; break;
+      case "schoolTransfer": patch.schoolTransferPlan = value as YesNoUnknown; patch.transferOrProgramChange = value === "yes" || scenario.academicProgramChangePlan === "yes" ? "yes" : "no"; break;
+      case "programChange": patch.academicProgramChangePlan = value as YesNoUnknown; patch.transferOrProgramChange = value === "yes" || scenario.schoolTransferPlan === "yes" ? "yes" : "no"; break;
+      case "firstAcademicYear": patch.firstAcademicYearCompleted = value as YesNoUnknown; break;
+      case "nextProgram": patch.nextProgramLevelPlan = value as NextProgramLevelPlan; break;
+      case "cptIntent": patch.cptPlan = value === "yes" ? "before_admission_end" : value === "no" ? "none" : "unknown"; break;
+      case "cptTiming": patch.cptPlan = value as CptPlan; break;
     }
-
-    if (value === "prospective_outside_us") {
-      setAnsweredFields({ startingPoint: true });
-      patchScenario({
-        startingPosition: "prospective_outside_us",
-        admissionBasis: "fixed_period",
-        inUsOnEffectiveDate: "no",
-        maintainingStatusOnEffectiveDate: "unknown",
-        programEndOnEffectiveDate: undefined,
-        eadEndOnEffectiveDate: undefined,
-        pendingExtensionOnDeparture: "no",
-        returningAfterEffectiveDate: "unknown",
-        optIntent: "unknown",
-        optStage: "none",
-        travelPosture: "unknown",
-        schoolTransferPlan: "unknown",
-        academicProgramChangePlan: "unknown",
-        educationLevel: "unknown",
-        nextProgramLevelPlan: "unknown",
-        cptPlan: "none"
-      });
-      return;
-    }
-
-    setAnsweredFields({ startingPoint: true });
-    patchScenario({
-      startingPosition: "unknown",
-      admissionBasis: "unknown",
-      inUsOnEffectiveDate: "unknown",
-      maintainingStatusOnEffectiveDate: "unknown"
+    patchScenario(patch);
+    setAnswered((current) => {
+      const next = new Set(current);
+      next.add(question.id);
+      if (question.id === "departBeforeRule" && value === "yes") next.delete("entryDate");
+      return next;
     });
   }
 
-  function updateCurrentI20End(value: string | undefined) {
-    markAnswered("programEndOnEffectiveDate");
-    setScenario((current) => ({
-      ...current,
-      programEndOnEffectiveDate: value,
-      currentProgramEndDate: current.transferOrProgramChange === "yes" ? current.currentProgramEndDate : value
-    }));
-  }
-
-  function updateTransferOrProgramChange(value: YesNoUnknown) {
-    markAnswered("transferOrProgramChange");
-    setScenario((current) => ({
-      ...current,
-      transferOrProgramChange: value,
-      currentProgramEndDate: value === "yes" ? current.currentProgramEndDate : current.programEndOnEffectiveDate ?? current.currentProgramEndDate
-    }));
-  }
-
-  function updateI94Basis(value: AdmissionBasis) {
-    markAnswered("admissionBasis");
-    setScenario((current) => ({
-      ...current,
-      admissionBasis: value,
-      i94AdmitUntilDate: value === "fixed_period" ? current.i94AdmitUntilDate : undefined
-    }));
-  }
-
-  function updateLeavingUs(value: TravelPosture) {
-    markAnswered("travelPosture");
-    setScenario((current) => ({
-      ...current,
-      travelPosture: value,
-      returningAfterEffectiveDate: value === "planned" ? current.returningAfterEffectiveDate ?? "unknown" : value === "unknown" ? "unknown" : "no",
-      reentryDate: value === "planned" ? current.reentryDate : undefined,
-      reentryBasis: value === "planned" ? current.reentryBasis : "unknown",
-      pendingExtensionOnDeparture: value === "planned" ? current.pendingExtensionOnDeparture : "no"
-    }));
-  }
-
-  function updateReturnAfterRule(value: YesNoUnknown) {
-    markAnswered("returningAfterEffectiveDate");
-    setScenario((current) => ({
-      ...current,
-      returningAfterEffectiveDate: value,
-      reentryDate: value === "yes" ? current.reentryDate : undefined,
-      reentryBasis: value === "yes" ? current.reentryBasis : "unknown",
-      pendingExtensionOnDeparture: value === "yes" ? current.pendingExtensionOnDeparture : "no"
-    }));
-  }
-
-  function updateOptIntent(value: YesNoUnknown) {
-    markAnswered("optIntent");
-    setScenario((current) => ({
-      ...current,
-      optIntent: value,
-      optStage: value === "yes" ? (current.optStage === "none" || current.optStage === "pre_completion" ? "post_completion_not_filed" : current.optStage) : "none",
-      optFilingDate: value === "yes" ? current.optFilingDate : undefined,
-      currentEadEndDate: value === "yes" ? current.currentEadEndDate : undefined
-    }));
-  }
-
-  function updateOptKind(value: OptKind) {
-    markAnswered("optKind");
-    setScenario((current) => ({
-      ...current,
-      optStage: optStageFromParts(value, optStatusFromStage(current.optStage))
-    }));
-  }
-
-  function updateOptStatus(value: OptFilingStatus) {
-    markAnswered("optStatus");
-    setScenario((current) => ({
-      ...current,
-      optStage: optStageFromParts(optKindFromStage(current.optStage), value)
-    }));
-  }
-
-  function updateSchoolTransfer(value: YesNoUnknown) {
-    markAnswered("schoolTransferPlan");
-    setScenario((current) => {
-      const combined = combinePlanAnswers(value, current.academicProgramChangePlan ?? "no");
-      return {
-        ...current,
-        schoolTransferPlan: value,
-        transferOrProgramChange: combined,
-        currentProgramEndDate: combined === "yes" ? current.currentProgramEndDate : current.programEndOnEffectiveDate ?? current.currentProgramEndDate
-      };
-    });
-  }
-
-  function updateAcademicProgramChange(value: YesNoUnknown) {
-    markAnswered("academicProgramChangePlan");
-    setScenario((current) => {
-      const combined = combinePlanAnswers(current.schoolTransferPlan ?? "no", value);
-      return {
-        ...current,
-        academicProgramChangePlan: value,
-        transferOrProgramChange: combined,
-        currentProgramEndDate: combined === "yes" ? current.currentProgramEndDate : current.programEndOnEffectiveDate ?? current.currentProgramEndDate
-      };
-    });
-  }
-
-  function updateCptIntent(value: YesNoUnknown) {
-    markAnswered("cptPlan");
-    update("cptPlan", value === "yes" ? "unknown" : "none");
-  }
-
-  async function applyNarrativeDraft() {
-    const narrative = scenario.narrative?.trim() ?? "";
-    if (!narrative) {
-      setDraftNotice("Tell your story first, by typing or speaking, and then I can draft facts from it.");
-      return;
+  function answerDate(question: Question, value?: string) {
+    const patch: Partial<StudentScenario> = {};
+    switch (question.id) {
+      case "entryDate":
+      case "returnDate": patch.reentryDate = value; break;
+      case "programStart":
+      case "travelProgramStart": patch.programStartDate = value; break;
+      case "programEnd":
+        patch.currentProgramEndDate = value;
+        if (isCurrent(scenario)) patch.programEndOnEffectiveDate = value;
+        break;
+      case "optFilingDate": patch.optFilingDate = value; break;
+      case "eadEndDate": patch.currentEadEndDate = value; break;
     }
-
-    setIntakeState("loading");
-    setIntakeExtraction(null);
-    setDraftNotice("Reading your story with GPT-5.6...");
-
-    try {
-      const response = await fetch("/api/intake", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ narrative, currentScenario: scenario })
-      });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-
-      const payload = (await response.json()) as IntakeExtractionResponse;
-      setIntakeExtraction(payload);
-      setIntakeState("ready");
-      setDraftNotice(
-        payload.facts.length
-          ? `I found ${payload.facts.length} candidate fact${payload.facts.length === 1 ? "" : "s"}. Review what I understood before applying it.`
-          : "I read the story but did not find facts I can safely apply yet. The follow-up questions below are the next best path."
-      );
-    } catch {
-      setIntakeState("failed");
-      setDraftNotice("OpenAI intake is not available yet, so I did not change your scenario facts.");
-    }
+    patchScenario(patch);
+    setAnswered((current) => new Set(current).add(question.id));
   }
 
-  function applyExtractedFacts() {
-    if (!intakeExtraction) {
-      return;
-    }
+  function resetQuestionValue(id: string, draft: StudentScenario): StudentScenario {
+    const next = { ...draft };
+    if (id === "presence") Object.assign(next, DEFAULT_SCENARIO, { narrative: draft.narrative });
+    if (id === "futureMethod") next.startingPosition = "prospective_outside_us";
+    if (id === "entryDate" || id === "returnDate") next.reentryDate = undefined;
+    if (id === "departBeforeRule") next.departBeforeEffectiveDate = "unknown";
+    if (id === "programStart" || id === "travelProgramStart") next.programStartDate = undefined;
+    if (id === "programEnd") { next.programEndOnEffectiveDate = undefined; next.currentProgramEndDate = undefined; }
+    if (id === "programType") next.programType = "unknown";
+    if (id === "educationLevel") next.educationLevel = "unknown";
+    if (id === "optIntent") { next.optIntent = "unknown"; next.optStage = "none"; }
+    if (id === "optKind" || id === "optStatus") next.optStage = "post_completion_not_filed";
+    if (id === "dsoRecommendation") next.dsoRecommendedOpt = "unknown";
+    if (id === "optFilingDate") next.optFilingDate = undefined;
+    if (id === "eadEndDate") next.currentEadEndDate = undefined;
+    if (id === "travelIntent") { next.travelPosture = "unknown"; next.returningAfterEffectiveDate = "unknown"; }
+    if (id === "returnAfterRule") next.returningAfterEffectiveDate = "unknown";
+    if (id === "schoolTransfer") next.schoolTransferPlan = "unknown";
+    if (id === "programChange") next.academicProgramChangePlan = "unknown";
+    if (id === "firstAcademicYear") next.firstAcademicYearCompleted = "unknown";
+    if (id === "nextProgram") next.nextProgramLevelPlan = "unknown";
+    if (id === "cptIntent" || id === "cptTiming") next.cptPlan = "none";
+    return next;
+  }
 
-    const factsToApply = readyFacts(intakeExtraction.facts);
-    const nextScenario = scenarioWithFacts(scenario, intakeExtraction.facts);
-    const changes = describeDraftChanges(scenario, nextScenario);
-    setScenario(nextScenario);
-    setAnsweredFields((current) =>
-      factsToApply.reduce<Partial<Record<AnswerField, boolean>>>(
-        (next, fact) => ({ ...next, [fact.field]: true }),
-        { ...current, startingPoint: nextScenario.startingPosition !== "unknown" }
-      )
-    );
-    setDraftNotice(
-      changes.length
-        ? `Updated ${changes.length} scenario field${changes.length === 1 ? "" : "s"} from ${factsToApply.length} applied fact${factsToApply.length === 1 ? "" : "s"}: ${changes.join(", ")}.`
-        : factsToApply.length
-          ? "Those facts were already in your scenario. Nothing else changed."
-          : "No facts are ready to apply yet. The remaining items need clarification or can be edited directly."
-    );
+  function editQuestion(id: string) {
+    const index = questionOrder.indexOf(id);
+    const idsToClear = questionOrder.slice(index);
+    setScenario((current) => idsToClear.reduce((draft, item) => resetQuestionValue(item, draft), current));
+    setAnswered((current) => new Set([...current].filter((item) => !idsToClear.includes(item))));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function markFactsAnswered(facts: IntakeCandidateFact[]) {
+    const mapping: Partial<Record<IntakeFactField, string[]>> = {
+      inUsOnEffectiveDate: ["presence"],
+      startingPosition: ["futureMethod"],
+      reentryDate: [isCurrent(draftScenario) ? "returnDate" : "entryDate"],
+      departBeforeEffectiveDate: ["departBeforeRule"],
+      programStartDate: [isCurrent(draftScenario) ? "travelProgramStart" : "programStart"],
+      currentProgramEndDate: ["programEnd"],
+      programEndOnEffectiveDate: ["programEnd"],
+      programType: ["programType"],
+      educationLevel: ["educationLevel"],
+      optStage: ["optIntent", "optKind", "optStatus"],
+      optIntent: ["optIntent"],
+      dsoRecommendedOpt: ["dsoRecommendation"],
+      optFilingDate: ["optFilingDate"],
+      currentEadEndDate: ["eadEndDate"],
+      travelPosture: ["travelIntent"],
+      returningAfterEffectiveDate: ["returnAfterRule"],
+      schoolTransferPlan: ["schoolTransfer"],
+      academicProgramChangePlan: ["programChange"],
+      firstAcademicYearCompleted: ["firstAcademicYear"],
+      nextProgramLevelPlan: ["nextProgram"],
+      cptPlan: ["cptIntent", "cptTiming"]
+    };
+    setAnswered(new Set(usableFacts(facts).flatMap((fact) => mapping[fact.field] ?? [])));
+  }
+
+  function finishStory() {
+    if (intake) {
+      setScenario(draftScenario);
+      markFactsAnswered(intake.facts);
+    }
+    recognitionRef.current?.stop();
+    setRecording(false);
+    setExperience("interview");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function toggleSpeech() {
-    const Recognition = window.SpeechRecognition ?? window.webkitSpeechRecognition;
     if (recording) {
       recognitionRef.current?.stop();
-      recognitionRef.current = null;
       setRecording(false);
-      setVoiceNotice("Stopped listening.");
       return;
     }
-
+    const Recognition = window.SpeechRecognition ?? window.webkitSpeechRecognition;
     if (!Recognition) {
-      setRecording(false);
-      setVoiceNotice("Voice input is not available in this browser. Typing your story works too.");
+      setIntakeNotice("Voice input is not available in this browser. You can type your story here instead.");
       return;
     }
-
     const recognition = new Recognition();
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.lang = "en-US";
     recognition.onresult = (event) => {
-      let transcript = "";
-      let interimTranscript = "";
+      let finalText = "";
+      let interim = "";
       for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        if (event.results[index].isFinal) {
-          transcript += `${event.results[index][0].transcript} `;
-        } else {
-          interimTranscript += `${event.results[index][0].transcript} `;
-        }
+        const text = event.results[index][0].transcript;
+        if (event.results[index].isFinal) finalText += `${text} `;
+        else interim += text;
       }
-      if (interimTranscript.trim()) {
-        setVoiceNotice(`Listening: "${interimTranscript.trim()}"`);
-      }
-      if (transcript.trim()) {
-        setScenario((current) => ({
-          ...current,
-          narrative: `${current.narrative ?? ""} ${transcript}`.trim()
-        }));
-        setVoiceNotice(`Added to your story: "${transcript.trim()}"`);
-        setDraftNotice("Press Draft facts to turn the story into scenario answers.");
-        setIntakeExtraction(null);
-        setIntakeState("idle");
+      setInterimTranscript(interim);
+      if (finalText.trim()) {
+        setScenario((current) => ({ ...current, narrative: `${current.narrative ?? ""} ${finalText}`.trim() }));
       }
     };
-    recognition.onerror = (event) => {
-      setRecording(false);
-      setVoiceNotice(
-        event.error === "not-allowed"
-          ? "Microphone permission was blocked. Typing your story works too."
-          : "Voice input stopped before adding text. You can try again or type your story."
-      );
-    };
-    recognition.onend = () => {
-      recognitionRef.current = null;
-      setRecording(false);
-      setVoiceNotice((current) => (current.startsWith("Listening") ? "Listening ended. Try speaking again or type your story." : current));
-    };
+    recognition.onerror = () => { setRecording(false); setIntakeNotice("Voice input stopped. Your transcript is saved below."); };
+    recognition.onend = () => { setRecording(false); setInterimTranscript(""); };
     recognitionRef.current = recognition;
-    try {
-      recognition.start();
-      setRecording(true);
-      setVoiceNotice("Listening. Speak naturally about your school, I-20 dates, travel, OPT/STEM, or transfer plans.");
-    } catch {
-      setRecording(false);
-      setVoiceNotice("Voice input could not start. Typing your story works too.");
-    }
+    recognition.start();
+    setRecording(true);
+    setIntakeNotice("I am listening. Speak naturally; pauses are fine.");
   }
 
-  async function calculateResults() {
-    setExplanationState("loading");
-    setExplanationText("");
-    setExplanationModel("");
-
+  async function createReport() {
+    reportAbortRef.current?.abort();
+    const controller = new AbortController();
+    reportAbortRef.current = controller;
+    setReportState("loading");
+    setReport(null);
     try {
       const response = await fetch("/api/explain", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ scenario, result, travelResult })
+        body: JSON.stringify({ scenario }),
+        signal: controller.signal
       });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-
-      const payload = (await response.json()) as ExplanationResponse;
-      setExplanationText(payload.explanation);
-      setExplanationModel(payload.model ?? "OpenAI");
-      setExplanationState("ready");
-    } catch {
-      setExplanationText(buildLocalExplanation(result));
-      setExplanationModel("deterministic fallback");
-      setExplanationState("failed");
+      if (!response.ok) throw new Error(`Report failed: ${response.status}`);
+      setReport(await response.json() as ExplanationResponse);
+      setReportState("ready");
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setReportState("failed");
     }
   }
 
-  const applicableFacts = intakeExtraction ? readyFacts(intakeExtraction.facts) : [];
-  const explanationParagraphs = explanationText.split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean);
-
-  function showOverviewPage() {
-    window.location.hash = "what-happened";
-    setPage("overview");
+  function restart() {
+    setScenario(DEFAULT_SCENARIO);
+    setAnswered(new Set());
+    setIntake(null);
+    setReport(null);
+    setExperience("welcome");
   }
 
-  function showPlannerPage() {
-    window.history.pushState("", document.title, window.location.pathname + window.location.search);
-    setPage("planner");
+  if (page === "overview") return <WhatHappened onBack={() => navigateOverview(false)} />;
+
+  if (experience === "welcome") {
+    return (
+      <main className="welcome-screen">
+        <nav className="welcome-nav"><strong>F-1 Stay Map</strong><button type="button" onClick={() => navigateOverview(true)}>What happened?</button></nav>
+        <section className="welcome-copy">
+          <p className="reveal-line line-one">The world has changed for F-1 students.</p>
+          <h1 className="reveal-line line-two">An F-1 visa no longer means an open-ended stay.</h1>
+          <p className="welcome-detail reveal-line line-three">Tell us your story, and we will show what the new rules mean for you.</p>
+          <div className="welcome-actions reveal-line line-four">
+            <button type="button" className="voice-start" onClick={() => { setExperience("story"); window.setTimeout(toggleSpeech, 0); }}><span className="listening-light" aria-hidden="true" /><Mic aria-hidden="true" /> Start talking</button>
+            <button type="button" className="secondary-start" onClick={() => setExperience("story")}><Keyboard aria-hidden="true" /> Type your story</button>
+            <button type="button" className="quiet-start" onClick={() => setExperience("interview")}>Answer a few questions <ArrowRight aria-hidden="true" /></button>
+          </div>
+        </section>
+        <footer><span>Private by design: no SEVIS ID, passport number, or document upload is needed.</span><span>Rule status checked July 19, 2026</span></footer>
+      </main>
+    );
+  }
+
+  if (experience === "story") {
+    return (
+      <main className="story-screen">
+        <header className="app-header"><button type="button" className="brand" onClick={restart}>F-1 Stay Map</button><button type="button" className="header-link" onClick={() => navigateOverview(true)}>What happened?</button></header>
+        <section className={`story-listening ${recording ? "is-recording" : ""}`}>
+          <div className="waveform" aria-hidden="true">{Array.from({ length: 22 }, (_, index) => <span key={index} style={{ animationDelay: `${index * 55}ms` }} />)}</div>
+          <p className="story-state">{recording ? "Listening" : "Tell me what is happening"}</p>
+          <h1>{recording ? "Speak in your own words." : "Talk or type. You do not need to know the legal terms."}</h1>
+          <textarea
+            autoFocus={!recording}
+            value={scenario.narrative ?? ""}
+            onChange={(event) => patchScenario({ narrative: event.currentTarget.value })}
+            placeholder="For example: I am in the U.S. now. My I-20 ends in May 2031, I hope to use OPT, and I may travel next summer..."
+            aria-label="Your F-1 story"
+          />
+          {interimTranscript && <p className="interim-text">{interimTranscript}</p>}
+          <div className="story-controls">
+            <button type="button" className="round-control" onClick={toggleSpeech} title={recording ? "Stop listening" : "Start listening"}>{recording ? <Square aria-hidden="true" /> : <Mic aria-hidden="true" />}</button>
+            <span aria-live="polite">{intakeState === "loading" ? "Understanding your story..." : intakeNotice || "Do not include a SEVIS ID or passport number."}</span>
+            <button type="button" className="finish-story" onClick={finishStory} disabled={!scenario.narrative?.trim()}>{intakeState === "loading" ? "Keep talking" : "Review what I understood"}<ArrowRight aria-hidden="true" /></button>
+          </div>
+        </section>
+        {(intake || scenario.narrative) && (
+          <section className="story-understanding">
+            <div className="understood-facts">
+              <p className="section-eyebrow">What I understand</p>
+              {intake?.summary && <h2>{intake.summary}</h2>}
+              <div className="fact-stream">
+                {intake?.facts.map((fact, index) => (
+                  <article key={`${fact.field}-${index}`} className={fact.needsConfirmation || fact.confidence === "low" ? "needs-check" : ""}>
+                    {fact.needsConfirmation || fact.confidence === "low" ? <CircleHelp aria-hidden="true" /> : <Check aria-hidden="true" />}
+                    <div><strong>{factLabels[fact.field]}</strong><span>{displayFactValue(fact)}</span>{fact.note && <small>{fact.note}</small>}</div>
+                  </article>
+                ))}
+              </div>
+              {intake?.followUpQuestions.slice(0, 2).map((question) => <p className="story-followup" key={question}>{question}</p>)}
+            </div>
+            <ImpactList result={result} provisional />
+          </section>
+        )}
+      </main>
+    );
   }
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <div>
-          <p className="eyebrow">F-1 fixed-period planner</p>
-          <h1>F-1 rule impact planner</h1>
-        </div>
-        <nav className="top-links" aria-label="Reference links">
-          <button type="button" className="nav-button" onClick={() => (page === "overview" ? showPlannerPage() : showOverviewPage())}>
-            {page === "overview" ? <ArrowLeft aria-hidden="true" /> : <Info aria-hidden="true" />}
-            {page === "overview" ? "Back to planner" : "What happened"}
-          </button>
-        </nav>
+    <div className="app-shell">
+      <header className="app-header">
+        <button type="button" className="brand" onClick={restart}>F-1 Stay Map</button>
+        <div><button type="button" className="header-link" onClick={() => navigateOverview(true)}>What happened?</button><button type="button" className="icon-action" onClick={restart} title="Start over"><RotateCcw aria-hidden="true" /></button></div>
       </header>
 
-      {page === "overview" ? (
-        <WhatHappenedPage result={result} />
-      ) : (
-      <main className="workspace">
-        <aside className="intake">
-          <section className="panel">
-            <div className="section-title">
-              <CalendarClock aria-hidden="true" />
-              <h2>Build your scenario</h2>
-            </div>
-
-            <div className="flow-step active">
-              <span className="step-kicker">Start</span>
-              <Segmented
-                label="Will you be a valid F-1 student in the United States on September 15, 2026?"
-                value={scenario.startingPosition}
-                options={pathOptions}
-                onChange={chooseStudentPath}
-                answered={Boolean(answeredFields.startingPoint)}
-              />
-              <p className="microcopy">This one answer decides whether we start with the old D/S transition rules or the new fixed-date admission rules.</p>
-            </div>
-
-            {pathChosen && currentTrack && (
-              <>
-                <div className="flow-step active">
-                  <span className="step-kicker">Current I-20</span>
-                  <DateField label="What is the program end date on your current I-20?" value={scenario.programEndOnEffectiveDate} onChange={updateCurrentI20End} />
-                  <p className="microcopy">Use the end date printed on the I-20 you have now.</p>
-                  <details className="inline-correction">
-                    <summary>My I-94 has an end date instead of D/S</summary>
-                    <p className="microcopy">
-                      Most current F-1 students have D/S on the I-94. Only change this if your CBP I-94 shows an actual end date.
-                    </p>
-                    <Segmented
-                      label="What does your I-94 show?"
-                      value={scenario.admissionBasis}
-                      options={i94Options}
-                      onChange={updateI94Basis}
-                      answered={Boolean(answeredFields.admissionBasis)}
-                    />
-                    {scenario.admissionBasis === "fixed_period" && (
-                      <DateField label="What end date is printed on your I-94?" value={scenario.i94AdmitUntilDate} onChange={(value) => update("i94AdmitUntilDate", value)} />
-                    )}
-                  </details>
-                </div>
-
-                {scenario.programEndOnEffectiveDate && septemberLocationAnswered && (
-                  <div className="flow-step active">
-                    <span className="step-kicker">Travel</span>
-                    <Segmented
-                      label="Are you planning to leave the U.S.?"
-                      value={hasTravelPlan(scenario) ? "planned" : scenario.travelPosture === "unknown" ? "unknown" : "none"}
-                      options={travelDecisionOptions}
-                      onChange={updateLeavingUs}
-                      answered={Boolean(answeredFields.travelPosture)}
-                    />
-                    {hasTravelPlan(scenario) && (
-                      <>
-                        <Segmented
-                          label="Will you return to the U.S. after September 15, 2026?"
-                          value={scenario.returningAfterEffectiveDate ?? "unknown"}
-                          options={returnAfterRuleOptions}
-                          onChange={updateReturnAfterRule}
-                          answered={Boolean(answeredFields.returningAfterEffectiveDate)}
-                        />
-                        {scenario.returningAfterEffectiveDate === "yes" && (
-                          <>
-                            <DateField label="What date would you come back to the U.S.?" value={scenario.reentryDate} onChange={(value) => update("reentryDate", value)} />
-                            <SelectField
-                              label="How would you come back?"
-                              value={scenario.reentryBasis}
-                              options={reentryLabels}
-                              onChange={(value) => update("reentryBasis", value)}
-                              answered={Boolean(answeredFields.reentryBasis)}
-                            />
-                            <Segmented
-                              label="Will an F-1 extension request be pending when you leave?"
-                              value={scenario.pendingExtensionOnDeparture}
-                              options={yesNoOptions}
-                              onChange={(value) => update("pendingExtensionOnDeparture", value)}
-                              answered={Boolean(answeredFields.pendingExtensionOnDeparture)}
-                            />
-                          </>
-                        )}
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {optReady && (
-                  <div className="flow-step active">
-                    <span className="step-kicker">OPT or STEM OPT</span>
-                    <Segmented
-                      label="Are you planning post-completion OPT or STEM OPT?"
-                      value={scenario.optIntent ?? "unknown"}
-                      options={planningOptions}
-                      onChange={updateOptIntent}
-                      answered={Boolean(answeredFields.optIntent)}
-                    />
-                    {needsOptDate(scenario.optStage) && (
-                      <>
-                        <Segmented
-                          label="Which kind?"
-                          value={optKindFromStage(scenario.optStage)}
-                          options={optKindOptions}
-                          onChange={updateOptKind}
-                          answered={Boolean(answeredFields.optKind)}
-                        />
-                        {optKindAnswered && (
-                          <Segmented
-                            label="Have you filed the I-765?"
-                            value={optStatusFromStage(scenario.optStage)}
-                            options={optStatusOptions}
-                            onChange={updateOptStatus}
-                            answered={Boolean(answeredFields.optStatus)}
-                          />
-                        )}
-                        {optKindAnswered && optStatusAnswered && (
-                          <DateField label="When did you file, or when do you plan to file, the I-765?" value={scenario.optFilingDate} onChange={(value) => update("optFilingDate", value)} />
-                        )}
-                        {optKindAnswered && optStatusAnswered && hasApprovedOpt(scenario.optStage) && (
-                          <DateField label="What end date is on the EAD card?" value={scenario.currentEadEndDate} onChange={(value) => update("currentEadEndDate", value)} />
-                        )}
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {schoolPlanningReady && (
-                  <div className="flow-step active">
-                    <span className="step-kicker">Program level</span>
-                    <Segmented
-                      label="Are you in an undergraduate or graduate program?"
-                      value={scenario.educationLevel ?? "unknown"}
-                      options={educationLevelOptions}
-                      onChange={(value) => update("educationLevel", value)}
-                      answered={Boolean(answeredFields.educationLevel)}
-                    />
-                  </div>
-                )}
-
-                {schoolPlanningReady && educationAnswered && (
-                  <div className="flow-step active">
-                    <span className="step-kicker">Transfer</span>
-                    <Segmented
-                      label="Are you planning to transfer to a different school?"
-                      value={scenario.schoolTransferPlan ?? "unknown"}
-                      options={planningOptions}
-                      onChange={updateSchoolTransfer}
-                      answered={Boolean(answeredFields.schoolTransferPlan)}
-                    />
-                  </div>
-                )}
-
-                {schoolPlanningReady && educationAnswered && transferAnswered && (
-                  <div className="flow-step active">
-                    <span className="step-kicker">Program change</span>
-                    <Segmented
-                      label="Are you planning to change your academic program?"
-                      value={scenario.academicProgramChangePlan ?? "unknown"}
-                      options={planningOptions}
-                      onChange={updateAcademicProgramChange}
-                      answered={Boolean(answeredFields.academicProgramChangePlan)}
-                    />
-                  </div>
-                )}
-
-                {schoolPlanningReady && educationAnswered && transferAnswered && programChangeAnswered && scenario.transferOrProgramChange === "yes" && (
-                  <div className="flow-step active">
-                    <span className="step-kicker">New I-20 date</span>
-                    <DateField
-                      label={
-                        scenario.schoolTransferPlan === "yes" && scenario.academicProgramChangePlan === "yes"
-                          ? "What end date is on the new school or new program I-20?"
-                          : scenario.schoolTransferPlan === "yes"
-                            ? "What program end date is on the I-20 from the new school?"
-                            : "What end date is on the I-20 for the new academic program?"
-                      }
-                      value={scenario.currentProgramEndDate}
-                      onChange={(value) => update("currentProgramEndDate", value)}
-                    />
-                  </div>
-                )}
-
-                {schoolPlanningReady && educationAnswered && transferAnswered && programChangeAnswered && (
-                  <div className="flow-step active">
-                    <span className="step-kicker">Next program</span>
-                    {scenario.transferOrProgramChange === "yes" && (
-                      <p className="microcopy">You can keep testing the next questions while you confirm the new I-20 date.</p>
-                    )}
-                    <Segmented
-                      label="After this program, are you considering another program at the same level or a lower level?"
-                      value={scenario.nextProgramLevelPlan ?? "unknown"}
-                      options={nextProgramLevelOptions}
-                      onChange={(value) => update("nextProgramLevelPlan", value)}
-                      answered={Boolean(answeredFields.nextProgramLevelPlan)}
-                    />
-                  </div>
-                )}
-
-                {schoolPlanningReady && educationAnswered && transferAnswered && programChangeAnswered && nextProgramAnswered && (
-                  <div className="flow-step active">
-                    <span className="step-kicker">CPT</span>
-                    <Segmented
-                      label="Are you planning CPT?"
-                      value={scenario.cptPlan === "none" ? "no" : "yes"}
-                      options={yesNoOnlyOptions}
-                      onChange={updateCptIntent}
-                      answered={Boolean(answeredFields.cptPlan)}
-                    />
-                  </div>
-                )}
-              </>
-            )}
-
-            {pathChosen && futureTrack && (
-              <>
-                <div className="flow-step active">
-                  <span className="step-kicker">Your entry</span>
-                  <DateField label="When do you expect to first enter the U.S. in F-1 status?" value={scenario.reentryDate} onChange={(value) => update("reentryDate", value)} />
-                </div>
-
-                {futureEntryContradiction && (
-                  <div className="flow-note danger" role="alert">
-                    <strong>These answers do not fit together yet.</strong>
-                    <p>
-                      You answered that you will not be an F-1 student in the United States on September 15, 2026, but this entry date is on or before that date. Change the first answer to Yes, or change the entry date to when you will actually arrive.
-                    </p>
-                  </div>
-                )}
-
-                {scenario.reentryDate && !futureEntryContradiction && (
-                  <div className="flow-step active">
-                    <span className="step-kicker">Your I-20</span>
-                    <DateField label="What program end date is on the I-20 you will use to enter?" value={scenario.currentProgramEndDate} onChange={(value) => update("currentProgramEndDate", value)} />
-                  </div>
-                )}
-
-                {futureBasicsReady && (
-                  <div className="flow-step active">
-                    <span className="step-kicker">Program level</span>
-                    <Segmented
-                      label="Are you entering an undergraduate or graduate program?"
-                      value={scenario.educationLevel ?? "unknown"}
-                      options={educationLevelOptions}
-                      onChange={(value) => update("educationLevel", value)}
-                      answered={Boolean(answeredFields.educationLevel)}
-                    />
-                  </div>
-                )}
-
-                {futureBasicsReady && educationAnswered && (
-                  <div className="flow-step active">
-                    <span className="step-kicker">Transfer</span>
-                    <Segmented
-                      label="Are you already thinking about transferring schools?"
-                      value={scenario.schoolTransferPlan ?? "unknown"}
-                      options={planningOptions}
-                      onChange={updateSchoolTransfer}
-                      answered={Boolean(answeredFields.schoolTransferPlan)}
-                    />
-                  </div>
-                )}
-
-                {futureBasicsReady && educationAnswered && transferAnswered && (
-                  <div className="flow-step active">
-                    <span className="step-kicker">Program change</span>
-                    <Segmented
-                      label="Are you already thinking about changing academic programs?"
-                      value={scenario.academicProgramChangePlan ?? "unknown"}
-                      options={planningOptions}
-                      onChange={updateAcademicProgramChange}
-                      answered={Boolean(answeredFields.academicProgramChangePlan)}
-                    />
-                  </div>
-                )}
-
-                {futureBasicsReady && educationAnswered && transferAnswered && programChangeAnswered && (
-                  <div className="flow-step active">
-                    <span className="step-kicker">Next program</span>
-                    <Segmented
-                      label="After this program, are you considering another program at the same level or a lower level?"
-                      value={scenario.nextProgramLevelPlan ?? "unknown"}
-                      options={nextProgramLevelOptions}
-                      onChange={(value) => update("nextProgramLevelPlan", value)}
-                      answered={Boolean(answeredFields.nextProgramLevelPlan)}
-                    />
-                  </div>
-                )}
-
-                {futureBasicsReady && educationAnswered && transferAnswered && programChangeAnswered && nextProgramAnswered && (
-                  <div className="flow-step active">
-                    <span className="step-kicker">OPT or STEM OPT</span>
-                    <Segmented
-                      label="Are you already thinking about post-completion OPT or STEM OPT?"
-                      value={scenario.optIntent ?? "unknown"}
-                      options={planningOptions}
-                      onChange={updateOptIntent}
-                      answered={Boolean(answeredFields.optIntent)}
-                    />
-                  </div>
-                )}
-
-                {futureBasicsReady && educationAnswered && transferAnswered && programChangeAnswered && nextProgramAnswered && futureOptAnswered && (
-                  <div className="flow-step active">
-                    <span className="step-kicker">CPT</span>
-                    <Segmented
-                      label="Are you already thinking about CPT?"
-                      value={scenario.cptPlan === "none" ? "no" : "yes"}
-                      options={yesNoOnlyOptions}
-                      onChange={updateCptIntent}
-                      answered={Boolean(answeredFields.cptPlan)}
-                    />
-                  </div>
-                )}
-              </>
-            )}
-          </section>
-
-          <section className="panel narrative">
-            <div className="section-title">
-              <Mic aria-hidden="true" />
-              <h2>Narrative intake</h2>
-            </div>
-            <textarea
-              value={scenario.narrative ?? ""}
-              onChange={(event) => update("narrative", event.currentTarget.value)}
-              placeholder="Example: I am in the U.S. now on F-1 D/S. My I-20 ends May 15, 2031 and I may travel in August 2027."
-            />
-            <div className="button-row">
-              <button type="button" onClick={toggleSpeech}>
-                {recording ? <Square aria-hidden="true" /> : <Mic aria-hidden="true" />}
-                {recording ? "Stop" : "Speak"}
-              </button>
-              <button type="button" onClick={applyNarrativeDraft} disabled={intakeState === "loading"}>
-                {intakeState === "loading" ? <RefreshCw aria-hidden="true" className="spin" /> : <Wand2 aria-hidden="true" />}
-                {intakeState === "loading" ? "Reading" : "Draft facts"}
-              </button>
-            </div>
-            <p className="muted status-line" aria-live="polite">
-              {recording ? "Recording..." : voiceNotice}
-            </p>
-            {draftNotice && (
-              <p className="muted status-line" aria-live="polite">
-                {draftNotice}
-              </p>
-            )}
-            {intakeExtraction && (
-              <div className="understood">
-                <div className="understood-heading">
-                  <h3>What I understood</h3>
-                  {intakeExtraction.model && <span>{intakeExtraction.model}</span>}
-                </div>
-                <p>{intakeExtraction.summary}</p>
-
-                {intakeExtraction.facts.length > 0 && (
-                  <div className="understood-list">
-                    {intakeExtraction.facts.map((fact, index) => (
-                      <div key={`${fact.field}-${fact.value}-${index}`} className={`understood-fact ${fact.confidence}`}>
-                        <div>
-                          <strong>{fact.label || factFieldLabels[fact.field]}</strong>
-                          <span>{factDisplayValue(fact)}</span>
-                        </div>
-                        <p>{fact.evidence}</p>
-                        <small>
-                          {fact.confidence} confidence{fact.needsConfirmation ? " · check this" : ""}
-                          {!isSupportedFactValue(fact) ? " · needs clarification" : ""}
-                        </small>
-                        {fact.note && <em>{fact.note}</em>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {(intakeExtraction.followUpQuestions.length > 0 || intakeExtraction.cautions.length > 0) && (
-                  <div className="understood-followups">
-                    {intakeExtraction.followUpQuestions.length > 0 && <strong>Next details to add</strong>}
-                    {intakeExtraction.followUpQuestions.map((question) => (
-                      <p key={question}>{question}</p>
-                    ))}
-                    {intakeExtraction.cautions.length > 0 && <strong>Things to double-check</strong>}
-                    {intakeExtraction.cautions.map((caution) => (
-                      <p key={caution}>{caution}</p>
-                    ))}
-                    <small>Answer these in the questions above, or edit your story and draft facts again.</small>
-                  </div>
-                )}
-
-                <button type="button" onClick={applyExtractedFacts} disabled={applicableFacts.length === 0}>
-                  <CheckCircle2 aria-hidden="true" />
-                  {applicableFacts.length
-                    ? `Apply ${applicableFacts.length} fact${applicableFacts.length === 1 ? "" : "s"} to my scenario`
-                    : "No facts ready to apply"}
+      <main className="planner-layout">
+        <section className="interview-column">
+          {completedQuestions.length > 0 && (
+            <div className="answer-history" aria-label="Your answers">
+              {completedQuestions.map((question) => (
+                <button type="button" key={question.id} onClick={() => editQuestion(question.id)}>
+                  <Check aria-hidden="true" />
+                  <span><small>{question.eyebrow}</small><strong>{question.answerLabel}</strong></span>
+                  <Pencil aria-hidden="true" />
                 </button>
-              </div>
-            )}
-            {intakeState === "failed" && (
-              <p className="muted status-line" aria-live="polite">
-                The OpenAI intake endpoint is not available yet. No scenario facts were changed.
-              </p>
-            )}
-          </section>
-        </aside>
-
-        <section className="results">
-          <section className="band impact-surface meaning-surface">
-            <div className="section-title">
-              <Sparkles aria-hidden="true" />
-              <h2>What this means for you</h2>
+              ))}
             </div>
-            <div className={`outcome ${studentOutcome.tone}`}>
-              <p>{studentOutcome.eyebrow}</p>
-              <h2>{studentOutcome.title}</h2>
-              <span>{studentOutcome.detail}</span>
-            </div>
-            <ImpactCards cards={impactCards} result={result} />
-            <StudentTimelines scenario={scenario} result={result} travelResult={travelResult} />
-          </section>
+          )}
 
-          <section className="band calculated-advisement">
-            <div className="section-title">
-              <Wand2 aria-hidden="true" />
-              <h2>Calculate results</h2>
-            </div>
-            <p className="microcopy">Generate a narrative advisement note from your answers and the source-linked rule findings.</p>
-            <button
-              type="button"
-              className="primary-action"
-              onClick={calculateResults}
-              disabled={explanationState === "loading" || scenario.startingPosition === "unknown" || blockingContradiction}
-            >
-              {explanationState === "loading" ? <RefreshCw aria-hidden="true" className="spin" /> : <Sparkles aria-hidden="true" />}
-              {explanationState === "loading" ? "Writing your advisement" : "Calculate results"}
-            </button>
-            {blockingContradiction && (
-              <p className="muted status-line">Fix the conflicting September 15 and entry-date answers before generating a narrative report.</p>
-            )}
-            {explanationState === "failed" && (
-              <p className="muted status-line">OpenAI advisement is not available right now, so this note uses the deterministic rule result only.</p>
-            )}
-            {explanationParagraphs.length > 0 && (
-              <div className="advisement-copy">
-                {explanationModel && <span>{explanationModel}</span>}
-                {explanationParagraphs.map((paragraph) => (
-                  <p key={paragraph}>{paragraph}</p>
-                ))}
-              </div>
-            )}
-          </section>
+          {activeQuestion ? (
+            <QuestionCard
+              key={activeQuestion.id}
+              question={activeQuestion}
+              onAnswer={(value) => answer(activeQuestion, value)}
+              onDate={(value) => answerDate(activeQuestion, value)}
+              onUnknownDate={() => answerDate(activeQuestion, undefined)}
+            />
+          ) : (
+            <section className="question-card complete-card">
+              <p className="question-kicker">Your answers are ready</p>
+              <h2>Review how the rule affects you, then create your advisor report.</h2>
+              <p className="question-help">You can change any answer above. The dates and cards update immediately.</p>
+              <button type="button" className="primary-command" onClick={createReport} disabled={reportState === "loading" || contradiction}>
+                {reportState === "loading" ? <RefreshCw className="spin" aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
+                {reportState === "loading" ? "Writing your report" : "Create my advisement"}
+              </button>
+              {contradiction && <p className="field-error">Resolve the highlighted date conflict before creating the report.</p>}
+            </section>
+          )}
 
-          <details className="band technical-details">
-            <summary>Rule details and sources</summary>
-            <div className="technical-grid">
-              <section>
-                <h2>Findings</h2>
-                <div className="finding-list">
-                  {result.findings.map((item) => (
-                    <article key={item.id} className={`finding ${item.tone}`}>
-                      {findingIcon(item.tone)}
-                      <div>
-                        <h3>{item.title}</h3>
-                        <p>{item.detail}</p>
-                        <SourceChips result={result} sourceIds={item.sourceIds} />
-                      </div>
-                    </article>
-                  ))}
+          <details className="uncommon-details">
+            <summary>What else could affect this? <ChevronDown aria-hidden="true" /></summary>
+            <div className="uncommon-grid">
+              {isCurrent(scenario) && (
+                <div className="uncommon-field">
+                  <label>
+                    <span>Most current F-1 I-94 records say D/S. Does yours show a date instead?</span>
+                    <select value={scenario.admissionBasis} onChange={(event) => patchScenario({ admissionBasis: event.currentTarget.value as AdmissionBasis, i94AdmitUntilDate: event.currentTarget.value === "fixed_period" ? scenario.i94AdmitUntilDate : undefined })}>
+                      <option value="duration_of_status">No, it says D/S</option>
+                      <option value="fixed_period">Yes, it has a date</option>
+                      <option value="unknown">I need to check</option>
+                    </select>
+                  </label>
+                  {scenario.admissionBasis === "fixed_period" && <DateAnswer value={scenario.i94AdmitUntilDate} onComplete={(value) => patchScenario({ i94AdmitUntilDate: value })} />}
                 </div>
-              </section>
-
-              {(result.followUpQuestions.length > 0 || result.nextActions.length > 0) && (
-                <section className="split">
-                  <div>
-                    <h2>Questions to answer</h2>
-                    {result.followUpQuestions.length ? (
-                      <ul>
-                        {result.followUpQuestions.map((question) => (
-                          <li key={question}>{question}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p>No blocking fact gaps in this scenario.</p>
-                    )}
-                  </div>
-                  <div>
-                    <h2>Suggested next steps</h2>
-                    {result.nextActions.length ? (
-                      <ul>
-                        {result.nextActions.map((action) => (
-                          <li key={action}>{action}</li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p>No extra action flags from the deterministic engine.</p>
-                    )}
-                  </div>
-                </section>
               )}
-
-              <section className="sources">
-                <h2>Sources</h2>
-                <ul>
-                  {result.citations.map((citation) => (
-                    <li key={citation.id}>
-                      <a href={citation.url} target="_blank" rel="noreferrer">
-                        {citation.id}
-                      </a>
-                      <span>{citation.locator}</span>
-                    </li>
-                  ))}
-                </ul>
-              </section>
+              <label><span>Do you have F-2 dependents?</span><select value={scenario.hasF2Dependents ?? "unknown"} onChange={(event) => patchScenario({ hasF2Dependents: event.currentTarget.value as YesNoUnknown })}><option value="unknown">Choose</option><option value="yes">Yes</option><option value="no">No</option></select></label>
+              <div className="uncommon-field"><label><span>Will this program end early, or did you withdraw?</span><select value={scenario.earlyEndSituation ?? "none"} onChange={(event) => patchScenario({ earlyEndSituation: event.currentTarget.value as StudentScenario["earlyEndSituation"], earlyEndDate: event.currentTarget.value === "none" ? undefined : scenario.earlyEndDate })}><option value="none">No</option><option value="completed_early">Completed early</option><option value="authorized_withdrawal">Authorized withdrawal</option><option value="status_violation">Possible status violation</option><option value="unknown">I need help deciding</option></select></label>{scenario.earlyEndSituation && scenario.earlyEndSituation !== "none" && scenario.earlyEndSituation !== "status_violation" && <DateAnswer value={scenario.earlyEndDate} onComplete={(value) => patchScenario({ earlyEndDate: value })} />}</div>
+              {scenario.travelPosture !== "none" && <label><span>Will an I-539 be pending when you leave?</span><select value={scenario.pendingExtensionOnDeparture} onChange={(event) => patchScenario({ pendingExtensionOnDeparture: event.currentTarget.value as YesNoUnknown })}><option value="unknown">Choose</option><option value="yes">Yes</option><option value="no">No</option></select></label>}
             </div>
           </details>
         </section>
+
+        <aside className="results-column">
+          <ImpactList result={result} />
+        </aside>
       </main>
+
+      <section className="timeline-band">
+        <div className="band-heading"><p>Your dates, in order</p><h2>See where each rule changes your path</h2></div>
+        <Timeline
+          title={
+            travelResult || result.classification === "transition_ds"
+              ? "If you stay in the United States"
+              : result.classification === "manual_review"
+                ? "The date that decides your first path"
+                : "Your fixed-period timeline"
+          }
+          subtitle={
+            result.classification === "transition_ds"
+              ? "This preserves the old D/S transition path."
+              : result.classification === "manual_review"
+                ? "More points appear as each date is confirmed."
+                : "The final point is the date shown on the projected or actual I-94."
+          }
+          events={result.timeline}
+        />
+        {travelResult && <Timeline title="If you leave and return after September 15" subtitle="This is a separate fixed-period projection. The I-94 issued after you return controls." events={travelResult.timeline} />}
+      </section>
+
+      {(report || reportState === "loading" || reportState === "failed") && (
+        <section className="report-band" aria-live="polite">
+          {reportState === "loading" && <div className="report-loading"><RefreshCw className="spin" aria-hidden="true" /><p>Your advisor note is being written from the verified dates and rule findings.</p></div>}
+          {reportState === "failed" && <div className="report-error"><AlertTriangle aria-hidden="true" /><div><h2>The report did not finish.</h2><p>Your dated results above are unchanged. Check the OpenAI connection, then try the report again.</p><button type="button" onClick={createReport}><RefreshCw aria-hidden="true" /> Try again</button></div></div>}
+          {report && <article className="advisor-report"><p className="section-eyebrow">Your advisement</p><h2>{report.title}</h2>{report.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}<footer><span>Prepared with {report.model ?? "OpenAI"}</span><span>Rule status checked July 19, 2026</span></footer></article>}
+        </section>
       )}
+
+      <section className="source-band">
+        <details>
+          <summary>Sources used for this result <ChevronDown aria-hidden="true" /></summary>
+          <div className="source-list">{result.citations.map((citation) => <a key={citation.id} href={citation.url} target="_blank" rel="noreferrer"><span><strong>{citation.title}</strong><small>{citation.locator}</small></span><ExternalLink aria-hidden="true" /></a>)}</div>
+        </details>
+      </section>
     </div>
   );
 }
