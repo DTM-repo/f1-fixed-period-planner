@@ -317,7 +317,7 @@ function appendTravelQuestions(scenario: StudentScenario, answered: Set<string>,
     id: "travelIntent",
     eyebrow: raisedByStudent ? "Your travel question" : "Travel",
     prompt: raisedByStudent ? "You mentioned travel. Are you planning to leave the United States?" : "Are you planning to travel outside the United States?",
-    help: raisedByStudent ? "I saved this from your story. These questions show exactly when travel changes your answer." : undefined,
+    help: raisedByStudent ? "A return after September 15, 2026 ends the old D/S path and begins a fixed admission period." : undefined,
     kind: "choice",
     choices: [{ value: "planned", label: "Yes" }, { value: "none", label: "No" }, { value: "unknown", label: "I do not know yet" }],
     value: scenario.travelPosture,
@@ -346,7 +346,7 @@ function appendTravelQuestions(scenario: StudentScenario, answered: Set<string>,
         id: "returnDate",
         eyebrow: "Return date",
         prompt: "When do you expect to return from that trip?",
-        help: "Your return puts you under the new rules. The date helps place that change on your timeline.",
+        help: "CBP issues the controlling I-94 when you return.",
         kind: "date",
         value: scenario.reentryDate,
         answerLabel: scenario.reentryDate ? formatDate(scenario.reentryDate) : "I do not know yet",
@@ -357,7 +357,7 @@ function appendTravelQuestions(scenario: StudentScenario, answered: Set<string>,
         id: "travelI20",
         eyebrow: "The I-20 you will use to return",
         prompt: "Will you return using the same I-20 for the same program?",
-        help: "If it is the same I-20, I will keep the program end date you already gave. If it is new or updated, its dates may produce a different I-94 end date.",
+        help: "A new or updated I-20 can produce a different I-94 end date.",
         kind: "choice",
         choices: [
           { value: "same_i20_balance", label: "Yes, the same I-20" },
@@ -378,7 +378,7 @@ function appendTravelQuestions(scenario: StudentScenario, answered: Set<string>,
           id: "travelProgramStart",
           eyebrow: "One different date on the same I-20",
           prompt: "What program start date is printed on that I-20?",
-          help: "I already have your program end date. I need the start date because the new four-year maximum is measured from the I-20 program start, not from the day you return.",
+          help: "The new four-year maximum is measured from the I-20 program start date, not from the day you return.",
           kind: "date",
           value: scenario.programStartDate,
           answerLabel: scenario.programStartDate ? formatDate(scenario.programStartDate) : "I do not know yet",
@@ -403,7 +403,7 @@ function appendTravelQuestions(scenario: StudentScenario, answered: Set<string>,
           id: "travelProgramEnd",
           eyebrow: "Your new or updated I-20",
           prompt: "What program end date is printed on that I-20?",
-          help: "I am asking again only because you said this will be a different I-20. Its end date replaces the earlier date for the return calculation.",
+          help: "This I-20 end date controls the new admission period instead of the earlier program end date.",
           kind: "date",
           value: scenario.returnProgramEndDate,
           answerLabel: scenario.returnProgramEndDate ? formatDate(scenario.returnProgramEndDate) : "I do not know yet",
@@ -422,7 +422,7 @@ export function buildQuestions(scenario: StudentScenario, answered: Set<string>,
       id: "presence",
       eyebrow: "First, one date",
       prompt: "Will you be in the United States in valid F-1 status on September 15, 2026?",
-      help: "This one answer decides whether the old D/S rules can continue for you.",
+      help: "Old D/S protection requires valid F-1 status in the United States on that date.",
       kind: "choice",
       choices: yesNoUnknown,
       value: scenario.inUsOnEffectiveDate,
@@ -469,7 +469,7 @@ export function buildQuestions(scenario: StudentScenario, answered: Set<string>,
           id: "departBeforeRule",
           eyebrow: "These dates need clarification",
           prompt: "Will you leave the United States before September 15, 2026?",
-          help: "You said you will not be here in valid F-1 status on September 15, but your entry date is before that day.",
+          help: "An F-1 entry before September 15 would place you in the United States that day unless you leave again first.",
           kind: "choice",
           choices: yesNoUnknown,
           value: scenario.departBeforeEffectiveDate,
@@ -575,7 +575,7 @@ export function buildQuestions(scenario: StudentScenario, answered: Set<string>,
       if (!answered.has("dsoRecommendation")) return questions;
     }
     if (scenario.optStage.endsWith("not_filed") || scenario.optStage.endsWith("pending")) {
-      questions.push({ id: "optFilingDate", eyebrow: "I-765 timing", prompt: "When did you file, or when do you plan to file, Form I-765?", help: isCurrent(scenario) ? "This date tells us whether you can use the special stay-in-the-United-States OPT path without filing a separate extension of stay only because D/S ended." : undefined, kind: "date", value: scenario.optFilingDate, answerLabel: scenario.optFilingDate ? formatDate(scenario.optFilingDate) : "I do not know yet", allowUnknownDate: true });
+      questions.push({ id: "optFilingDate", eyebrow: "I-765 timing", prompt: "When did you file, or when do you plan to file, Form I-765?", help: isCurrent(scenario) ? "An I-765 received by March 18, 2027 may qualify for the special transition path without a separate Form I-539 solely because D/S ended." : undefined, kind: "date", value: scenario.optFilingDate, answerLabel: scenario.optFilingDate ? formatDate(scenario.optFilingDate) : "I do not know yet", allowUnknownDate: true });
       if (!answered.has("optFilingDate")) return questions;
     }
     if (scenario.optStage.endsWith("approved")) {
@@ -727,10 +727,10 @@ function TravelDifference({ scenario, travelResult, hasTravelConcern }: { scenar
       <section className="difference-maker warning">
         <AlertTriangle aria-hidden="true" />
         <div>
-          <p>The choice that changes your result</p>
+          <p>Travel changes your F-1 rules</p>
           <h3>Your planned return puts you under the new rules.</h3>
           <span>
-            You said at least one trip will bring you back after September 15, 2026{scenario.reentryDate ? `, on ${formatDate(scenario.reentryDate)}` : ""}. The fixed-period result below is your main path. The old-rule timeline applies only if you stay in the United States.
+            A return after September 15, 2026{scenario.reentryDate ? `, on ${formatDate(scenario.reentryDate)}` : ""} ends D/S and begins a fixed admission period. If you remain in the United States, the old D/S rules continue instead.
           </span>
           {scenario.optIntent === "yes" && scenario.optStage.endsWith("not_filed") && (
             <strong className="micro-recommendation">Before you travel, ask your DSO to compare getting the OPT recommendation and filing Form I-765 in the United States with the I-765 and Form I-539 process after a fixed-period return.</strong>
@@ -748,7 +748,7 @@ function TravelDifference({ scenario, travelResult, hasTravelConcern }: { scenar
       <div>
         <p>Travel changes the rule</p>
         <h3>{confirmedPostRuleReturn ? "Your planned return puts you under the new rules." : noPostRuleReturn ? "Your current travel plan does not end the old-rule path." : "Any return after September 15 puts you under the new rules."}</h3>
-        <span>{confirmedPostRuleReturn ? "Add the dates from the I-20 you will use to return so your fixed-period timeline can be calculated. Until then, the old-rule result below is only the alternative if you stay in the United States." : noPostRuleReturn ? "You said no trip will bring you back after September 15, 2026. If that changes, update this answer before relying on your result." : "Tell us whether any planned trip brings you back after that date so the return timeline can be calculated."}</span>
+        <span>{confirmedPostRuleReturn ? "The program dates on the I-20 used for your return determine the new fixed admission period. Remaining in the United States preserves the old D/S path instead." : noPostRuleReturn ? "Every planned return is on or before September 15, 2026, so your current travel plan does not end D/S. A later return would change that." : "A return after September 15, 2026 ends D/S and begins a fixed admission period. A return on or before that date does not trigger the new admission system by itself."}</span>
         {scenario.optIntent === "yes" && !noPostRuleReturn && <strong className="micro-recommendation">Your travel date and OPT filing date need to be planned together.</strong>}
       </div>
     </section>
@@ -773,16 +773,15 @@ function SourceLink({ sourceId }: { sourceId: string }) {
   );
 }
 
-function ImpactList({ result, provisional = false }: { result: ReturnType<typeof calculateScenario>; provisional?: boolean }) {
+function ImpactList({ result }: { result: ReturnType<typeof calculateScenario> }) {
   const visible = result.findings.filter((item) => !item.id.startsWith("date-") && item.id !== "transition-protection");
   return (
     <section className="impact-area" aria-live="polite">
       <div className="impact-heading">
         <div>
-          <p>{provisional ? "From what I understand so far" : "How this affects you"}</p>
+          <p>How this affects you</p>
           <h2>{result.headline}</h2>
         </div>
-        {provisional && <span>Draft</span>}
       </div>
       <p className="impact-summary">{result.summary}</p>
       <div className="impact-list">
@@ -1516,7 +1515,7 @@ export default function App() {
                   )}
                 </div>
                 <TravelDifference scenario={activeScenario} travelResult={travelResult} hasTravelConcern={hasTravelConcern} />
-                <ImpactList result={primaryResult} provisional />
+                <ImpactList result={primaryResult} />
               </>
             ) : (
               <div className="understanding-waiting">
@@ -1564,9 +1563,7 @@ export default function App() {
             />
           ) : (
             <section className="question-card complete-card">
-              <p className="question-kicker">Your answers are ready</p>
-              <h2>Review how the rule affects you, then create your advisor report.</h2>
-              <p className="question-help">You can change any answer above. The dates and cards update immediately.</p>
+              <h2>Create your full advisement</h2>
               <button type="button" className="primary-command" onClick={createReport} disabled={reportState === "loading" || contradiction}>
                 {reportState === "loading" ? <RefreshCw className="spin" aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
                 {reportState === "loading" ? "Writing your report" : "Create my advisement"}
@@ -1624,7 +1621,7 @@ export default function App() {
             result.classification === "transition_ds"
               ? "This preserves the old D/S transition path."
               : result.classification === "manual_review"
-                ? "More points appear as each date is confirmed."
+                ? "Your September 15 location and F-1 status determine which rules apply."
                 : "The final point is the date shown on the projected or actual I-94."
           }
           events={result.timeline}
@@ -1634,15 +1631,15 @@ export default function App() {
 
       {(report || reportState === "loading" || reportState === "failed") && (
         <section className="report-band" aria-live="polite">
-          {reportState === "loading" && <div className="report-loading"><RefreshCw className="spin" aria-hidden="true" /><p>Your advisor note is being written from the verified dates and rule findings.</p></div>}
-          {reportState === "failed" && <div className="report-error"><AlertTriangle aria-hidden="true" /><div><h2>The report did not finish.</h2><p>Your dated results above are unchanged. Check the OpenAI connection, then try the report again.</p><button type="button" onClick={createReport}><RefreshCw aria-hidden="true" /> Try again</button></div></div>}
-          {report && <article className="advisor-report"><p className="section-eyebrow">Your advisement</p><h2>{report.title}</h2>{report.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}<footer><span>Prepared with {report.model ?? "OpenAI"}</span><span>Rule status checked July 19, 2026</span></footer></article>}
+          {reportState === "loading" && <div className="report-loading"><RefreshCw className="spin" aria-hidden="true" /><p>Writing your advisement.</p></div>}
+          {reportState === "failed" && <div className="report-error"><AlertTriangle aria-hidden="true" /><div><h2>The advisement did not finish.</h2><p>Your dated guidance remains available. Try again.</p><button type="button" onClick={createReport}><RefreshCw aria-hidden="true" /> Try again</button></div></div>}
+          {report && <article className="advisor-report"><p className="section-eyebrow">Your advisement</p><h2>{report.title}</h2>{report.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}<footer><span>Rule status checked July 19, 2026</span></footer></article>}
         </section>
       )}
 
       <section className="source-band">
         <details>
-          <summary>Sources used for this result <ChevronDown aria-hidden="true" /></summary>
+          <summary>Official sources <ChevronDown aria-hidden="true" /></summary>
           <div className="source-list">{primaryResult.citations.map((citation) => <a key={citation.id} href={citation.url} target="_blank" rel="noreferrer"><span><strong>{citation.title}</strong><small>{citation.locator}</small></span><ExternalLink aria-hidden="true" /></a>)}</div>
         </details>
       </section>

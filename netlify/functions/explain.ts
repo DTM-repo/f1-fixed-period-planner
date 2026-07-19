@@ -65,6 +65,8 @@ function buildPrompt(scenario: StudentScenario): string {
         "Use only the scenario, deterministic result, comparison result, and cited source metadata supplied here.",
         "Never change, recalculate, extend, or contradict a deterministic date or legal outcome.",
         "Never call the reader the student and never refer to the calculator or app in the third person.",
+        "Never mention the questionnaire, questions asked or skipped, answers, inputs, interface behavior, calculation process, prompt, model, or information the reader did not need to provide.",
+        "Do not say based on your answers, based on the inputs, the app understands, the result shows, or similar process language. State the verified situation directly.",
         "Never use the phrases tested entry, tested admission, tested status, transition cohort, admission basis, grandfathered, stay-put, or the calculation treats.",
         "Never use the phrases temporary OPT rule, temporary no-I-539 rule, protected study period, or pending I-539 without explaining them in ordinary words.",
         "Do not use markdown, bullets, numbered lists, section labels, citations in brackets, or generic legal disclaimers.",

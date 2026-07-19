@@ -130,7 +130,7 @@ function normalizeScenarioDates(scenario: StudentScenario) {
     }
     if (useDefault) {
       writable[field] = DEFAULT_EFFECTIVE_DATE;
-      followUpQuestions.push(`Confirm the ${label}. This result currently uses ${formatDate(DEFAULT_EFFECTIVE_DATE)}.`);
+      followUpQuestions.push(`Confirm the ${label}. The published effective date is ${formatDate(DEFAULT_EFFECTIVE_DATE)}.`);
     } else {
       writable[field] = undefined;
       followUpQuestions.push(
@@ -146,7 +146,7 @@ function normalizeScenarioDates(scenario: StudentScenario) {
       finding(
         "date-input-normalized",
         "info",
-        "I read the dates this way",
+        "Confirm these dates",
         `${changes.join("; ")}. Correct any date that does not match your document.`,
         []
       )
@@ -158,7 +158,7 @@ function normalizeScenarioDates(scenario: StudentScenario) {
         "date-confirmation-needed",
         "question",
         "A date needs your confirmation",
-        "The result still shows everything that can be determined without that date.",
+        "Use the month name, day, and year shown on your document.",
         []
       )
     );
@@ -245,7 +245,7 @@ function addAcademicFindings(scenario: StudentScenario, findings: Finding[], nex
           "undergraduate-first-year-complete",
           "good",
           "The new first-year restriction does not block this timing",
-          "You said you will have completed your first academic year before the planned change. Other transfer or program-change requirements still apply.",
+          "You will have completed your first academic year before the planned change. Other transfer or program-change requirements still apply.",
           ["8CFR-214-2-F5II"]
         )
       );
@@ -324,7 +324,7 @@ function addCptFindings(
         "cpt-within-program",
         "info",
         "Your CPT remains tied to your program dates",
-        `The new rule does not create an earlier CPT deadline based on the dates you entered. CPT can continue only through the end date authorized by your DSO and cannot continue past your I-20 program end date${scenario.currentProgramEndDate ? ` of ${formatDate(scenario.currentProgramEndDate)}` : ""}.`,
+        `CPT can continue only through the end date authorized by your DSO and cannot continue past your I-20 program end date${scenario.currentProgramEndDate ? ` of ${formatDate(scenario.currentProgramEndDate)}` : ""}. The new rule does not create an earlier CPT deadline in your situation.`,
         ["8CFR-214-2-F5VIII-CPT"]
       )
     );
@@ -434,7 +434,7 @@ function addOptFindings(
           "future-opt-plan",
           "info",
           "OPT begins with regular post-completion OPT",
-          "STEM OPT, if you qualify later, is a 24-month extension after regular post-completion OPT. Because you are not close to filing yet, you do not need to answer DSO recommendation or Form I-765 filing questions now.",
+          "STEM OPT, if you qualify later, is a 24-month extension after regular post-completion OPT.",
           ["USCIS-OPT-STEM"]
         )
       );
@@ -453,7 +453,7 @@ function addOptFindings(
         "fixed-opt-separate-period",
         "info",
         "OPT or STEM OPT uses a separate fixed-period date",
-        "An OPT return can depend on the EAD end date, a pending I-765 receipt, and the employment end date recommended by your DSO. Add those documents before relying on a projected I-94 date.",
+        "An OPT return can depend on the EAD end date, a pending I-765 receipt, and the employment end date recommended by your DSO. Confirm those dates before relying on a projected I-94 date.",
         ["8CFR-214-2-F5-EXCEPTIONS"]
       )
     );
@@ -485,7 +485,7 @@ function addOptFindings(
         )
       );
     } else {
-      findings.push(finding("approved-opt-ead-needed", "question", "Add the EAD end date", `The EAD date determines the approved OPT or STEM OPT stay-through date. The timeline shown now continues to use the confirmed I-20 or EAD facts already provided${activityEnd ? ` through ${formatDate(activityEnd)}` : ""}.`, ["8CFR-214-1-M1-OPT"]));
+      findings.push(finding("approved-opt-ead-needed", "question", "Confirm the EAD end date", `The EAD end date determines how long approved OPT or STEM OPT extends your F-1 stay${activityEnd ? `. Your confirmed protection currently runs through ${formatDate(activityEnd)}` : ""}.`, ["8CFR-214-1-M1-OPT"]));
     }
     return;
   }
@@ -495,7 +495,7 @@ function addOptFindings(
       finding(
         "opt-filing-date-needed",
         "question",
-        "Your I-765 filing date changes the OPT answer",
+        "Your I-765 filing date controls the transition OPT path",
         `If you stay in the United States and do not return after September 15, USCIS must receive your I-765 by March 18, 2027${latestDepartureDate ? ` and before your current D/S timeline ends on ${formatDate(latestDepartureDate)}` : ""}. Filing on time can let you use the transition OPT path without a separate Form I-539 solely because D/S ended.`,
         ["8CFR-214-1-M1-OPT"]
       )
@@ -525,7 +525,7 @@ function addOptFindings(
       "opt-filing-in-window",
       "good",
       "This filing date fits the stay-in-the-U.S. OPT path",
-      `${formatDate(scenario.optFilingDate)} is on or before March 18, 2027 and fits the other confirmed timing facts. If you stay in the United States, you can avoid a separate Form I-539 solely because D/S ended, provided your DSO recommendation and all normal OPT requirements are met.`,
+      `${formatDate(scenario.optFilingDate)} is on or before March 18, 2027 and meets the confirmed transition deadlines. If you stay in the United States, you can avoid a separate Form I-539 solely because D/S ended, provided your DSO recommendation and all normal OPT requirements are met.`,
       ["8CFR-214-1-M1-OPT"]
     )
   );
@@ -564,7 +564,7 @@ function buildFixedResult(
   const timelineItems: TimelineItem[] = [];
   if (scenario.programStartDate) timelineItems.push(timeline(scenario.programStartDate, "Program starts", "The four-year maximum is measured from this I-20 date."));
   if (scenario.reentryDate) timelineItems.push(timeline(scenario.reentryDate, isReentry ? "You return to the United States" : "You enter in F-1 status", "CBP issues the controlling I-94 at entry."));
-  if (activityEnd) timelineItems.push(timeline(activityEnd, "Study or training period ends", actualI94 ? "This is 30 days before the I-94 date you entered." : `Earlier of the I-20 end and the ${fixedProgramLabel(scenario)}.`, extensionNeeded ? "warning" : "good"));
+  if (activityEnd) timelineItems.push(timeline(activityEnd, "Study or training period ends", actualI94 ? "This is 30 days before your I-94 admit-until date." : `Earlier of the I-20 end and the ${fixedProgramLabel(scenario)}.`, extensionNeeded ? "warning" : "good"));
   if (i94End) timelineItems.push(timeline(i94End, "I-94 admit-until date", "This includes the final 30 days to leave or take action to maintain lawful status.", extensionNeeded ? "warning" : "neutral"));
 
   if (scenario.reentryDate && scenario.programStartDate) {
@@ -589,8 +589,8 @@ function buildFixedResult(
       finding(
         "actual-i94-controls",
         "info",
-        "The I-94 date you entered controls this timeline",
-        `Your I-94 says ${formatDate(actualI94)}. That date already includes the final 30 days, so this app does not add another 30 days.`,
+        "Your I-94 date controls your stay",
+        `Your I-94 ends ${formatDate(actualI94)}. That date already includes the final 30 days; your authorized stay does not continue for another 30 days beyond it.`,
         ["8CFR-214-2-F5V"]
       )
     );
@@ -649,7 +649,7 @@ function buildFixedResult(
     : "You will have a fixed F-1 end date instead of D/S";
   const summary = i94End
     ? `Your study or training period runs through ${formatDate(activityEnd)}, followed by 30 days already included in the ${formatDate(i94End)} I-94 date.`
-    : "Your I-94 will show a specific admit-until date. Add the I-20 program start and end dates to project that date and see whether an extension may be needed.";
+    : "Your I-94 will show a specific admit-until date determined by your I-20 program start and end dates.";
 
   return makeResult(scenario, {
     classification: isChangeOfStatus ? "change_of_status_fixed_period" : isReentry ? "fixed_period_reentry" : "incoming_fixed_period",
@@ -712,8 +712,8 @@ export function calculateScenario(input: StudentScenario): PlannerResult {
       finding(
         "future-entry-before-effective-date-contradiction",
         "question",
-        "These answers need clarification",
-        `You said you will not be in the United States in valid F-1 status on September 15, 2026, but you also entered ${formatDate(scenario.reentryDate)} as an F-1 entry date. That can happen only if you leave before September 15 or another fact changes.`,
+        "Your entry date and September 15 location conflict",
+        `An F-1 entry on ${formatDate(scenario.reentryDate)} would place you in the United States on September 15, 2026 unless you leave again before that day.`,
         ["8CFR-214-1-M1"]
       )
     ];
@@ -721,8 +721,8 @@ export function calculateScenario(input: StudentScenario): PlannerResult {
       scenario,
       findings,
       [...normalized.followUpQuestions, "Will you leave the United States before September 15, 2026?"],
-      "Tell us whether you will leave before September 15",
-      "No date result is shown until the location conflict is resolved, but the rest of your answers are preserved."
+      "Will you leave before September 15?",
+      "An entry before September 15 and a departure before September 15 lead to different rules."
     );
   }
 
@@ -740,13 +740,13 @@ export function calculateScenario(input: StudentScenario): PlannerResult {
           "post-rule-return-date-needed",
           "question",
           "Add the date you will return after September 15",
-          `You said you will enter on ${formatDate(scenario.reentryDate)} and leave before the rule starts. The fixed-period timeline begins with your next F-1 admission after September 15, not the earlier trip.`,
+          `An F-1 entry on ${formatDate(scenario.reentryDate)} followed by departure before the rule starts does not begin the fixed-period timeline. Your next F-1 admission after September 15 does.`,
           ["8CFR-214-1-A4"]
         )
       ],
       [...normalized.followUpQuestions, "When will you next enter the United States in F-1 status after September 15, 2026?"],
       "Your post-rule return date is still needed",
-      "The app kept the rest of your facts and will calculate the fixed-period path after you add that return date."
+      "Your next F-1 admission after September 15 determines the fixed-period path."
     );
   }
 
@@ -767,10 +767,10 @@ export function calculateScenario(input: StudentScenario): PlannerResult {
     if (scenario.maintainingStatusOnEffectiveDate === "unknown" && scenario.inUsOnEffectiveDate === "yes") questions.push("Will your F-1 status still be valid on September 15, 2026?");
     return buildClarificationResult(
       scenario,
-      [...normalized.findings, finding("first-branch-needed", "question", "Your September 15 situation decides the first result", "Answer the current question and the app will show the parts of the rule that apply immediately.", ["8CFR-214-1-M1"])],
+      [...normalized.findings, finding("first-branch-needed", "question", "Your September 15 situation decides which rules apply", "Old D/S protection requires you to be in the United States in valid F-1 status on September 15, 2026.", ["8CFR-214-1-M1"])],
       questions,
       "Start with September 15, 2026",
-      "One answer decides whether the old D/S rules can continue for you or whether you enter the fixed-period system."
+      "Valid F-1 status in the United States on September 15 keeps the old D/S path available; otherwise the fixed-period rules apply."
     );
   }
 
@@ -784,7 +784,7 @@ export function calculateScenario(input: StudentScenario): PlannerResult {
       [...normalized.findings, finding("transition-not-established", "question", "The old-rule protection is not established yet", "It requires you to be in the United States in valid F-1 status with D/S on your I-94 when the rule begins.", ["8CFR-214-1-M1"])],
       [...normalized.followUpQuestions, "Confirm what your I-94 says and whether your F-1 status will be valid on September 15, 2026."],
       "Confirm your September 15 documents",
-      "The app will keep the facts you already provided while you confirm the missing item."
+      "Old-rule protection requires valid F-1 status in the United States and D/S on your I-94 on September 15, 2026."
     );
   }
 
@@ -792,20 +792,20 @@ export function calculateScenario(input: StudentScenario): PlannerResult {
   if (!effectiveDocumentEnd) {
     return buildClarificationResult(
       scenario,
-      [...normalized.findings, finding("effective-document-date-needed", "question", "Add the I-20 end date that will be active on September 15", "That date is needed to calculate how long the old rules protect you. Add an EAD end date too if you will have one that day.", ["8CFR-214-1-M1"])],
+      [...normalized.findings, finding("effective-document-date-needed", "question", "Confirm the I-20 end date active on September 15", "Your active I-20 end date determines how long the old rules protect you. If you will have an approved EAD that day, its end date also matters.", ["8CFR-214-1-M1"])],
       [...normalized.followUpQuestions, "What program end date will be on your active I-20 on September 15, 2026?"],
-      "You remain under the old rules if these facts stay the same",
-      "You are in the protected current-student group. Add your document date to see exactly how long the protection lasts."
+      "You remain under the old rules",
+      "Your active I-20 or approved EAD end date on September 15 determines when that protection ends."
     );
   }
 
   if (isAfter(effectiveDate, effectiveDocumentEnd)) {
     return buildClarificationResult(
       scenario,
-      [...normalized.findings, finding("document-ends-before-effective-date", "question", "Tell us what will keep you in F-1 status on September 15", `The date entered, ${formatDate(effectiveDocumentEnd)}, is before the rule begins. Add a later I-20, OPT, or STEM OPT fact so the app does not guess.`, ["8CFR-214-1-M1"])],
+      [...normalized.findings, finding("document-ends-before-effective-date", "question", "Confirm what will keep you in F-1 status on September 15", `The document date of ${formatDate(effectiveDocumentEnd)} is before the rule begins. A later I-20, approved OPT EAD, or approved STEM OPT EAD is needed to establish valid F-1 status on September 15.`, ["8CFR-214-1-M1"])],
       [...normalized.followUpQuestions, "Will you have a later I-20, post-completion OPT, or STEM OPT on September 15, 2026?"],
       "Your current document ends before the rule begins",
-      "The rest of your result will appear after you identify your F-1 basis on September 15."
+      "A document covering September 15 is required for the old D/S protection."
     );
   }
 
@@ -818,7 +818,7 @@ export function calculateScenario(input: StudentScenario): PlannerResult {
       "transition-protection",
       "good",
       "You remain under the old rules",
-      `This is the old duration-of-status system, shown as D/S on most current F-1 I-94 records. If these facts stay the same and you do not leave the United States, your protection continues through ${formatDate(activityEnd)}, followed by 60 days through ${formatDate(latestDepartureDate)}.`,
+      `This is the old duration-of-status system, shown as D/S on most current F-1 I-94 records. If you remain in the United States and do not travel, your protection continues through ${formatDate(activityEnd)}, followed by 60 days through ${formatDate(latestDepartureDate)}.`,
       ["8CFR-214-1-M1"]
     )
   ];

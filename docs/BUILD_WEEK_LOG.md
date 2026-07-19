@@ -648,3 +648,29 @@ Each entry should capture:
 - David flagged “adding later training” as unclear in a result for a student who had already said no to OPT. The phrase was intended to cover later post-completion OPT or STEM OPT, but it introduced an unconfirmed hypothetical instead of answering the student's facts.
 - Removed the umbrella phrase and the entire speculative sentence. The result now gives the actual I-20 end date and says directly that Form I-539 is not needed to finish that program.
 - Added a regression assertion for the complete visible sentence so internal shorthand cannot quietly return to this card.
+
+### Student Guidance Without Process Commentary
+
+**Research**
+
+- A future-OPT card correctly explained that regular post-completion OPT comes before a possible STEM OPT extension, then diluted that guidance by explaining why later filing questions were omitted.
+- Similar phrases elsewhere narrated the questionnaire or calculation process instead of addressing the student's immigration situation directly.
+
+**Decisions**
+
+- Result cards and the final advisement may state only a legal consequence, controlling date, necessary condition, or practical action.
+- Do not mention questions asked or skipped, answers or inputs, the app or calculator, the model, or how a result was generated.
+- Keep short operational messages only where they are necessary to use the interface, such as recording status or the prompt to answer before the next question appears.
+- Keep true contradiction and uncertainty notices, but describe the conflicting facts directly and give the student an immediate correction path.
+
+**Codex Assistance**
+
+- Audited deterministic findings, travel guidance, contradiction copy, timeline descriptions, the local report fallback, and the GPT-5.6 Sol advisement prompt.
+- Removed process narration and rewrote remaining passages as direct, second-person advisement.
+- Added a cross-scenario regression guard that rejects common questionnaire and calculation-process language in visible results.
+
+**Verification**
+
+- Vitest: 56/56 passed.
+- TypeScript and the production Vite build passed.
+- Browser verification of the incoming undergraduate OPT path showed only the substantive regular-OPT/STEM-OPT sequence, with no skipped-question commentary and no console errors.

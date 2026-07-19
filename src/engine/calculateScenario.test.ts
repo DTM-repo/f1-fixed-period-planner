@@ -39,6 +39,15 @@ function ids(result: ReturnType<typeof calculateScenario>) {
   return result.findings.map((item) => item.id);
 }
 
+function studentFacingCopy(result: ReturnType<typeof calculateScenario>) {
+  return [
+    result.headline,
+    result.summary,
+    ...result.findings.flatMap((item) => [item.title, item.detail]),
+    ...result.timeline.flatMap((item) => [item.title, item.detail])
+  ].join(" ");
+}
+
 describe("D/S transition", () => {
   it("caps current-student protection at September 15, 2030 plus 60 days", () => {
     const result = calculateScenario(transition);
@@ -262,7 +271,8 @@ describe("OPT and STEM OPT transition", () => {
     const result = calculateScenario({ ...incoming, optIntent: "yes", optStage: "none" });
     const finding = result.findings.find((item) => item.id === "future-opt-plan");
     expect(finding?.title).toContain("regular post-completion OPT");
-    expect(finding?.detail).toContain("extension after regular post-completion OPT");
+    expect(finding?.detail).toBe("STEM OPT, if you qualify later, is a 24-month extension after regular post-completion OPT.");
+    expect(finding?.detail).not.toMatch(/question|answer|DSO recommendation|Form I-765/i);
     expect(ids(result)).not.toContain("opt-dso-recommendation-needed");
   });
 
@@ -398,5 +408,27 @@ describe("school, work, and unusual facts", () => {
 
     const short = calculateScenario({ ...incoming, currentProgramEndDate: "2029-05-20" });
     expect(ids(short)).not.toContain("extension-process-details");
+  });
+});
+
+describe("student-facing language", () => {
+  it("does not narrate the questionnaire or calculation process", () => {
+    const results = [
+      calculateScenario(transition),
+      calculateScenario(incoming),
+      calculateScenario({ ...incoming, optIntent: "yes", optStage: "none" }),
+      calculateScenario({ ...transition, optIntent: "yes", optStage: "post_completion_approved" }),
+      calculateScenario({ ...incoming, i94AdmitUntilDate: "2029-12-31" }),
+      calculateScenario({
+        ...incoming,
+        reentryDate: "2026-08-20",
+        departBeforeEffectiveDate: "unknown"
+      })
+    ];
+    const metaLanguage = /\b(?:(?:the|this) (?:app|calculator)|based on (?:your )?(?:answers|inputs)|your (?:answers|inputs)|you (?:said|entered)|questions? (?:asked|skipped)|do not need to answer|facts already provided|timeline shown|result (?:below|will|shows))\b/i;
+
+    for (const result of results) {
+      expect(studentFacingCopy(result)).not.toMatch(metaLanguage);
+    }
   });
 });
