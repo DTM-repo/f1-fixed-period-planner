@@ -48,11 +48,8 @@ export type IntakeTopic =
 export interface IntakeCandidateFact {
   field: IntakeFactField;
   value: string;
-  label: string;
   confidence: IntakeConfidence;
-  evidence: string;
   needsConfirmation: boolean;
-  note: string;
 }
 
 export interface IntakeExtractionRequest {
@@ -61,11 +58,8 @@ export interface IntakeExtractionRequest {
 }
 
 export interface IntakeExtractionResponse {
-  summary: string;
   highlights: string[];
   topics: IntakeTopic[];
   facts: IntakeCandidateFact[];
-  followUpQuestions: string[];
-  cautions: string[];
   model?: string;
 }

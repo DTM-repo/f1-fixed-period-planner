@@ -564,6 +564,7 @@ Each entry should capture:
 **Codex Assistance**
 
 - Added deterministic topic preservation for travel, OPT/STEM OPT, CPT, extensions, transfers, program changes, and change of status, so a model omission cannot erase a concern explicitly stated in the narrative.
+- Removed unused AI-written summaries, follow-up prose, evidence text, and caution text from each live intake call. The model now returns only highlights, topics, and calculator facts, reducing response size and repeated narration.
 - Added guarded current-student assumptions with explicit counterexample handling and an immediate correction path in answer history.
 - Replaced the voice fact-card transcript with a short bullet list such as “Current F-1 student,” “Graduating December 2026,” and “Has a travel question.”
 - Added the persistent “Your questions are saved” tracker, adaptive travel-first questioning, student-specific question explanations, and an emphasized travel difference-maker in the result column.

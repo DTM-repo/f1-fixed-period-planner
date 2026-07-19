@@ -83,15 +83,12 @@ function studyClearlyContinuesPastEffectiveDate(narrative: string): boolean {
   return year > 2026 || (year === 2026 && month >= 10);
 }
 
-function assumption(field: IntakeCandidateFact["field"], value: string, label: string, note: string): IntakeCandidateFact {
+function assumption(field: IntakeCandidateFact["field"], value: string): IntakeCandidateFact {
   return {
     field,
     value,
-    label,
     confidence: "medium",
-    evidence: "Your story describes current F-1 study that continues beyond September 15, 2026.",
-    needsConfirmation: true,
-    note
+    needsConfirmation: true
   };
 }
 
@@ -100,18 +97,18 @@ export function addCurrentStudentAssumptions(narrative: string, facts: IntakeCan
   const next = [...facts];
 
   if (!hasField(next, "startingPosition")) {
-    next.push(assumption("startingPosition", "current_ds_inside_us", "You are a current F-1 student", "Change this if you are not currently studying in the United States in F-1 status."));
+    next.push(assumption("startingPosition", "current_ds_inside_us"));
   }
   if (!hasField(next, "admissionBasis") && !hasField(next, "i94AdmitUntilDate")) {
-    next.push(assumption("admissionBasis", "duration_of_status", "Your I-94 says D/S", "This is the usual I-94 answer for current F-1 students. You can correct it if your I-94 shows a date."));
+    next.push(assumption("admissionBasis", "duration_of_status"));
   }
 
   const presenceAlreadyKnown = hasField(next, "inUsOnEffectiveDate");
   if (!presenceAlreadyKnown && studyClearlyContinuesPastEffectiveDate(narrative) && !explicitlyAwayOnEffectiveDate(narrative)) {
-    next.push(assumption("inUsOnEffectiveDate", "yes", "You expect to be in the United States on September 15, 2026", "I am using this as a working assumption because your studies continue past that date. Change it if you expect to be outside the United States that day."));
+    next.push(assumption("inUsOnEffectiveDate", "yes"));
   }
   if (!hasField(next, "maintainingStatusOnEffectiveDate") && next.some((fact) => fact.field === "inUsOnEffectiveDate" && fact.value === "yes")) {
-    next.push(assumption("maintainingStatusOnEffectiveDate", "yes", "You expect your F-1 status to remain valid", "Change this if you expect a status problem before September 15, 2026."));
+    next.push(assumption("maintainingStatusOnEffectiveDate", "yes"));
   }
 
   return next;
