@@ -668,6 +668,7 @@ export default function App() {
   const [intakeNotice, setIntakeNotice] = useState("");
   const [understoodNarrative, setUnderstoodNarrative] = useState("");
   const [recording, setRecording] = useState(false);
+  const [storyFinished, setStoryFinished] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState("");
   const [report, setReport] = useState<ExplanationResponse | null>(null);
   const [reportState, setReportState] = useState<ReportState>("idle");
@@ -675,11 +676,13 @@ export default function App() {
   const reportAbortRef = useRef<AbortController | null>(null);
   const latestScenarioRef = useRef(scenario);
   const recordingRef = useRef(recording);
+  const interimTranscriptRef = useRef("");
   const intakeControllerRef = useRef<AbortController | null>(null);
   const intakeInFlightRef = useRef(false);
   const activeIntakeNarrativeRef = useRef("");
   const queuedIntakeNarrativeRef = useRef<string | null>(null);
   const lastUnderstoodNarrativeRef = useRef("");
+  const storyResultsRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     const onHash = () => setPage(window.location.hash === "#what-happened" ? "overview" : "planner");
@@ -732,6 +735,7 @@ export default function App() {
     setIntakeState("loading");
     setIntakeNotice(recordingRef.current ? "I am building your first results while you speak." : "I am reading your story now.");
     let succeeded = false;
+    let receivedFactCount = 0;
 
     try {
       const response = await fetch("/api/intake", {
@@ -746,6 +750,7 @@ export default function App() {
       setIntake(body);
       setUnderstoodNarrative(narrative);
       lastUnderstoodNarrativeRef.current = narrative;
+      receivedFactCount = usableFacts(body.facts).length;
       succeeded = true;
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
@@ -768,7 +773,9 @@ export default function App() {
       }
       if (succeeded) {
         setIntakeState("ready");
-        setIntakeNotice(recordingRef.current ? "Your results are updating below. Keep speaking, or tell me when you are done." : "I found the details below. Review them when you are ready.");
+        setIntakeNotice(recordingRef.current
+          ? `I found ${receivedFactCount} detail${receivedFactCount === 1 ? "" : "s"}. Your results are changing beside your story.`
+          : `I found ${receivedFactCount} detail${receivedFactCount === 1 ? "" : "s"}. They are already reflected in your results.`);
       }
     }
   }
@@ -797,6 +804,12 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [experience, recording, scenario.narrative]);
 
+  useEffect(() => {
+    if (experience !== "story" || !storyFinished || !currentNarrative) return;
+    const timer = window.setTimeout(() => storyResultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+    return () => window.clearTimeout(timer);
+  }, [experience, storyFinished, intakeState, scenario.narrative]);
+
   const draftScenario = useMemo(() => intake ? mergeFacts(scenario, intake.facts) : scenario, [intake, scenario]);
   const activeScenario = experience === "story" ? draftScenario : scenario;
   const result = useMemo(() => calculateScenario(activeScenario), [activeScenario]);
@@ -816,12 +829,13 @@ export default function App() {
   const contradiction = result.findings.some((item) => item.id === "future-entry-before-effective-date-contradiction");
   const currentNarrative = scenario.narrative?.trim() ?? "";
   const storyReady = Boolean(intake && intakeState === "ready" && understoodNarrative === currentNarrative);
+  const understoodFactCount = intake ? usableFacts(intake.facts).length : 0;
   const storyActionLabel = recording
     ? "I am done talking"
     : intakeState === "loading"
-      ? "Finishing what I understood"
+      ? "Finishing your results"
       : storyReady
-        ? "Review what I understood"
+        ? "Make changes or add details"
         : intakeState === "failed"
           ? "Try understanding again"
           : "Understand my story";
@@ -974,6 +988,7 @@ export default function App() {
     recognitionRef.current?.stop();
     recordingRef.current = false;
     setRecording(false);
+    setStoryFinished(true);
     setIntakeState("loading");
     setIntakeNotice("Got it. I am finishing what I heard.");
     const narrative = latestScenarioRef.current.narrative?.trim() ?? "";
@@ -989,6 +1004,7 @@ export default function App() {
       finishStory();
       return;
     }
+    setStoryFinished(true);
     void understandNarrative(currentNarrative);
   }
 
@@ -1014,6 +1030,7 @@ export default function App() {
         if (event.results[index].isFinal) finalText += `${text} `;
         else interim += text;
       }
+      interimTranscriptRef.current = interim;
       setInterimTranscript(interim);
       if (finalText.trim()) {
         setScenario((current) => {
@@ -1031,6 +1048,14 @@ export default function App() {
     recognition.onend = () => {
       recordingRef.current = false;
       setRecording(false);
+      const unfinishedPhrase = interimTranscriptRef.current.trim();
+      if (unfinishedPhrase) {
+        const current = latestScenarioRef.current;
+        const next = { ...current, narrative: `${current.narrative ?? ""} ${unfinishedPhrase}`.trim() };
+        latestScenarioRef.current = next;
+        setScenario(next);
+      }
+      interimTranscriptRef.current = "";
       setInterimTranscript("");
       const narrative = latestScenarioRef.current.narrative?.trim() ?? "";
       if (narrative.length >= 12) void understandNarrative(narrative);
@@ -1039,6 +1064,7 @@ export default function App() {
     recognition.start();
     recordingRef.current = true;
     setRecording(true);
+    setStoryFinished(false);
     setIntakeNotice("I am listening. Speak naturally; pauses are fine.");
   }
 
@@ -1071,6 +1097,7 @@ export default function App() {
     activeIntakeNarrativeRef.current = "";
     queuedIntakeNarrativeRef.current = null;
     lastUnderstoodNarrativeRef.current = "";
+    interimTranscriptRef.current = "";
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     recordingRef.current = false;
@@ -1081,6 +1108,7 @@ export default function App() {
     setIntakeState("idle");
     setIntakeNotice("");
     setRecording(false);
+    setStoryFinished(false);
     setReport(null);
     setExperience("welcome");
   }
@@ -1108,7 +1136,7 @@ export default function App() {
 
   if (experience === "story") {
     return (
-      <main className="story-screen">
+      <main className={`story-screen ${currentNarrative ? "has-live-results" : ""} ${storyFinished ? "is-finished" : ""}`}>
         <header className="app-header"><button type="button" className="brand" onClick={restart}>F-1 Stay Map</button><button type="button" className="header-link" onClick={() => navigateOverview(true)}>What happened?</button></header>
         <section className={`story-listening ${recording ? "is-recording" : ""}`}>
           <div className="waveform" aria-hidden="true">{Array.from({ length: 22 }, (_, index) => <span key={index} style={{ animationDelay: `${index * 55}ms` }} />)}</div>
@@ -1131,22 +1159,34 @@ export default function App() {
             </button>
           </div>
         </section>
-        {(intake || scenario.narrative) && (
-          <section className="story-understanding">
-            <div className="understood-facts">
-              <p className="section-eyebrow">What I understand</p>
-              {intake?.summary && <h2>{intake.summary}</h2>}
-              <div className="fact-stream">
-                {intake?.facts.map((fact, index) => (
-                  <article key={`${fact.field}-${index}`} className={fact.needsConfirmation || fact.confidence === "low" ? "needs-check" : ""}>
-                    {fact.needsConfirmation || fact.confidence === "low" ? <CircleHelp aria-hidden="true" /> : <Check aria-hidden="true" />}
-                    <div><strong>{factLabels[fact.field]}</strong><span>{displayFactValue(fact)}</span>{fact.note && <small>{fact.note}</small>}</div>
-                  </article>
-                ))}
+        {scenario.narrative && (
+          <section className="story-understanding" ref={storyResultsRef}>
+            {intake ? (
+              <>
+                <div className="understood-facts">
+                  <p className="section-eyebrow">What I understand</p>
+                  <p className="understanding-count"><CheckCircle2 aria-hidden="true" /> {understoodFactCount} detail{understoodFactCount === 1 ? "" : "s"} are shaping these results</p>
+                  {intake.summary && <h2>{intake.summary}</h2>}
+                  <div className="fact-stream">
+                    {intake.facts.map((fact, index) => (
+                      <article key={`${fact.field}-${index}`} className={fact.needsConfirmation || fact.confidence === "low" ? "needs-check" : ""}>
+                        {fact.needsConfirmation || fact.confidence === "low" ? <CircleHelp aria-hidden="true" /> : <Check aria-hidden="true" />}
+                        <div><strong>{factLabels[fact.field]}</strong><span>{displayFactValue(fact)}</span>{fact.note && <small>{fact.note}</small>}</div>
+                      </article>
+                    ))}
+                  </div>
+                  {intake.followUpQuestions.slice(0, 2).map((question) => <p className="story-followup" key={question}>{question}</p>)}
+                </div>
+                <ImpactList result={result} provisional />
+              </>
+            ) : (
+              <div className="understanding-waiting">
+                <RefreshCw className={intakeState === "loading" ? "spin" : ""} aria-hidden="true" />
+                <p className="section-eyebrow">Your results will appear here</p>
+                <h2>I am listening for dates, plans, travel, work, and study details.</h2>
+                <p>The first facts will appear while you are still speaking.</p>
               </div>
-              {intake?.followUpQuestions.slice(0, 2).map((question) => <p className="story-followup" key={question}>{question}</p>)}
-            </div>
-            <ImpactList result={result} provisional />
+            )}
           </section>
         )}
       </main>

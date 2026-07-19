@@ -522,6 +522,8 @@ Each entry should capture:
 - David's live voice test showed that speech recognition and transcription worked, but the interface stayed in its understanding state and never displayed extracted facts.
 - Netlify Dev logs showed many `/api/intake` requests completing successfully with HTTP 200 in roughly 5 to 10 seconds. The failure was therefore in client coordination, not speech capture, the OpenAI key, or the intake model.
 - Each finalized speech chunk changed the narrative and triggered React effect cleanup, which aborted the browser request already in progress. OpenAI still completed server-side, but the browser discarded the response. Continuous natural speech could starve the UI indefinitely.
+- David's immediate retest after request serialization still felt like no transfer. The calls again returned HTTP 200; code review showed that the live understanding and impact cards were rendered below a speaking panel that occupied the entire viewport. The data could exist without being visible.
+- The browser can also hold the last spoken phrase as an interim result until recording stops. Clearing that interim display on `onend` could discard visible words before the final intake pass.
 
 **Decisions**
 
@@ -529,10 +531,14 @@ Each entry should capture:
 - Allow an initial understanding to appear while the student continues speaking, then run one follow-up pass for words added during that request.
 - Replace the misleading loading-state button label "Keep talking" with an explicit "I am done talking" action while recording. After the student stops, show "Finishing what I understood" until the current transcript is ready.
 - Do not let a loading-state button move the student into the interview with an empty or stale extraction.
+- Keep the understood facts and changed impacts in the same viewport as the voice experience. Show an explicit count of details currently shaping the result.
+- Preserve any final interim phrase when recording ends and include it in the final queued extraction.
 
 **Codex Assistance**
 
 - Diagnosed the mismatch between successful server responses and the permanently loading browser state from live function logs and React lifecycle code.
 - Replaced abort-on-every-chunk behavior with a serialized active-plus-latest queue.
 - Added explicit stop-and-finish behavior, current-transcript checks before review, stale-request cleanup on restart, and clearer live status copy.
+- Rebuilt the story screen into a side-by-side live workspace on desktop, with a compact stacked result flow and automatic result focus after stopping on smaller screens.
+- Added a visible "details are shaping these results" acknowledgment and preserved the last interim speech phrase through the stop event.
 - Re-ran TypeScript, all 39 deterministic tests, and the production build successfully.
