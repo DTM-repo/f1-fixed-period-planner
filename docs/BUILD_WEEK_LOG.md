@@ -321,3 +321,24 @@ Each entry should capture:
 - Added a deterministic guard for I-20/EAD dates ending before September 15, 2026, so the engine asks what F-1 basis exists on the rule date instead of showing a misleading old-rule result.
 - Rebuilt progressive reveal logic so travel, OPT/STEM, and school/CPT questions appear only after earlier answers make them relevant.
 - Replaced the branch-bar timeline with labeled event timelines showing dates and meanings directly.
+
+### Current-Student Impact Language
+
+**Research**
+
+- Rechecked the Federal Register transition section against David's question about whether old-rule protection turns on F-1 status generally or physical presence in the United States on September 15, 2026.
+- Confirmed the text says the F/J transition treatment generally applies to people present in the United States on the final rule's effective date, validly maintaining status, and admitted for D/S; it separately excludes people outside the United States when the rule takes effect.
+
+**Decisions**
+
+- Show a meaningful provisional result as soon as the student says they are a current F-1 student: they may be partly exempt from the fixed-date system if the September 15/D/S conditions are met.
+- Treat D/S as the default current-student I-94 posture and move unusual fixed-date I-94 cases into a small correction path, not a main funnel gate.
+- When the I-20/program/training date runs past September 15, 2030, say plainly that old-rule protection stops there and staying later likely needs an extension of stay.
+- Highlight travel as a possible strategic branch when a later fixed-period return produces a longer timeline than staying in the United States, while warning that travel also creates visa/admission risk.
+- Make source IDs clickable in the calculation drawer so legal support is accessible without forcing citations into the main student flow.
+
+**Codex Assistance**
+
+- Rewrote the deterministic engine's result copy from third-person expert language into second-person student language.
+- Added linked citation chips for finding-level source IDs.
+- Adjusted the OpenAI intake function so summaries, follow-ups, cautions, and fact notes address the student as "you" and do not strand broad follow-up questions with no way to answer them.

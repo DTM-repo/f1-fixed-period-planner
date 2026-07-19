@@ -487,6 +487,15 @@ function programEndBeforeRuleStarts(scenario: StudentScenario): boolean {
   return Boolean(scenario.programEndOnEffectiveDate && compareDates(scenario.programEndOnEffectiveDate, DEFAULT_EFFECTIVE_DATE) < 0);
 }
 
+function programRunsPastCoverage(scenario: StudentScenario, result: PlannerView): boolean {
+  const testedEnd = scenario.currentProgramEndDate ?? scenario.programEndOnEffectiveDate;
+  return Boolean(result.coverageEnd && testedEnd && compareDates(testedEnd, result.coverageEnd) > 0);
+}
+
+function travelCanExtendTimeline(result: PlannerView, travelResult: PlannerView | null): boolean {
+  return Boolean(result.coverageEnd && travelResult?.coverageEnd && compareDates(travelResult.coverageEnd, result.coverageEnd) > 0);
+}
+
 function optKindFromStage(stage: OptStage): OptKind {
   return stage.startsWith("stem") ? "stem" : "regular";
 }
@@ -534,6 +543,23 @@ function sortEvents(events: StudentTimelineEvent[]): StudentTimelineEvent[] {
   });
 }
 
+function SourceChips({ result, sourceIds }: { result: PlannerView; sourceIds: string[] }) {
+  return (
+    <span className="source-chips" aria-label="Sources">
+      {sourceIds.map((sourceId) => {
+        const citation = result.citations.find((item) => item.id === sourceId);
+        return citation ? (
+          <a key={sourceId} href={citation.url} target="_blank" rel="noreferrer" title={citation.locator}>
+            {sourceId}
+          </a>
+        ) : (
+          <span key={sourceId}>{sourceId}</span>
+        );
+      })}
+    </span>
+  );
+}
+
 function buildStudentOutcome(scenario: StudentScenario, result: PlannerView, travelResult: PlannerView | null): StudentOutcome {
   if (scenario.startingPosition === "unknown") {
     return {
@@ -545,12 +571,25 @@ function buildStudentOutcome(scenario: StudentScenario, result: PlannerView, tra
   }
 
   if (isCurrentTrack(scenario)) {
+    const beyondProtectedPeriod = programRunsPastCoverage(scenario, result);
+
     if (!scenario.programEndOnEffectiveDate) {
       return {
         eyebrow: "Current F-1 student",
-        title: "Enter the end date on your current I-20.",
-        detail: "That date is the first date we need before showing a reliable timeline.",
-        tone: "manual"
+        title: "You may be partly exempt from the new fixed-date rule.",
+        detail:
+          "If you are inside the U.S. on September 15, 2026 and your I-94 says D/S, the old D/S rules may keep covering your current stay. Your I-20 date, travel, OPT/STEM, and school changes tell us how far that protection goes.",
+        tone: "good"
+      };
+    }
+
+    if (scenario.inUsOnEffectiveDate === "no" || scenario.maintainingStatusOnEffectiveDate === "no") {
+      return {
+        eyebrow: "Current F-1 student",
+        title: "Being outside the U.S. on September 15 changes the path.",
+        detail:
+          "The old-rule protection is for students who are physically in the U.S. when the rule starts. If you return after that date, your return may be treated as a new fixed-date F-1 admission.",
+        tone: "warning"
       };
     }
 
@@ -567,11 +606,17 @@ function buildStudentOutcome(scenario: StudentScenario, result: PlannerView, tra
     if (result.coverageEnd && result.latestDepartureDate) {
       return {
         eyebrow: "If you do not travel",
-        title: `Old D/S rules may last until ${formatDate(result.coverageEnd)}.`,
-        detail: `After that date, the F-1 period to leave the U.S. or take another immigration step runs through ${formatDate(
-          result.latestDepartureDate
-        )}.`,
-        tone: result.status === "ok" ? "good" : result.status === "manual" ? "manual" : "warning"
+        title: beyondProtectedPeriod
+          ? "You are partly exempt, but not through the whole program."
+          : `You may stay under the old D/S rules until ${formatDate(result.coverageEnd)}.`,
+        detail: beyondProtectedPeriod
+          ? `The old-rule protection stops on ${formatDate(
+              result.coverageEnd
+            )}. To stay after that date for study or training, you likely need to file an extension of stay before the protected period ends.`
+          : `After that date, the F-1 period to leave the U.S. or take another immigration step runs through ${formatDate(
+              result.latestDepartureDate
+            )}.`,
+        tone: beyondProtectedPeriod ? "warning" : result.status === "ok" ? "good" : result.status === "manual" ? "manual" : "warning"
       };
     }
 
@@ -625,17 +670,26 @@ function buildImpactCards(scenario: StudentScenario, result: PlannerView, travel
   if (isCurrentTrack(scenario)) {
     const cards: ImpactCard[] = [
       {
-        title: "Check your I-94",
+        title: "You may be partly exempt from the new fixed-date rule",
         detail:
-          "Most F-1 I-94 records before this change say “D/S,” which means there is no printed end date. If yours has an end date, change it in the I-94 question.",
-        tone: "info"
+          "Current F-1 students are not automatically switched to a fixed I-94 on September 15. If you are in the U.S. that day and your I-94 says D/S, the old D/S rules may keep covering this stay.",
+        tone: "good"
       }
     ];
+
+    if (scenario.inUsOnEffectiveDate === "no" || scenario.maintainingStatusOnEffectiveDate === "no") {
+      cards.push({
+        title: "The September 15 location answer changes this",
+        detail:
+          "The old-rule protection is for students physically in the U.S. when the rule starts. If you are outside the U.S. then, a later return may start a fixed-date admission instead.",
+        tone: "warning"
+      });
+    }
 
     if (!scenario.programEndOnEffectiveDate) {
       cards.push({
         title: "I-20 end date comes first",
-        detail: "The date on your current I-20 tells us whether the new rule reaches your current study plan.",
+        detail: "The date on your current I-20 tells us how long the old-rule protection may last before travel, OPT/STEM, or a school change changes the answer.",
         tone: "question"
       });
     } else if (programEndBeforeRuleStarts(scenario) && scenario.optStage === "none" && !scenario.eadEndOnEffectiveDate) {
@@ -648,22 +702,31 @@ function buildImpactCards(scenario: StudentScenario, result: PlannerView, travel
     } else if (result.coverageEnd && result.latestDepartureDate) {
       cards.push({
         title: "If you do not travel",
-        detail: `The old D/S rules may cover this path until ${formatDate(
-          result.coverageEnd
-        )}. The period after that date ends ${formatDate(result.latestDepartureDate)}.`,
-        tone: result.status === "ok" ? "good" : result.status === "manual" ? "question" : "warning"
+        detail: programRunsPastCoverage(scenario, result)
+          ? `The old-rule protection stops on ${formatDate(result.coverageEnd)}. Your program or training runs later than that, so staying after that date likely needs an extension of stay.`
+          : `The old D/S rules may cover this path until ${formatDate(
+              result.coverageEnd
+            )}. The period to leave the U.S. or take another immigration step ends ${formatDate(result.latestDepartureDate)}.`,
+        tone: programRunsPastCoverage(scenario, result) ? "warning" : result.status === "ok" ? "good" : result.status === "manual" ? "question" : "warning"
       });
     }
 
     if (hasTravelPlan(scenario)) {
+      const travelExtends = travelCanExtendTimeline(result, travelResult);
       cards.push({
-        title: travelResult?.coverageEnd ? "Travel creates a second timeline" : "Travel needs a return date",
+        title: travelExtends ? "Travel may extend your F-1 timeline" : travelResult?.coverageEnd ? "Travel creates a second timeline" : "Travel needs a return date",
         detail: travelResult?.coverageEnd
-          ? `If you return on ${formatDate(scenario.reentryDate)}, the new fixed-date system may run through ${formatDate(
-              travelResult.coverageEnd
-            )}, with 30 days after that.`
+          ? travelExtends
+            ? `If you stay in the U.S., this path reaches ${formatDate(result.coverageEnd)}. If you return on ${formatDate(
+                scenario.reentryDate
+              )}, the new fixed-date period may run through ${formatDate(
+                travelResult.coverageEnd
+              )}. That can be useful, but travel also creates visa and admission risk.`
+            : `If you return on ${formatDate(scenario.reentryDate)}, the new fixed-date system may run through ${formatDate(
+                travelResult.coverageEnd
+              )}, with 30 days after that.`
           : "The return date matters because coming back after September 15 can start a new fixed-date I-94 period.",
-        tone: travelResult?.coverageEnd ? "info" : "question"
+        tone: travelExtends ? "good" : travelResult?.coverageEnd ? "info" : "question"
       });
     } else {
       cards.push({
@@ -684,8 +747,8 @@ function buildImpactCards(scenario: StudentScenario, result: PlannerView, travel
 
     if (scenario.transferOrProgramChange === "yes") {
       cards.push({
-        title: "A transfer or new program can change the timeline",
-        detail: "We need the I-20 end date for the new school or new program before saying whether an extension may be needed.",
+        title: "A school transfer or program change needs its own check",
+        detail: "A later I-20 end date can run past the protected period. Add the new I-20 date before relying on the stay-in-the-U.S. timeline.",
         tone: "warning"
       });
     }
@@ -1240,7 +1303,7 @@ export default function App() {
             </div>
 
             <div className="flow-step active">
-              <span className="step-kicker">First split</span>
+              <span className="step-kicker">Start</span>
               <Segmented
                 label="Are you already an F-1 student, or will you be one before September 15, 2026?"
                 value={scenario.startingPosition}
@@ -1253,18 +1316,19 @@ export default function App() {
             {pathChosen && currentTrack && (
               <>
                 <div className="flow-step active">
-                  <span className="step-kicker">I-94 check</span>
-                  <p className="microcopy">Most F-1 I-94 records before this change say “D/S.” That means there is no printed end date.</p>
-                  <Segmented label="Does your I-94 say D/S?" value={scenario.admissionBasis} options={i94Options} onChange={updateI94Basis} />
-                  {scenario.admissionBasis === "fixed_period" && (
-                    <DateField label="What end date is printed on your I-94?" value={scenario.i94AdmitUntilDate} onChange={(value) => update("i94AdmitUntilDate", value)} />
-                  )}
-                </div>
-
-                <div className="flow-step active">
                   <span className="step-kicker">Current I-20</span>
                   <DateField label="What is the program end date on your current I-20?" value={scenario.programEndOnEffectiveDate} onChange={updateCurrentI20End} />
                   <p className="microcopy">Use the end date printed on the I-20 you have now.</p>
+                  <details className="inline-correction">
+                    <summary>My I-94 has an end date instead of D/S</summary>
+                    <p className="microcopy">
+                      Most current F-1 students have D/S on the I-94. Only change this if your CBP I-94 shows an actual end date.
+                    </p>
+                    <Segmented label="What does your I-94 show?" value={scenario.admissionBasis} options={i94Options} onChange={updateI94Basis} />
+                    {scenario.admissionBasis === "fixed_period" && (
+                      <DateField label="What end date is printed on your I-94?" value={scenario.i94AdmitUntilDate} onChange={(value) => update("i94AdmitUntilDate", value)} />
+                    )}
+                  </details>
                 </div>
 
                 {scenario.programEndOnEffectiveDate && (
@@ -1281,7 +1345,7 @@ export default function App() {
                         })
                       }
                     />
-                    <p className="microcopy">This matters because the old rules only help students who are in the U.S. when the new rule starts.</p>
+                    <p className="microcopy">This matters because the old-rule protection is only for students who are physically in the U.S. when the new rule starts.</p>
                   </div>
                 )}
 
@@ -1484,12 +1548,15 @@ export default function App() {
 
                 {(intakeExtraction.followUpQuestions.length > 0 || intakeExtraction.cautions.length > 0) && (
                   <div className="understood-followups">
+                    {intakeExtraction.followUpQuestions.length > 0 && <strong>Next details to add</strong>}
                     {intakeExtraction.followUpQuestions.map((question) => (
                       <p key={question}>{question}</p>
                     ))}
+                    {intakeExtraction.cautions.length > 0 && <strong>Things to double-check</strong>}
                     {intakeExtraction.cautions.map((caution) => (
                       <p key={caution}>{caution}</p>
                     ))}
+                    <small>Answer these in the questions above, or edit your story and draft facts again.</small>
                   </div>
                 )}
 
@@ -1524,7 +1591,7 @@ export default function App() {
           </section>
 
           <details className="band technical-details">
-            <summary>Calculation details and sources</summary>
+            <summary>Calculate results</summary>
             <div className="technical-grid">
               <section>
                 <h2>Findings</h2>
@@ -1535,7 +1602,7 @@ export default function App() {
                       <div>
                         <h3>{item.title}</h3>
                         <p>{item.detail}</p>
-                        <small>{item.sourceIds.join(" · ")}</small>
+                        <SourceChips result={result} sourceIds={item.sourceIds} />
                       </div>
                     </article>
                   ))}
@@ -1545,7 +1612,7 @@ export default function App() {
               {(result.followUpQuestions.length > 0 || result.nextActions.length > 0) && (
                 <section className="split">
                   <div>
-                    <h2>Follow-ups</h2>
+                    <h2>Questions to answer</h2>
                     {result.followUpQuestions.length ? (
                       <ul>
                         {result.followUpQuestions.map((question) => (
@@ -1557,7 +1624,7 @@ export default function App() {
                     )}
                   </div>
                   <div>
-                    <h2>Next actions</h2>
+                    <h2>Suggested next steps</h2>
                     {result.nextActions.length ? (
                       <ul>
                         {result.nextActions.map((action) => (

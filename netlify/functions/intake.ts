@@ -39,6 +39,8 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
       },
       hardRules: [
         "Return only facts that are directly supported by the student's words.",
+        "Write summary, follow-up questions, cautions, labels, and notes directly to the student using 'you' and 'your'. Do not write 'the student'.",
+        "Follow-up questions must be answerable by editing the story or by answering one visible app field. Do not dump broad legal research questions.",
         "Use low confidence and needsConfirmation=true when the student's meaning is plausible but not explicit.",
         "Dates must be YYYY-MM-DD only when the student gives a full unambiguous date, such as May 15, 2031 or 2031-05-15.",
         "Do not convert numeric slash dates like 6/2/2029 because date order differs by country.",
@@ -94,7 +96,7 @@ const intakeSchema = {
   properties: {
     summary: {
       type: "string",
-      description: "A short plain-English summary of what the student appears to be saying."
+      description: "A short plain-English summary addressed directly to the student with 'you' and 'your'."
     },
     facts: {
       type: "array",
@@ -148,13 +150,37 @@ const intakeSchema = {
   }
 };
 
+function speakToStudent(text: string): string {
+  return text
+    .replace(/\bthe student's\b/gi, "your")
+    .replace(/\bThe student appears to be\b/g, "It sounds like you are")
+    .replace(/\bthe student appears to be\b/g, "you appear to be")
+    .replace(/\bThe student is\b/g, "You are")
+    .replace(/\bthe student is\b/g, "you are")
+    .replace(/\bThe student has\b/g, "You have")
+    .replace(/\bthe student has\b/g, "you have")
+    .replace(/\bThe student plans\b/g, "You plan")
+    .replace(/\bthe student plans\b/g, "you plan")
+    .replace(/\bThe student\b/g, "You")
+    .replace(/\bthe student\b/g, "you");
+}
+
 function normalizeExtraction(value: unknown, model: string): IntakeExtractionResponse {
   const parsed = value as IntakeExtractionResponse;
   return {
-    summary: typeof parsed.summary === "string" ? parsed.summary : "I found possible facts to review.",
-    facts: Array.isArray(parsed.facts) ? parsed.facts : [],
-    followUpQuestions: Array.isArray(parsed.followUpQuestions) ? parsed.followUpQuestions.filter((item) => typeof item === "string") : [],
-    cautions: Array.isArray(parsed.cautions) ? parsed.cautions.filter((item) => typeof item === "string") : [],
+    summary: typeof parsed.summary === "string" ? speakToStudent(parsed.summary) : "I found possible facts to review.",
+    facts: Array.isArray(parsed.facts)
+      ? parsed.facts.map((fact) => ({
+          ...fact,
+          label: typeof fact.label === "string" ? speakToStudent(fact.label) : fact.label,
+          evidence: typeof fact.evidence === "string" ? speakToStudent(fact.evidence) : fact.evidence,
+          note: typeof fact.note === "string" ? speakToStudent(fact.note) : fact.note
+        }))
+      : [],
+    followUpQuestions: Array.isArray(parsed.followUpQuestions)
+      ? parsed.followUpQuestions.filter((item) => typeof item === "string").map(speakToStudent)
+      : [],
+    cautions: Array.isArray(parsed.cautions) ? parsed.cautions.filter((item) => typeof item === "string").map(speakToStudent) : [],
     model
   };
 }
@@ -194,7 +220,7 @@ export default async (request: Request): Promise<Response> => {
     body: JSON.stringify({
       model,
       instructions:
-        "You extract structured facts for a student-facing F-1 planner. You do not calculate legal results. You are careful, conservative, and explicit about ambiguity.",
+        "You extract structured facts for a student-facing F-1 planner. You do not calculate legal results. You are careful, conservative, and explicit about ambiguity. Any visible text you write must address the student directly as 'you', never as 'the student'.",
       input: buildPrompt(payload),
       text: {
         format: {

@@ -272,11 +272,25 @@ a:focus-visible {
   padding-top: 12px;
 }
 
+.inline-correction {
+  background: #f8fafb;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
 .edge-cases summary,
-.example-loader summary {
+.example-loader summary,
+.inline-correction summary {
   cursor: pointer;
   font-size: 13px;
   font-weight: 760;
+}
+
+.inline-correction[open] summary {
+  margin-bottom: 8px;
 }
 
 .edge-grid {
@@ -397,6 +411,17 @@ a:focus-visible {
   display: grid;
   gap: 6px;
   padding-top: 10px;
+}
+
+.understood-followups strong,
+.understood-followups small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.understood-followups strong {
+  color: var(--ink);
+  margin-top: 2px;
 }
 
 .results {
@@ -722,11 +747,32 @@ a:focus-visible {
   margin: 0;
 }
 
-.finding small {
+.finding small,
+.source-chips {
   color: var(--muted);
   display: block;
   font-size: 11px;
   margin-top: 8px;
+}
+
+.source-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.source-chips a,
+.source-chips span {
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--blue-dark);
+  padding: 3px 7px;
+  text-decoration: none;
+}
+
+.source-chips a:hover {
+  border-color: var(--blue);
 }
 
 .timeline {
