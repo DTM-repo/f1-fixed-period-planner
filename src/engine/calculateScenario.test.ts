@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calculateScenario } from "./calculateScenario";
+import { calculateScenario, scenarioForFixedReentry } from "./calculateScenario";
 import type { StudentScenario } from "./types";
 
 const transition: StudentScenario = {
@@ -47,6 +47,8 @@ describe("D/S transition", () => {
     expect(result.latestDepartureDate).toBe("2030-11-14");
     expect(result.departurePeriodDays).toBe(60);
     expect(result.extensionPlanningDate).toBe("2030-09-15");
+    expect(result.findings.find((item) => item.id === "transition-extension-needed")?.detail).toContain("departure and readmission");
+    expect(result.findings.find((item) => item.id === "transition-extension-needed")?.detail).toContain("does not automatically add four years");
   });
 
   it("uses an earlier active I-20 end date and then adds 60 days", () => {
@@ -54,6 +56,8 @@ describe("D/S transition", () => {
     expect(result.activityEnd).toBe("2028-05-20");
     expect(result.latestDepartureDate).toBe("2028-07-19");
     expect(result.status).toBe("ok");
+    expect(result.headline).toBe("You are under the old rules");
+    expect(result.summary).toContain("60 days after your program ends");
   });
 
   it("immediately tells a qualifying current student that the old rules continue even before a document date is entered", () => {
@@ -115,6 +119,7 @@ describe("fixed-period dates", () => {
     expect(result.extensionPlanningDate).toBe("2030-09-01");
     expect(result.extensionFilingDeadline).toBe("2030-10-01");
     expect(result.findings.find((item) => item.id === "fixed-extension-needed")?.detail).toContain("USCIS must receive");
+    expect(result.findings.find((item) => item.id === "fixed-extension-needed")?.detail).toContain("departure and readmission");
   });
 
   it("asks for the program start date instead of inventing a four-year date", () => {
@@ -185,6 +190,43 @@ describe("contradictions and travel", () => {
     expect(travelFinding?.detail).not.toContain("four years from");
   });
 
+  it("reuses the existing I-20 end date for a same-I-20 return", () => {
+    const reentry = scenarioForFixedReentry({
+      ...transition,
+      programStartDate: "2025-08-25",
+      currentProgramEndDate: "2028-05-20",
+      reentryBasis: "same_i20_balance",
+      reentryDate: "2027-08-20"
+    });
+    expect(reentry.programStartDate).toBe("2025-08-25");
+    expect(reentry.currentProgramEndDate).toBe("2028-05-20");
+  });
+
+  it("uses a new I-20's dates for a different-I-20 return", () => {
+    const reentry = scenarioForFixedReentry({
+      ...transition,
+      programStartDate: "2023-08-25",
+      currentProgramEndDate: "2027-05-20",
+      reentryBasis: "longer_program_i20",
+      returnProgramStartDate: "2027-08-25",
+      returnProgramEndDate: "2032-05-20"
+    });
+    expect(reentry.programStartDate).toBe("2027-08-25");
+    expect(reentry.currentProgramEndDate).toBe("2032-05-20");
+  });
+
+  it("flags a return after the I-20 can support admission", () => {
+    const result = calculateScenario({
+      ...incoming,
+      startingPosition: "readmitted_fixed_period",
+      reentryDate: "2032-01-15",
+      programStartDate: "2025-08-25",
+      currentProgramEndDate: "2032-05-20"
+    });
+    expect(ids(result)).toContain("entry-after-authorized-study-end");
+    expect(result.status).toBe("risk");
+  });
+
   it("flags a pending I-539 return that seeks a longer period", () => {
     const result = calculateScenario({ ...transition, travelPosture: "planned", pendingExtensionOnDeparture: "yes", reentryBasis: "longer_program_i20" });
     expect(result.status).toBe("risk");
@@ -212,6 +254,14 @@ describe("OPT and STEM OPT transition", () => {
     optIntent: "yes",
     dsoRecommendedOpt: "yes"
   };
+
+  it("explains a future OPT plan without pretending STEM OPT is the first choice", () => {
+    const result = calculateScenario({ ...incoming, optIntent: "yes", optStage: "none" });
+    const finding = result.findings.find((item) => item.id === "future-opt-plan");
+    expect(finding?.title).toContain("regular post-completion OPT");
+    expect(finding?.detail).toContain("extension after regular post-completion OPT");
+    expect(ids(result)).not.toContain("opt-dso-recommendation-needed");
+  });
 
   it("accepts a qualifying post-completion OPT filing inside both deadlines", () => {
     const result = calculateScenario({ ...optBase, optStage: "post_completion_not_filed", optFilingDate: "2027-02-10" });
@@ -271,6 +321,11 @@ describe("school, work, and unusual facts", () => {
     const result = calculateScenario({ ...transition, educationLevel: "undergraduate", schoolTransferPlan: "yes", firstAcademicYearCompleted: "no", transferOrProgramChange: "yes" });
     expect(result.status).toBe("risk");
     expect(ids(result)).toContain("undergraduate-first-year-block");
+  });
+
+  it("scopes the general first-year rule to undergraduate students", () => {
+    const result = calculateScenario({ ...incoming, educationLevel: "undergraduate", schoolTransferPlan: "no", academicProgramChangePlan: "no" });
+    expect(result.findings.find((item) => item.id === "undergraduate-first-year-rule")?.detail).toContain("As an undergraduate student");
   });
 
   it("does not apply the first-year block after one academic year", () => {

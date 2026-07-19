@@ -577,3 +577,39 @@ Each entry should capture:
 - Vitest: 43/43 passed.
 - `tsc --noEmit`: passed.
 - Production Vite build: passed.
+
+### Presence Gate, Reentry Logic, and Test-Case Sharing
+
+**Research**
+
+- Rechecked the final rule's transition and readmission language after David asked whether a student could keep D/S for years, travel near the end, and receive four fresh years without Form I-539.
+- Confirmed that transition D/S protection cannot run six years after the effective date: it ends at the I-20 or EAD date in place on September 15, 2026, capped at September 15, 2030, plus the legacy 60-day departure period.
+- Confirmed that the four-year maximum is not an aggregate lifetime cap. A later eligible admission can create another fixed period, but that period is measured from the program start date on the controlling I-20, not from the day of return, and is limited by the I-20 program end date.
+- Confirmed that departure and readmission with an updated I-20 can be an alternative to a Form I-539 for additional time. It is not an automatic extension: CBP decides admission and the issued I-94 controls.
+- Reconfirmed that STEM OPT is a 24-month extension after regular post-completion OPT, not an alternative first OPT choice.
+
+**Decisions**
+
+- Ask every user one mandatory question before voice, typing, or interview intake: whether they will be physically in the United States in valid F-1 status on September 15, 2026.
+- Lock that confirmed answer so narrative extraction cannot overwrite it. The no branch can still distinguish entry from an in-country change of status.
+- Require a narrative topic to be supported by the student's own words. A model-only travel label can no longer create a travel card or travel questions.
+- For travel, first ask whether the return uses the same I-20. Reuse the program end date already supplied for the same I-20; request separate start and end dates only for a new or updated I-20.
+- Preserve still-compatible answers when one earlier response changes. New conditional questions appear when needed, but previously completed answers are not discarded.
+- Treat future OPT interest as planning only. Do not ask incoming or far-from-filing students about a DSO recommendation, Form I-765, or application status.
+- Reduce the current-student result to one direct statement: old-rule protection continues through the displayed date if the student does not travel. Hide the duplicate transition card.
+- Add print/save-PDF, share, and a privacy-conscious "Copy test case" action that excludes the original voice or typed narrative and produces a structured package for review in Codex.
+
+**Codex Assistance**
+
+- Traced the false travel card to two independent code paths: an overly broad render condition and acceptance of an unsupported model topic. Corrected both and added the exact no-travel graduate narrative as a regression case.
+- Added a tested reentry-scenario transformation shared by the browser and server-side advisor report so same-I-20 and updated-I-20 returns cannot silently use different dates.
+- Added guardrails for impossible returns after the supporting I-20 period, explicit extension-versus-readmission guidance, future OPT sequencing, and undergraduate-scoped transfer language.
+- Verified the progressive interview in the browser on current and incoming paths, confirmed internationalized date entry, confirmed later answers survive an earlier date edit, and confirmed the copied test package excludes the narrative.
+- Checked the opening flow at 1280 by 720 and 390 by 844, corrected medium-width hero clipping, and verified no horizontal overflow.
+
+**Verification**
+
+- Vitest: 51/51 passed across the rule engine, intake semantics, and confirmed-presence lock.
+- `tsc --noEmit`: passed.
+- Production Vite build: passed.
+- Browser checks passed for the initial gate, current-student path, incoming undergraduate OPT path, date editing, concise result, source anchors, timelines, and test-case export.

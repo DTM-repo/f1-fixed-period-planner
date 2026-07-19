@@ -59,6 +59,8 @@ const DATE_FIELDS: Array<[keyof StudentScenario, string, boolean?]> = [
   ["currentEadEndDate", "current EAD end date"],
   ["optFilingDate", "I-765 filing date"],
   ["reentryDate", "entry or return date"],
+  ["returnProgramStartDate", "returning I-20 program start date"],
+  ["returnProgramEndDate", "returning I-20 program end date"],
   ["earlyEndDate", "early completion or withdrawal date"],
   ["effectiveDate", "rule effective date", true]
 ];
@@ -176,6 +178,19 @@ function fixedProgramLabel(scenario: StudentScenario): string {
   return "four-year maximum";
 }
 
+export function scenarioForFixedReentry(scenario: StudentScenario): StudentScenario {
+  const hasDifferentI20 = scenario.reentryBasis === "longer_program_i20";
+  return {
+    ...scenario,
+    startingPosition: "readmitted_fixed_period",
+    admissionBasis: "fixed_period",
+    inUsOnEffectiveDate: "no",
+    maintainingStatusOnEffectiveDate: "unknown",
+    programStartDate: hasDifferentI20 ? scenario.returnProgramStartDate : scenario.programStartDate,
+    currentProgramEndDate: hasDifferentI20 ? scenario.returnProgramEndDate : scenario.currentProgramEndDate
+  };
+}
+
 function addAcademicFindings(scenario: StudentScenario, findings: Finding[], nextActions: string[]) {
   const hasLevel = scenario.educationLevel && scenario.educationLevel !== "unknown";
   const hasPlan = scenario.schoolTransferPlan === "yes" || scenario.academicProgramChangePlan === "yes";
@@ -220,7 +235,7 @@ function addAcademicFindings(scenario: StudentScenario, findings: Finding[], nex
           "undergraduate-first-year-rule",
           "info",
           "Your first academic year limits school and program changes",
-          "During your first academic year, you cannot transfer schools or change your major or education level unless SEVP authorizes an exception for extenuating circumstances.",
+          "As an undergraduate student, during your first academic year you cannot transfer schools or change your major or education level unless SEVP authorizes an exception for extenuating circumstances.",
           ["8CFR-214-2-F5II"]
         )
       );
@@ -395,7 +410,21 @@ function addOptFindings(
   findings: Finding[],
   nextActions: string[]
 ) {
-  if (scenario.optStage === "none" || scenario.optStage === "pre_completion") return;
+  if (scenario.optStage === "none") {
+    if (scenario.optIntent === "yes") {
+      findings.push(
+        finding(
+          "future-opt-plan",
+          "info",
+          "OPT begins with regular post-completion OPT",
+          "STEM OPT, if you qualify later, is a 24-month extension after regular post-completion OPT. Because you are not close to filing yet, you do not need to answer DSO recommendation or Form I-765 filing questions now.",
+          ["USCIS-OPT-STEM"]
+        )
+      );
+    }
+    return;
+  }
+  if (scenario.optStage === "pre_completion") return;
   const isStem = scenario.optStage.startsWith("stem");
   const isApproved = scenario.optStage.endsWith("approved");
   const isPending = scenario.optStage.endsWith("pending");
@@ -526,6 +555,18 @@ function buildFixedResult(
     if (lead > 30) findings.push(finding("entry-more-than-thirty-days-early", "danger", "This entry date is more than 30 days before the program starts", `The ordinary F-1 rule permits entry up to 30 days before the I-20 program start date. These dates are ${lead} days apart.`, ["8CFR-214-1-A4"]));
   }
 
+  if (scenario.reentryDate && activityEnd && isAfter(scenario.reentryDate, activityEnd)) {
+    findings.push(
+      finding(
+        "entry-after-authorized-study-end",
+        "danger",
+        "These I-20 dates do not support this entry",
+        `Your entry date is ${formatDate(scenario.reentryDate)}, after the projected study or training period ends on ${formatDate(activityEnd)}. A return does not add four years from the travel date. Before traveling, obtain an I-20 whose program dates support the requested admission and confirm the plan with your DSO. CBP decides the period issued at entry.`,
+        ["8CFR-214-1-A4", "FR-FOUR-YEAR-START"]
+      )
+    );
+  }
+
   if (actualI94) {
     findings.push(
       finding(
@@ -554,11 +595,11 @@ function buildFixedResult(
         "fixed-extension-needed",
         "warning",
         "Your program continues after the first fixed period",
-        `Your I-20 ends ${formatDate(scenario.currentProgramEndDate)}, after the projected study period ends ${formatDate(activityEnd)}. USCIS must receive a complete I-539 by ${formatDate(i94End)}. File before ${formatDate(activityEnd)} if you need already-authorized CPT or other F-1 employment to continue while the request is pending.`,
+        `Your I-20 ends ${formatDate(scenario.currentProgramEndDate)}, after the projected study period ends ${formatDate(activityEnd)}. To continue, work with your DSO on either a timely Form I-539 extension or departure and readmission with an updated I-20. USCIS must receive a complete I-539 by ${formatDate(i94End)}. File before ${formatDate(activityEnd)} if you need already-authorized CPT or other F-1 employment to continue while the request is pending. A return does not automatically add four years from the travel date; the I-20 program dates and the I-94 issued by CBP control.`,
         ["8CFR-214-2-F7", "8CFR-214-2-F7-TIMELY"]
       )
     );
-    actions.push("Work with your DSO well before the study or training period ends to prepare the new I-20 and I-539 evidence.");
+    actions.push("Before the study or training period ends, ask your DSO to compare a Form I-539 extension with departure and readmission on an updated I-20.");
     actions.push("Budget for the current I-539 filing fee and possible biometrics; premium processing is not currently promised for this extension category.");
     findings.push(
       finding(
@@ -783,11 +824,11 @@ export function calculateScenario(input: StudentScenario): PlannerResult {
         "transition-extension-needed",
         "warning",
         "Your program or training continues beyond the old-rule protection",
-        `Your current plan runs through ${formatDate(plannedEnd)}, but the protected study or training period ends ${formatDate(activityEnd)}. Work with your DSO on an extension-of-stay plan before that date.`,
+        `Your current plan runs through ${formatDate(plannedEnd)}, but your old-rule protection ends ${formatDate(activityEnd)}. Before then, work with your DSO on either a timely Form I-539 extension or departure and readmission with an updated I-20. A return does not automatically add four years from the travel date; the new period is based on the I-20 program dates and the I-94 issued by CBP.`,
         ["8CFR-214-1-M1", "8CFR-214-2-F7"]
       )
     );
-    actions.push("Start the I-539 plan with your DSO well before the protected study or training period ends.");
+    actions.push("Before the old-rule protection ends, ask your DSO to compare a Form I-539 extension with departure and readmission on an updated I-20.");
   } else {
     findings.push(
       finding(
@@ -830,8 +871,8 @@ export function calculateScenario(input: StudentScenario): PlannerResult {
   return makeResult(scenario, {
     classification: "transition_ds",
     status,
-    headline: `You remain under the old rules through ${formatDate(activityEnd)}`,
-    summary: `If you stay in the United States and these facts do not change, your 60-day period runs through ${formatDate(latestDepartureDate)}.`,
+    headline: "You are under the old rules",
+    summary: `If you do not travel, that protection continues through ${formatDate(latestDepartureDate)}, 60 days after your ${qualifyingApprovedOpt ? "approved OPT period" : "program"} ends.`,
     activityEnd,
     coverageEnd: activityEnd,
     departurePeriodDays: 60,

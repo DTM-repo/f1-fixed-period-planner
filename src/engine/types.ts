@@ -73,6 +73,8 @@ export interface StudentScenario {
   travelPosture: TravelPosture;
   reentryDate?: DateString;
   reentryBasis: ReentryBasis;
+  returnProgramStartDate?: DateString;
+  returnProgramEndDate?: DateString;
   pendingExtensionOnDeparture: YesNoUnknown;
   transferOrProgramChange: YesNoUnknown;
   schoolTransferPlan?: YesNoUnknown;

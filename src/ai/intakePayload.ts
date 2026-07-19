@@ -18,6 +18,8 @@ export type IntakeFactField =
   | "travelPosture"
   | "reentryDate"
   | "reentryBasis"
+  | "returnProgramStartDate"
+  | "returnProgramEndDate"
   | "pendingExtensionOnDeparture"
   | "transferOrProgramChange"
   | "schoolTransferPlan"

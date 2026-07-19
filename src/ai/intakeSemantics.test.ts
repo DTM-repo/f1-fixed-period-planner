@@ -8,6 +8,12 @@ describe("voice intake semantics", () => {
     expect(deriveNarrativeTopics(story, [])).toEqual(expect.arrayContaining(["travel", "opt"]));
   });
 
+  it("does not invent a travel concern from an unsupported model topic", () => {
+    const narrative = "I am a current F-1 student in the last year of a graduate program. I will graduate next spring.";
+    expect(deriveNarrativeTopics(narrative, ["travel"])).not.toContain("travel");
+    expect(buildIntakeHighlights(narrative, [], ["Has a travel question"], [])).not.toContain("Has a travel question");
+  });
+
   it("uses a correctable current-student assumption when study continues past the effective date", () => {
     const facts = addCurrentStudentAssumptions(story, []);
     expect(facts).toEqual(expect.arrayContaining([

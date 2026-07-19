@@ -126,6 +126,13 @@ export const SOURCE_INDEX: Record<string, SourceReference> = {
     url: "https://content.govdelivery.com/accounts/USDHSCIS/bulletins/35fa3e4",
     lastVerified: "2026-07-19"
   },
+  "USCIS-OPT-STEM": {
+    id: "USCIS-OPT-STEM",
+    title: "USCIS Practical Training for F-1 Students",
+    locator: "USCIS overview of post-completion OPT and the later 24-month STEM OPT extension",
+    url: "https://www.uscis.gov/node/92821",
+    lastVerified: "2026-07-19"
+  },
   "NAFSA-DS-FINAL-RULE-HUB": {
     id: "NAFSA-DS-FINAL-RULE-HUB",
     title: "NAFSA DHS Final Rule Ending Duration of Status",

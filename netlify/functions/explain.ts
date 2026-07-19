@@ -1,5 +1,5 @@
 import type { ExplanationRequest, ExplanationResponse } from "../../src/ai/explanationPayload";
-import { calculateScenario } from "../../src/engine/calculateScenario";
+import { calculateScenario, scenarioForFixedReentry } from "../../src/engine/calculateScenario";
 import type { StudentScenario } from "../../src/engine/types";
 
 const DEFAULT_MODEL = "gpt-5.6-sol";
@@ -35,13 +35,8 @@ function travelComparisonFor(scenario: StudentScenario) {
   ) {
     return null;
   }
-  return calculateScenario({
-    ...scenario,
-    startingPosition: "readmitted_fixed_period",
-    admissionBasis: "fixed_period",
-    inUsOnEffectiveDate: "no",
-    maintainingStatusOnEffectiveDate: "unknown"
-  });
+  if (!["same_i20_balance", "longer_program_i20"].includes(scenario.reentryBasis)) return null;
+  return calculateScenario(scenarioForFixedReentry(scenario));
 }
 
 function buildPrompt(scenario: StudentScenario): string {
@@ -62,6 +57,8 @@ function buildPrompt(scenario: StudentScenario): string {
         "Explain travel, OPT or STEM OPT, CPT, transfers, program changes, and extensions only when the verified facts make them relevant.",
         "When travel is planned or a travel comparison is present, clearly separate a stay-in-the-United-States timeline from a return timeline.",
         "When post-completion OPT and travel are both relevant, explain the DSO recommendation first, then compare filing before departure under the stay-in-the-United-States path with filing after a fixed-period return. Do not call an I-765 an extension of stay.",
+        "When a longer program needs more time, explain both verified choices: a timely Form I-539 while staying in the United States, or departure and readmission with an updated I-20. Never imply that travel guarantees admission or automatically adds four years.",
+        "When the reader is an undergraduate, introduce the first-academic-year restriction with the words As an undergraduate student so its scope is unmistakable.",
         "End with concrete next steps and name any missing fact that would change the answer."
       ],
       hardRules: [
@@ -73,6 +70,7 @@ function buildPrompt(scenario: StudentScenario): string {
         "Do not use markdown, bullets, numbered lists, section labels, citations in brackets, or generic legal disclaimers.",
         "Do not hedge a definite rule with may, might, likely, generally, or appears. State the rule, then separately state any exception.",
         "Call a date projected when it is projected. Say that the actual I-94 issued by CBP controls after entry.",
+        "A fixed period is measured from the I-20 program start date and is limited by the I-20 program end date. Never describe it as four years from the return date.",
         "Do not promise an extension approval. USCIS makes that decision.",
         "Use four to seven short paragraphs and keep every paragraph focused on one idea."
       ],

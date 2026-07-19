@@ -31,7 +31,7 @@ const TOPIC_PATTERNS: Record<IntakeTopic, RegExp> = {
   opt: /\b(?:opt|optional practical training)\b/i,
   stem_opt: /\b(?:stem[ -]?opt|stem optional practical training)\b/i,
   cpt: /\b(?:cpt|curricular practical training|day[ -]?1 cpt)\b/i,
-  extension: /\b(?:i-?539|extension of stay|extend my (?:stay|status|program))\b/i,
+  extension: /\b(?:i-?539|extension of stay|uscis extension|extension with uscis|need(?:ing)? (?:an )?extension|avoid[^.!?\n]{0,35}extension|extend my (?:stay|status|program))\b/i,
   school_transfer: /\b(?:transfer(?:ring)? (?:schools?|to another school)|school transfer)\b/i,
   program_change: /\b(?:change (?:my )?(?:major|program|degree|education level)|switch (?:my )?(?:major|program|degree))\b/i,
   change_of_status: /\b(?:change of status|change (?:my )?status (?:to|into) f-?1)\b/i
@@ -41,14 +41,11 @@ function unique<T>(items: T[]): T[] {
   return [...new Set(items)];
 }
 
-function isTopic(value: unknown): value is IntakeTopic {
-  return typeof value === "string" && TOPICS.includes(value as IntakeTopic);
-}
-
 export function deriveNarrativeTopics(narrative: string, modelTopics: unknown): IntakeTopic[] {
-  const supplied = Array.isArray(modelTopics) ? modelTopics.filter(isTopic) : [];
-  const detected = TOPICS.filter((topic) => TOPIC_PATTERNS[topic].test(narrative));
-  const topics = unique([...supplied, ...detected]);
+  // A topic controls visible follow-up questions, so the student's own words
+  // must support it. Model-only topics can otherwise invent a concern.
+  void modelTopics;
+  const topics = TOPICS.filter((topic) => TOPIC_PATTERNS[topic].test(narrative));
   return topics.includes("stem_opt") ? topics.filter((topic) => topic !== "opt") : topics;
 }
 
@@ -173,6 +170,7 @@ export function buildIntakeHighlights(
     if (/\bOPT\b/i.test(item)) return "opt";
     if (/\b(?:travel|trip|return)\b/i.test(item)) return "travel";
     if (/\bCPT\b/i.test(item)) return "cpt";
+    if (/\b(?:I-?539|USCIS extension|extension of stay)\b/i.test(item)) return "extension";
     if (/\btransfer/i.test(item)) return "transfer";
     if (/\b(?:program|major) change/i.test(item)) return "program-change";
     return undefined;
@@ -180,6 +178,19 @@ export function buildIntakeHighlights(
   const covered = new Set(generated.map(category).filter((item): item is string => Boolean(item)));
   const additional = supplied.filter((item) => {
     const itemCategory = category(item);
+    const categorySupported =
+      !itemCategory ||
+      (itemCategory === "f1-position" && Boolean(fact("startingPosition"))) ||
+      (itemCategory === "education" && Boolean(education)) ||
+      (itemCategory === "graduation" && Boolean(graduation)) ||
+      (itemCategory === "year" && Boolean(year)) ||
+      (itemCategory === "opt" && (topics.includes("opt") || topics.includes("stem_opt") || Boolean(fact("optIntent", "yes")))) ||
+      (itemCategory === "travel" && (topics.includes("travel") || Boolean(fact("travelPosture", "planned")))) ||
+      (itemCategory === "cpt" && topics.includes("cpt")) ||
+      (itemCategory === "extension" && topics.includes("extension")) ||
+      (itemCategory === "transfer" && topics.includes("school_transfer")) ||
+      (itemCategory === "program-change" && topics.includes("program_change"));
+    if (!categorySupported) return false;
     if (!itemCategory || !covered.has(itemCategory)) {
       if (itemCategory) covered.add(itemCategory);
       return true;
