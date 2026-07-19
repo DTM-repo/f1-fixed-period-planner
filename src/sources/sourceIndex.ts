@@ -80,6 +80,14 @@ export const SOURCE_INDEX: Record<string, SourceReference> = {
     locator: "USCIS bulletin describing premium processing for certain change-of-status I-539 filings and biometrics timing",
     url: "https://content.govdelivery.com/accounts/USDHSCIS/bulletins/35fa3e4",
     lastVerified: "2026-07-19"
+  },
+  "NAFSA-DS-FINAL-RULE-HUB": {
+    id: "NAFSA-DS-FINAL-RULE-HUB",
+    title: "NAFSA DHS Final Rule Ending Duration of Status",
+    locator: "NAFSA public analysis and link hub for the DHS final rule ending duration of status, dated July 18, 2026",
+    url: "https://www.nafsa.org/regulatory-information/dhs-final-rule-ending-duration-status",
+    published: "2026-07-18",
+    lastVerified: "2026-07-19"
   }
 };
 

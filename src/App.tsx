@@ -1699,6 +1699,10 @@ export default function App() {
             <Info aria-hidden="true" />
             What happened
           </a>
+          <a href="https://www.nafsa.org/regulatory-information/dhs-final-rule-ending-duration-status" target="_blank" rel="noreferrer">
+            <FileText aria-hidden="true" />
+            NAFSA overview
+          </a>
           <a
             href="https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant"
             target="_blank"

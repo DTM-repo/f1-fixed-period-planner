@@ -386,3 +386,20 @@ Each entry should capture:
 - Added deterministic findings for graduate program/transfer limits, undergraduate one-academic-year checks, and same/lower-level next-program risk.
 - Added a source-linked "What happened" overview and a source-linked advisement panel that explains travel, extension, OPT/STEM, grace-period, and school-change consequences in direct student language.
 - Changed progressive reveal logic so uncertain travel answers no longer block OPT/STEM and school-change questions.
+
+### NAFSA Reference Hub Added
+
+**Research**
+
+- Reviewed NAFSA's public "DHS Final Rule Ending Duration of Status" page dated July 18, 2026. The page is useful both as an expert overview and as a link hub to the Federal Register final rule, SEVP quick facts, SEVP FAQ, SEVP webinar information, and the regulatory impact analysis.
+- Noted that NAFSA's synopsis tracks several app-critical issues: fixed-date I-94s, 30-day grace period for fixed-period entries/reentries, transition provisions for D/S students in the United States on September 15, 2026, travel/reentry producing a date-specific I-94, I-539 extension requirements, program-level restrictions, and lateral/reverse matriculation limits.
+
+**Decisions**
+
+- Keep NAFSA as a reference and link hub rather than as the deterministic legal authority. Federal Register, USCIS, SEVP, and other government sources remain the primary sources for calculations.
+- Add a visible "NAFSA overview" header link for demo/testing convenience because the page helps explain the overall rule and points to useful primary-source links.
+
+**Codex Assistance**
+
+- Added `NAFSA-DS-FINAL-RULE-HUB` to the source index.
+- Added a top-level "NAFSA overview" link beside "What happened" and "Official rule."
