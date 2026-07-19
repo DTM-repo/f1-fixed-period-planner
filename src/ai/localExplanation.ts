@@ -2,17 +2,14 @@ import { formatDate } from "../engine/dateMath";
 import type { PlannerResult } from "../engine/types";
 
 export function buildLocalExplanation(result: PlannerResult): string {
-  const lines = [
-    `Here is what the calculator can say from the facts entered so far: ${result.headline}.`,
-    result.summary
-  ];
+  const lines = [`Here is what your situation shows from the facts entered so far: ${result.headline}. ${result.summary}`];
 
   if (result.coverageEnd) {
-    lines.push(`The tested status or admission end is ${formatDate(result.coverageEnd)}.`);
+    lines.push(`The important end date in this scenario is ${formatDate(result.coverageEnd)}.`);
   }
 
   if (result.latestDepartureDate) {
-    lines.push(`The tested stay-through/departure-period date is ${formatDate(result.latestDepartureDate)}.`);
+    lines.push(`After that, your F-1 period to leave the United States or take another immigration step runs through ${formatDate(result.latestDepartureDate)}.`);
   }
 
   const priorityFindings = result.findings
@@ -21,15 +18,15 @@ export function buildLocalExplanation(result: PlannerResult): string {
     .map((finding) => `${finding.title}: ${finding.detail}`);
 
   if (priorityFindings.length) {
-    lines.push(["The main things to check next:", ...priorityFindings.map((finding) => `- ${finding}`)].join("\n"));
+    lines.push(`The main things to check next are ${priorityFindings.join(" ")}`);
   }
 
   if (result.followUpQuestions.length) {
-    lines.push(["The next facts that would sharpen this result:", ...result.followUpQuestions.map((question) => `- ${question}`)].join("\n"));
+    lines.push(`The next detail that would sharpen this result is: ${result.followUpQuestions[0]}`);
   }
 
   lines.push(
-    "This explanation is generated from the deterministic calculator result. It does not add new legal conclusions beyond the cited rule findings."
+    "This note uses only the deterministic rule result and the linked source findings already shown here."
   );
 
   return lines.join("\n\n");

@@ -32,9 +32,10 @@ function buildPrompt(payload: ExplanationRequest): string {
   return JSON.stringify(
     {
       instruction:
-        "Explain the deterministic F-1 fixed-period planning result in plain English. Do not make new legal conclusions. If facts are missing, ask focused follow-up questions. Keep citations tied to the provided source list.",
+        "Write a warm, careful advisement-style explanation for an F-1 student using only the deterministic result and source list provided. Address the student directly as you/your. Do not use markdown headings, bullet points, numbered lists, tables, or generic disclaimer language. Do not write 'the calculator' or 'the app.' Do not make legal conclusions beyond the deterministic result. If a rule is definite in the result, state it directly without hedging. Mention only dates that matter to this scenario classification; for incoming_fixed_period, do not discuss the D/S transition cap unless a finding explicitly makes it relevant. If facts are missing, say exactly what information would sharpen the answer. Keep it to 3 to 5 short paragraphs.",
       scenario: payload.scenario,
       deterministicResult: payload.result,
+      travelComparisonResult: payload.travelResult ?? null,
       sourceList: payload.result.citations.map((citation) => ({
         id: citation.id,
         title: citation.title,
@@ -74,7 +75,7 @@ export default async (request: Request): Promise<Response> => {
     body: JSON.stringify({
       model,
       instructions:
-        "You are helping explain a source-cited immigration compliance calculator. You are not a lawyer, and you must not override the deterministic result.",
+        "You write source-grounded F-1 student advisement copy. You are careful, plain-spoken, direct, and student-facing. You must not override deterministic rule outputs or invent legal facts.",
       input: buildPrompt(payload),
       max_output_tokens: 900,
       store: false

@@ -471,6 +471,18 @@ function addTransferAndCptFindings(scenario: StudentScenario, coverageEnd: strin
   }
 
   if (scenario.educationLevel === "graduate") {
+    if (scenario.schoolTransferPlan !== "yes" && scenario.academicProgramChangePlan !== "yes") {
+      findings.push(
+        finding(
+          "graduate-level-change-rules",
+          "info",
+          "Graduate-level school changes are restricted",
+          "Because you selected graduate study, later school-change planning is different. You may not change educational objectives during the program, and a school transfer requires an SEVP-authorized exception for extenuating circumstances.",
+          ["8CFR-214-2-F5II"]
+        )
+      );
+    }
+
     if (scenario.academicProgramChangePlan === "yes") {
       findings.push(
         finding(
@@ -489,8 +501,8 @@ function addTransferAndCptFindings(scenario: StudentScenario, coverageEnd: strin
         finding(
           "graduate-transfer-limit",
           "warning",
-          "Graduate transfers may need an SEVP exception",
-          "Because you selected graduate study and a planned school transfer, this scenario needs an exception check. The final rule generally restricts graduate-level F-1 transfers unless SEVP authorizes an exception for extenuating circumstances.",
+          "Graduate transfers need an SEVP exception",
+          "Because you selected graduate study and a planned school transfer, this scenario needs an exception check. The final rule prohibits graduate-level F-1 transfers unless SEVP authorizes an exception for extenuating circumstances.",
           ["8CFR-214-2-F5II"]
         )
       );
@@ -509,6 +521,16 @@ function addTransferAndCptFindings(scenario: StudentScenario, coverageEnd: strin
       )
     );
     nextActions.push("Confirm whether you will have completed one academic year before the transfer or program change.");
+  } else if (scenario.educationLevel === "undergraduate") {
+    findings.push(
+      finding(
+        "undergraduate-level-change-rules",
+        "info",
+        "Undergraduate school changes have first-year limits",
+        "Because you selected undergraduate study, later transfer or program-change planning depends on the first-academic-year rule unless SEVP authorizes an exception for extenuating circumstances.",
+        ["8CFR-214-2-F5II"]
+      )
+    );
   }
 
   if (scenario.nextProgramLevelPlan === "same_or_lower") {
@@ -530,7 +552,7 @@ function addTransferAndCptFindings(scenario: StudentScenario, coverageEnd: strin
         "cpt-after-admission-end",
         "warning",
         "CPT depends on you still being in F-1 status",
-        "This flags CPT as a timing dependency. If practical training would occur after the calculated admission or protected period ends, you likely need an extension strategy before the CPT period.",
+        "This flags CPT as a timing dependency. If practical training would occur after the calculated admission or protected period ends, you need an extension strategy before the CPT period.",
         ["8CFR-214-1-M1", "8CFR-214-1-A4"]
       )
     );
@@ -828,7 +850,7 @@ export function calculateScenario(scenario: StudentScenario): PlannerResult {
         "Your program is longer than the maximum protected period",
         `Your program or training date (${formatDate(targetActivityEnd)}) is later than the protected end date (${formatDate(
           coverageEnd
-        )}). To stay in the United States past that date, you likely need to file an extension of stay before the protected period ends.`,
+        )}). To stay in the United States past that date for study or training, you need an extension-of-stay plan before the protected period ends.`,
         ["8CFR-214-1-M1", "USCIS-G1055-I539"]
       )
     );

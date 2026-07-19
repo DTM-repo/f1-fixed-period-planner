@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  ArrowLeft,
   CalendarClock,
   CheckCircle2,
   FileText,
@@ -12,7 +13,9 @@ import {
   Wand2
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ExplanationResponse } from "./ai/explanationPayload";
 import type { IntakeCandidateFact, IntakeExtractionResponse, IntakeFactField } from "./ai/intakePayload";
+import { buildLocalExplanation } from "./ai/localExplanation";
 import { DEFAULT_SCENARIO } from "./content/demoScenarios";
 import { calculateScenario, DEFAULT_EFFECTIVE_DATE } from "./engine/calculateScenario";
 import { compareDates, formatDate, isValidDateString } from "./engine/dateMath";
@@ -502,6 +505,7 @@ interface ImpactCard {
   title: string;
   detail: string;
   tone: ImpactTone;
+  sourceIds?: string[];
 }
 
 interface AdvisoryItem {
@@ -543,9 +547,9 @@ const planningOptions: Array<{ value: YesNoUnknown; label: string }> = [
 ];
 
 const pathOptions: Array<{ value: StartingPosition; label: string }> = [
-  { value: "current_ds_inside_us", label: "Yes, before Sept. 15" },
-  { value: "prospective_outside_us", label: "No, after Sept. 15" },
-  { value: "unknown", label: "Not sure" }
+  { value: "current_ds_inside_us", label: "Yes" },
+  { value: "prospective_outside_us", label: "No" },
+  { value: "unknown", label: "I do not know yet" }
 ];
 
 const i94Options: Array<{ value: AdmissionBasis; label: string }> = [
@@ -687,258 +691,73 @@ function SourceChips({ result, sourceIds }: { result: PlannerView; sourceIds: st
   );
 }
 
-function RuleOverview({ result }: { result: PlannerView }) {
-  const items: AdvisoryItem[] = [
+function WhatHappenedPage({ result }: { result: PlannerView }) {
+  const changes: AdvisoryItem[] = [
     {
-      title: "What changed",
+      title: "F-1 entries and reentries get fixed I-94 end dates",
       body:
-        "Starting September 15, 2026, new F-1 entries and reentries move from open-ended D/S admission to a fixed I-94 period tied to the I-20 or training document, capped at four years.",
+        "Starting September 15, 2026, F-1 students entering or reentering the United States are admitted until a fixed date tied to the I-20 or training period, with a four-year cap.",
       tone: "info",
-      sourceIds: ["FR-2026-FINAL-RULE", "8CFR-214-1-A4"]
+      sourceIds: ["8CFR-214-1-A4"]
     },
     {
-      title: "Current students get a transition path",
+      title: "The after-program period drops from 60 days to 30 days",
       body:
-        "If you are in the United States on September 15, 2026, staying in F-1 status, and your I-94 says D/S, the old D/S rules may keep covering this stay until the active I-20 or EAD date, capped at September 15, 2030.",
-      tone: "good",
-      sourceIds: ["8CFR-214-1-M1"]
-    },
-    {
-      title: "The after-program period shrinks",
-      body:
-        "The old D/S transition path can still use the 60-day F-1 period after the protected end date. A new fixed-period admission uses 30 days instead.",
+        "New fixed-period F-1 admissions have 30 days after the fixed end date to leave the United States or take another immigration step. Current D/S transition students can still have the 60-day F-1 period on the old-rule path.",
       tone: "warning",
       sourceIds: ["8CFR-214-1-M1", "8CFR-214-2-F5V"]
     },
     {
-      title: "School changes are stricter",
+      title: "Current D/S students get transition protection, but not forever",
       body:
-        "The rule adds separate limits for transfers, graduate program changes, and starting another program at the same or a lower education level after completing a program.",
+        "If you are a valid F-1 student in the United States on September 15, 2026 and your I-94 says D/S, the old D/S rules can keep covering this stay until the I-20 or EAD date in place then, capped at September 15, 2030.",
+      tone: "good",
+      sourceIds: ["8CFR-214-1-M1"]
+    },
+    {
+      title: "OPT, STEM OPT, transfers, and program changes now need closer timing checks",
+      body:
+        "The rule adds special transition treatment for certain early OPT/STEM OPT filings, while also tightening school transfers, graduate program changes, and same-level or lower-level next programs.",
       tone: "warning",
-      sourceIds: ["8CFR-214-2-F5II"]
+      sourceIds: ["8CFR-214-1-M1-OPT", "8CFR-214-2-F5II"]
     }
   ];
 
   return (
-    <section className="band overview-panel" id="what-happened">
-      <div className="section-title">
-        <Info aria-hidden="true" />
-        <h2>What happened</h2>
-      </div>
-      <div className="overview-grid">
-        {items.map((item) => (
-          <article key={item.title} className={`overview-card ${item.tone}`}>
-            <strong>{item.title}</strong>
-            <p>{item.body}</p>
-            <SourceChips result={result} sourceIds={item.sourceIds} />
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function buildAdvisoryItems(scenario: StudentScenario, result: PlannerView, travelResult: PlannerView | null): AdvisoryItem[] {
-  const items: AdvisoryItem[] = [];
-
-  if (scenario.startingPosition === "unknown") {
-    return [
-      {
-        title: "Start with the before-or-after question.",
-        body:
-          "Once you say whether you are already in F-1 status before September 15, 2026 or entering after that date, you can see the first real impact without reading every rule branch.",
-        tone: "question",
-        sourceIds: ["FR-2026-FINAL-RULE"]
-      }
-    ];
-  }
-
-  if (isCurrentTrack(scenario)) {
-    const runsPastProtection = programRunsPastCoverage(scenario, result);
-    const travelExtends = travelCanExtendTimeline(result, travelResult);
-
-    if (!scenario.programEndOnEffectiveDate) {
-      items.push({
-        title: "You may be protected from the new fixed-date system.",
-        body:
-          "Because you are a current F-1 student, the first question is how long your current I-20 or EAD lasts. That date tells us whether staying in the United States keeps you under the old D/S rules or whether another step is needed later.",
-        tone: "good",
-        sourceIds: ["8CFR-214-1-M1"]
-      });
-    } else if (scenario.inUsOnEffectiveDate === "no" || scenario.maintainingStatusOnEffectiveDate === "no") {
-      items.push({
-        title: "September 15 changes your starting point.",
-        body:
-          "Your current-student protection depends on being inside the United States when the rule starts. If you are outside the country then, the next ordinary F-1 entry may be a new fixed-period admission instead of the old D/S transition path.",
-        tone: "warning",
-        sourceIds: ["8CFR-214-1-M1", "8CFR-214-1-A4"]
-      });
-    } else if (runsPastProtection && result.coverageEnd) {
-      items.push({
-        title: "You have a long-program timing issue.",
-        body: `You have an important scenario here. Staying in the United States may keep you under the old D/S rules for now, but that protection stops on ${formatDate(
-          result.coverageEnd
-        )}. Your program or training date goes later than that, so the stay-in-the-U.S. path alone does not carry you to the end. The next question is whether OPT timing, school changes, travel, or an extension filing gives you the cleanest path.`,
-        tone: "warning",
-        sourceIds: ["8CFR-214-1-M1"]
-      });
-    } else if (result.coverageEnd && result.latestDepartureDate) {
-      items.push({
-        title: "Staying in the United States may preserve the old rules.",
-        body: `Based on what you have entered so far, the stay-in-the-U.S. path may keep you under the old D/S rules through ${formatDate(
-          result.coverageEnd
-        )}. The 60-day F-1 period after that runs through ${formatDate(result.latestDepartureDate)}. Travel, OPT/STEM, or a school change can still change the answer.`,
-        tone: "good",
-        sourceIds: ["8CFR-214-1-M1"]
-      });
-    }
-
-    if (hasTravelPlan(scenario)) {
-      if (travelExtends && travelResult?.coverageEnd && result.coverageEnd) {
-        items.push({
-          title: "Travel may help, but only because it creates a new branch.",
-          body: `This is the unusual but important part: travel does not extend your old D/S protection. Instead, returning after September 15 can create a new fixed-period admission. In this scenario, staying reaches ${formatDate(
-            result.coverageEnd
-          )}, while the tested return path reaches ${formatDate(
-            travelResult.coverageEnd
-          )}. That may avoid or delay an extension filing, but it also means a 30-day period after the fixed end date and ordinary travel/admission risk.`,
-          tone: "good",
-          sourceIds: ["8CFR-214-1-A4", "8CFR-214-2-F5V"]
-        });
-      } else if (!scenario.reentryDate && scenario.returningAfterEffectiveDate !== "no") {
-        items.push({
-          title: "Do not treat travel as good or bad yet.",
-          body:
-            "You have said travel may happen, but the return date is not set. The return date decides whether travel starts a fixed-period I-94 after the rule begins, and it can also affect OPT timing. Keep answering the other questions even if the travel date is still uncertain.",
-          tone: "question",
-          sourceIds: ["8CFR-214-1-A4", "8CFR-214-1-M1-OPT"]
-        });
-      } else if (travelResult?.coverageEnd) {
-        items.push({
-          title: "Travel creates a second timeline.",
-          body: `If you return after the rule starts, that return is tested as a fixed-period branch. With the dates entered so far, that branch reaches ${formatDate(
-            travelResult.coverageEnd
-          )} before the fixed-period 30-day period begins. Compare that against the stay-in-the-U.S. timeline before making a travel decision.`,
-          tone: "info",
-          sourceIds: ["8CFR-214-1-A4", "8CFR-214-2-F5V"]
-        });
-      }
-    } else {
-      items.push({
-        title: "Travel is worth testing before you book anything.",
-        body:
-          "If your program runs long, a later return can sometimes create a fixed-period admission that reaches farther than the current-student transition cap. It can also shorten a timeline or affect OPT. Compare both paths before treating travel as helpful.",
-        tone: "info",
-        sourceIds: ["8CFR-214-1-A4", "8CFR-214-1-M1-OPT"]
-      });
-    }
-
-    if (scenario.optIntent === "yes" || scenario.optIntent === "unknown") {
-      items.push({
-        title: "OPT/STEM has a special early transition window.",
-        body:
-          "If you stay in the D/S transition path and file a qualifying post-completion OPT or STEM OPT I-765 on or before March 18, 2027, the rule may let you file the I-765 without adding an I-539 just because the D/S rule changed. Leaving before filing can move you into the fixed-period travel branch, so the order of filing and travel matters.",
-        tone: scenario.optIntent === "yes" ? "warning" : "info",
-        sourceIds: ["8CFR-214-1-M1-OPT", "8CFR-214-2-F11"]
-      });
-    }
-  } else {
-    if (result.coverageEnd && result.latestDepartureDate) {
-      items.push({
-        title: "You are in the new fixed-date system.",
-        body: `For an F-1 entry after September 15, 2026, the I-94 period is tied to the I-20 end date or four years from entry, whichever is earlier. With the dates entered so far, the fixed period reaches ${formatDate(
-          result.coverageEnd
-        )}, followed by 30 days through ${formatDate(result.latestDepartureDate)}.`,
-        tone: result.status === "ok" ? "info" : "warning",
-        sourceIds: ["8CFR-214-1-A4", "8CFR-214-2-F5V"]
-      });
-    } else {
-      items.push({
-        title: "Your entry date and I-20 end date set the clock.",
-        body:
-          "For an incoming F-1 student, the rule does not start with old D/S protection. It starts with a fixed-date I-94 tied to the I-20 end date and the four-year limit.",
-        tone: "info",
-        sourceIds: ["8CFR-214-1-A4"]
-      });
-    }
-  }
-
-  if (result.extensionNeededBy) {
-    items.push({
-      title: "An extension is more than a date on a calendar.",
-      body:
-        "If this path needs an extension of stay, plan for a USCIS filing before the protected or fixed period ends. The current USCIS fee schedule lists Form I-539 at $420 online or $470 by paper. Biometrics may be required if USCIS sends an appointment notice. Do not assume premium processing is available for this new F-1 extension path; DHS said USCIS would announce any expansion through USCIS premium-processing guidance.",
-      tone: "warning",
-      sourceIds: ["USCIS-G1055-I539", "USCIS-I539-PREMIUM", "FR-2026-FINAL-RULE"]
-    });
-  }
-
-  if (scenario.educationLevel === "graduate") {
-    items.push({
-      title: "Graduate students have special school-change limits.",
-      body:
-        "Because you selected graduate study, transfers and academic program changes need special care. The rule is much stricter for graduate-level students than for undergraduates, and a transfer may need an SEVP exception.",
-      tone: "warning",
-      sourceIds: ["8CFR-214-2-F5II"]
-    });
-  } else if (scenario.educationLevel === "undergraduate") {
-    items.push({
-      title: "Undergraduate changes depend on timing.",
-      body:
-        "Because you selected undergraduate study, a transfer or program change may depend on whether you have completed one academic year. That is separate from the I-94 end-date calculation.",
-      tone: "info",
-      sourceIds: ["8CFR-214-2-F5II"]
-    });
-  } else if (scenario.educationLevel === "unknown") {
-    items.push({
-      title: "Your program level may change the advice.",
-      body:
-        "Graduate, undergraduate, and other F-1 programs are not treated the same for school transfers and program changes. Add your level when you know it to narrow this part of the answer.",
-      tone: "question",
-      sourceIds: ["8CFR-214-2-F5II"]
-    });
-  }
-
-  if (scenario.nextProgramLevelPlan === "same_or_lower") {
-    items.push({
-      title: "A same-level or lower-level next program is a serious issue.",
-      body:
-        "You selected a possible next program at the same or a lower level. For programs completed after September 15, 2026, the rule generally blocks using F-1 status for a new program at the same or lower education level.",
-      tone: "danger",
-      sourceIds: ["8CFR-214-2-F5II"]
-    });
-  }
-
-  return items;
-}
-
-function AdvisoryPanel({
-  scenario,
-  result,
-  travelResult
-}: {
-  scenario: StudentScenario;
-  result: PlannerView;
-  travelResult: PlannerView | null;
-}) {
-  const items = buildAdvisoryItems(scenario, result, travelResult);
-
-  return (
-    <section className="band advisory-panel">
-      <div className="section-title">
-        <Sparkles aria-hidden="true" />
-        <h2>Your advisement note</h2>
-      </div>
-      <div className="advisory-list">
-        {items.map((item) => (
-          <article key={item.title} className={`advisory-card ${item.tone}`}>
-            <strong>{item.title}</strong>
-            <p>{item.body}</p>
-            <SourceChips result={result} sourceIds={item.sourceIds} />
-          </article>
-        ))}
-      </div>
-    </section>
+    <main className="overview-page" id="what-happened">
+      <article className="overview-article">
+        <p className="eyebrow">What happened</p>
+        <h2>Major changes to duration of status for F-1 students</h2>
+        <p>
+          On July 17, 2026, the Department of Homeland Security released a final rule that ends the open-ended duration of status framework for many F-1 students. The rule takes effect on September 15, 2026. After that date, new F-1 entries and many reentries move to fixed admission periods with specific I-94 end dates.
+        </p>
+        <p>
+          The biggest question for any student is whether you will be a valid F-1 student inside the United States on September 15, 2026. If yes, the transition rules may keep your current stay under the old D/S system. If no, your next F-1 entry is analyzed under the new fixed-date system.
+        </p>
+        <div className="overview-links">
+          <a href="https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant" target="_blank" rel="noreferrer">
+            <FileText aria-hidden="true" />
+            DHS final rule
+          </a>
+          <a href="https://www.nafsa.org/regulatory-information/dhs-final-rule-ending-duration-status" target="_blank" rel="noreferrer">
+            <FileText aria-hidden="true" />
+            NAFSA overview
+          </a>
+        </div>
+        <section>
+          <h3>Key changes at a glance</h3>
+          <div className="overview-grid">
+            {changes.map((item) => (
+              <article key={item.title} className={`overview-card ${item.tone}`}>
+                <strong>{item.title}</strong>
+                <p>{item.body}</p>
+                <SourceChips result={result} sourceIds={item.sourceIds} />
+              </article>
+            ))}
+          </div>
+        </section>
+      </article>
+    </main>
   );
 }
 
@@ -947,7 +766,7 @@ function buildStudentOutcome(scenario: StudentScenario, result: PlannerView, tra
     return {
       eyebrow: "Start here",
       title: "Answer one question to see what changes.",
-      detail: "The biggest split is whether F-1 status starts before or after September 15, 2026.",
+      detail: "The biggest split is whether you will be a valid F-1 student in the United States on September 15, 2026.",
       tone: "manual"
     };
   }
@@ -957,10 +776,10 @@ function buildStudentOutcome(scenario: StudentScenario, result: PlannerView, tra
 
     if (!scenario.programEndOnEffectiveDate) {
       return {
-        eyebrow: "Current F-1 student",
+        eyebrow: "Valid F-1 in the U.S. on September 15",
         title: "The new fixed-date I-94 does not automatically take over this stay.",
         detail:
-          "If you are inside the U.S. on September 15, 2026 and your I-94 says D/S, the old D/S rules may keep covering your current stay. Your I-20 date, travel, OPT/STEM, and school changes tell us how far that protection goes.",
+          "Because you will be inside the U.S. in valid F-1 status on September 15, 2026, the old D/S rules may keep covering your current stay if your I-94 says D/S. Your I-20 date, travel, OPT/STEM, and school changes tell us how far that protection goes.",
         tone: "good"
       };
     }
@@ -994,7 +813,7 @@ function buildStudentOutcome(scenario: StudentScenario, result: PlannerView, tra
         detail: beyondProtectedPeriod
           ? `The old-rule protection stops on ${formatDate(
               result.coverageEnd
-            )}. To stay after that date for study or training, you likely need to file an extension of stay before the protected period ends.`
+            )}. If you need to study or train after that date, plan to file an extension of stay before the protected period ends.`
           : `After that date, the F-1 period to leave the U.S. or take another immigration step runs through ${formatDate(
               result.latestDepartureDate
             )}.`,
@@ -1030,9 +849,9 @@ function buildStudentOutcome(scenario: StudentScenario, result: PlannerView, tra
 
   return {
     eyebrow: "New fixed-date system",
-    title: result.coverageEnd ? `Your first fixed F-1 period may end on ${formatDate(result.coverageEnd)}.` : "One more date is needed.",
+    title: result.coverageEnd ? `Your first fixed F-1 period would end on ${formatDate(result.coverageEnd)}.` : "One more date is needed.",
     detail: result.latestDepartureDate
-      ? `After that, the 30-day period to leave the U.S. or take another immigration step runs through ${formatDate(result.latestDepartureDate)}.`
+      ? `After that, your 30-day F-1 grace period to leave the U.S. or take another immigration step runs through ${formatDate(result.latestDepartureDate)}.`
       : "Add the missing date to see the full timeline.",
     tone: result.status === "ok" ? "good" : result.status === "manual" ? "manual" : "warning"
   };
@@ -1042,9 +861,10 @@ function buildImpactCards(scenario: StudentScenario, result: PlannerView, travel
   if (scenario.startingPosition === "unknown") {
     return [
       {
-        title: "Before or after September 15?",
-        detail: "That one fact decides whether we look first at the old D/S rules or the new fixed-date system.",
-        tone: "question"
+        title: "Start with September 15, 2026",
+        detail: "Tell us whether you will be a valid F-1 student in the United States on the day the rule starts.",
+        tone: "question",
+        sourceIds: ["FR-2026-FINAL-RULE"]
       }
     ];
   }
@@ -1055,7 +875,8 @@ function buildImpactCards(scenario: StudentScenario, result: PlannerView, travel
         title: "This stay may remain under the old D/S rules",
         detail:
           "Current F-1 students are not automatically switched to a fixed I-94 on September 15. If you are in the U.S. that day and your I-94 says D/S, this stay can remain in the old-rule path.",
-        tone: "good"
+        tone: "good",
+        sourceIds: ["8CFR-214-1-M1"]
       }
     ];
 
@@ -1064,7 +885,8 @@ function buildImpactCards(scenario: StudentScenario, result: PlannerView, travel
         title: "The September 15 location answer changes this",
         detail:
           "The old-rule protection is for students physically in the U.S. when the rule starts. If you are outside the U.S. then, a later return may start a fixed-date admission instead.",
-        tone: "warning"
+        tone: "warning",
+        sourceIds: ["8CFR-214-1-M1", "8CFR-214-1-A4"]
       });
     }
 
@@ -1072,24 +894,27 @@ function buildImpactCards(scenario: StudentScenario, result: PlannerView, travel
       cards.push({
         title: "I-20 end date comes first",
         detail: "The date on your current I-20 tells us how long the old-rule protection may last before travel, OPT/STEM, or a school change changes the answer.",
-        tone: "question"
+        tone: "question",
+        sourceIds: ["8CFR-214-1-M1"]
       });
     } else if (programEndBeforeRuleStarts(scenario) && scenario.optStage === "none" && !scenario.eadEndOnEffectiveDate) {
       cards.push({
         title: "This I-20 ends before the new rule starts",
         detail:
           "If your F-1 status also ends before September 15, this new rule may not change that timeline. If you will have OPT, STEM OPT, or a later I-20, answer those next.",
-        tone: "question"
+        tone: "question",
+        sourceIds: ["8CFR-214-1-M1"]
       });
     } else if (result.coverageEnd && result.latestDepartureDate) {
       cards.push({
         title: "If you do not travel",
         detail: programRunsPastCoverage(scenario, result)
-          ? `The old-rule protection stops on ${formatDate(result.coverageEnd)}. Your program or training runs later than that, so staying after that date likely needs an extension of stay.`
+          ? `The old-rule protection stops on ${formatDate(result.coverageEnd)}. If you need to study or train after that date, you need an extension-of-stay plan before the protected period ends.`
           : `The old D/S rules may cover this path until ${formatDate(
               result.coverageEnd
             )}. The period to leave the U.S. or take another immigration step ends ${formatDate(result.latestDepartureDate)}.`,
-        tone: programRunsPastCoverage(scenario, result) ? "warning" : result.status === "ok" ? "good" : result.status === "manual" ? "question" : "warning"
+        tone: programRunsPastCoverage(scenario, result) ? "warning" : result.status === "ok" ? "good" : result.status === "manual" ? "question" : "warning",
+        sourceIds: ["8CFR-214-1-M1"]
       });
     }
 
@@ -1108,13 +933,15 @@ function buildImpactCards(scenario: StudentScenario, result: PlannerView, travel
                 travelResult.coverageEnd
               )}, with 30 days after that.`
           : "The return date matters because coming back after September 15 can start a new fixed-date I-94 period.",
-        tone: travelExtends ? "good" : travelResult?.coverageEnd ? "info" : "question"
+        tone: travelExtends ? "good" : travelResult?.coverageEnd ? "info" : "question",
+        sourceIds: ["8CFR-214-1-A4", "8CFR-214-2-F5V"]
       });
     } else {
       cards.push({
         title: "Travel can change the answer",
         detail: "If you leave the U.S. and come back after September 15, your return may start a new fixed-date I-94 period.",
-        tone: "info"
+        tone: "info",
+        sourceIds: ["8CFR-214-1-A4"]
       });
     }
 
@@ -1123,7 +950,8 @@ function buildImpactCards(scenario: StudentScenario, result: PlannerView, travel
         title: "OPT or STEM OPT timing matters",
         detail:
           "The important facts are whether it is regular OPT or STEM OPT, whether you filed, whether it is approved, the filing date, EAD dates, and travel timing.",
-        tone: "warning"
+        tone: "warning",
+        sourceIds: ["8CFR-214-1-M1-OPT", "8CFR-214-2-F11"]
       });
     }
 
@@ -1131,7 +959,36 @@ function buildImpactCards(scenario: StudentScenario, result: PlannerView, travel
       cards.push({
         title: "A school transfer or program change needs its own check",
         detail: "A later I-20 end date can run past the protected period. Add the new I-20 date before relying on the stay-in-the-U.S. timeline.",
-        tone: "warning"
+        tone: "warning",
+        sourceIds: ["8CFR-214-1-M1", "8CFR-214-2-F5II"]
+      });
+    }
+
+    if (scenario.educationLevel === "graduate") {
+      cards.push({
+        title: "Graduate program changes are prohibited during the program",
+        detail: "Because you selected graduate study, you cannot change your educational objective during the program under the new rule.",
+        tone: scenario.academicProgramChangePlan === "yes" ? "danger" : "warning",
+        sourceIds: ["8CFR-214-2-F5II"]
+      });
+      cards.push({
+        title: "Graduate transfers need an SEVP exception",
+        detail: "If you want to transfer schools during your graduate program, SEVP must authorize an exception for extenuating circumstances before you can rely on that transfer plan.",
+        tone: scenario.schoolTransferPlan === "yes" ? "danger" : "warning",
+        sourceIds: ["8CFR-214-2-F5II"]
+      });
+    } else if (scenario.educationLevel === "undergraduate") {
+      cards.push({
+        title: "Undergraduate transfers have a first-year limit",
+        detail: "Because you selected undergraduate study, you generally cannot transfer schools during your first academic year unless SEVP authorizes an exception.",
+        tone: scenario.schoolTransferPlan === "yes" ? "warning" : "info",
+        sourceIds: ["8CFR-214-2-F5II"]
+      });
+      cards.push({
+        title: "Undergraduate program changes have a first-year limit",
+        detail: "You generally cannot change your major or education level during your first academic year unless SEVP authorizes an exception.",
+        tone: scenario.academicProgramChangePlan === "yes" ? "warning" : "info",
+        sourceIds: ["8CFR-214-2-F5II"]
       });
     }
 
@@ -1140,7 +997,8 @@ function buildImpactCards(scenario: StudentScenario, result: PlannerView, travel
         title: "Same-level or lower-level next program risk",
         detail:
           "The new rule generally blocks F-1 status for another program at the same or a lower education level after you complete a program after September 15, 2026.",
-        tone: "danger"
+        tone: "danger",
+        sourceIds: ["8CFR-214-2-F5II"]
       });
     }
 
@@ -1151,8 +1009,9 @@ function buildImpactCards(scenario: StudentScenario, result: PlannerView, travel
     {
       title: "Fixed-period admission path",
       detail:
-        "If you first enter F-1 after September 15, 2026, your I-94 will likely have an end date. It is tied to the I-20 program end, but cannot be more than four years from entry.",
-      tone: "info"
+        "Because you will not be a valid F-1 student in the United States on September 15, 2026, your next F-1 entry is handled under the new fixed-date system. Your I-94 will have an end date tied to your I-20 program end, capped at four years from entry.",
+      tone: "info",
+      sourceIds: ["8CFR-214-1-A4"]
     }
   ];
 
@@ -1160,7 +1019,8 @@ function buildImpactCards(scenario: StudentScenario, result: PlannerView, travel
     cards.push({
       title: "Entry date starts the clock",
       detail: "Add the expected U.S. entry date so we can place the four-year limit.",
-      tone: "question"
+      tone: "question",
+      sourceIds: ["8CFR-214-1-A4"]
     });
   }
 
@@ -1168,35 +1028,63 @@ function buildImpactCards(scenario: StudentScenario, result: PlannerView, travel
     cards.push({
       title: "I-20 end date controls the comparison",
       detail: "The new rule compares the I-20 end date with four years from the date you enter.",
-      tone: "question"
+      tone: "question",
+      sourceIds: ["8CFR-214-1-A4"]
     });
   } else if (result.coverageEnd && result.latestDepartureDate) {
     cards.push({
-      title: "Your first I-94 end date is now visible",
-      detail: `With the answers so far, the fixed-date period may end ${formatDate(
+      title: `Your first I-94 end date would be ${formatDate(result.coverageEnd)}`,
+      detail: `Based on your answers so far, your I-94 end date would be ${formatDate(
         result.coverageEnd
-      )}, followed by 30 days through ${formatDate(result.latestDepartureDate)}.`,
-      tone: result.status === "ok" ? "good" : result.status === "manual" ? "question" : "warning"
+      )}. After that, you would have a 30-day F-1 grace period, down from the old 60 days, through ${formatDate(result.latestDepartureDate)}.`,
+      tone: result.status === "ok" ? "good" : result.status === "manual" ? "question" : "warning",
+      sourceIds: ["8CFR-214-1-A4", "8CFR-214-2-F5V"]
+    });
+  }
+
+  if (result.extensionNeededBy && scenario.currentProgramEndDate && result.coverageEnd) {
+    cards.push({
+      title: "Your program runs past your first fixed F-1 period",
+      detail: `Your program end date is ${formatDate(scenario.currentProgramEndDate)}, but your first fixed F-1 period would end ${formatDate(
+        result.coverageEnd
+      )}. To keep studying after that date, you would need to file an extension of stay before the I-94 period ends.`,
+      tone: "warning",
+      sourceIds: ["8CFR-214-1-A4", "USCIS-G1055-I539"]
     });
   }
 
   if (scenario.educationLevel === "graduate") {
     cards.push({
-      title: "Graduate transfers and program changes are restricted",
-      detail: "For graduate students, transfers and academic program changes need special review before you rely on them as an F-1 plan.",
-      tone: "warning"
+      title: "Graduate program changes are prohibited during the program",
+      detail: "Because you selected graduate study, you cannot change your educational objective during the program under the new rule.",
+      tone: "warning",
+      sourceIds: ["8CFR-214-2-F5II"]
+    });
+    cards.push({
+      title: "Graduate transfers need an SEVP exception",
+      detail: "If you want to transfer schools during your graduate program, SEVP must authorize an exception for extenuating circumstances before you can rely on that transfer plan.",
+      tone: scenario.schoolTransferPlan === "yes" ? "danger" : "warning",
+      sourceIds: ["8CFR-214-2-F5II"]
     });
   } else if (scenario.educationLevel === "undergraduate") {
     cards.push({
-      title: "Undergraduate changes depend on the one-year rule",
-      detail: "For undergraduates, a school transfer or program change may depend on whether one academic year has been completed.",
-      tone: "info"
+      title: "Undergraduate transfers have a first-year limit",
+      detail: "Because you selected undergraduate study, you generally cannot transfer schools during your first academic year unless SEVP authorizes an exception.",
+      tone: "info",
+      sourceIds: ["8CFR-214-2-F5II"]
+    });
+    cards.push({
+      title: "Undergraduate program changes have a first-year limit",
+      detail: "You generally cannot change your major or education level during your first academic year unless SEVP authorizes an exception.",
+      tone: "info",
+      sourceIds: ["8CFR-214-2-F5II"]
     });
   } else {
     cards.push({
       title: "Program level can change the answer",
       detail: "Graduate, undergraduate, and same/lower-level next-program plans have different limits under the new rule.",
-      tone: "question"
+      tone: "question",
+      sourceIds: ["8CFR-214-2-F5II"]
     });
   }
 
@@ -1204,20 +1092,22 @@ function buildImpactCards(scenario: StudentScenario, result: PlannerView, travel
     cards.push({
       title: "Same-level or lower-level next program risk",
       detail: "The new rule generally blocks F-1 status for another program at the same or a lower education level after you complete a program after September 15, 2026.",
-      tone: "danger"
+      tone: "danger",
+      sourceIds: ["8CFR-214-2-F5II"]
     });
   }
 
   return cards;
 }
 
-function ImpactCards({ cards }: { cards: ImpactCard[] }) {
+function ImpactCards({ cards, result }: { cards: ImpactCard[]; result: PlannerView }) {
   return (
     <div className="impact-grid">
       {cards.map((card) => (
         <article key={`${card.title}-${card.detail}`} className={`impact-card ${card.tone}`}>
           <strong>{card.title}</strong>
           <p>{card.detail}</p>
+          {card.sourceIds && <SourceChips result={result} sourceIds={card.sourceIds} />}
         </article>
       ))}
     </div>
@@ -1375,14 +1265,35 @@ function StudentTimelines({
 }
 
 export default function App() {
+  const [page, setPage] = useState<"planner" | "overview">(() => (window.location.hash === "#what-happened" ? "overview" : "planner"));
   const [scenario, setScenario] = useState<StudentScenario>(DEFAULT_SCENARIO);
+  const [answeredFields, setAnsweredFields] = useState<Partial<Record<keyof StudentScenario | "startingPoint", boolean>>>({});
   const [recording, setRecording] = useState(false);
   const [voiceNotice, setVoiceNotice] = useState("Voice input is ready.");
   const [draftNotice, setDraftNotice] = useState("");
   const [intakeExtraction, setIntakeExtraction] = useState<IntakeExtractionResponse | null>(null);
   const [intakeState, setIntakeState] = useState<"idle" | "loading" | "failed" | "ready">("idle");
+  const [explanationState, setExplanationState] = useState<"idle" | "loading" | "failed" | "ready">("idle");
+  const [explanationText, setExplanationText] = useState("");
+  const [explanationModel, setExplanationModel] = useState("");
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const result = useMemo(() => calculateScenario(scenario), [scenario]);
+
+  useEffect(() => {
+    function syncPageWithHash() {
+      setPage(window.location.hash === "#what-happened" ? "overview" : "planner");
+    }
+
+    window.addEventListener("hashchange", syncPageWithHash);
+    return () => window.removeEventListener("hashchange", syncPageWithHash);
+  }, []);
+
+  useEffect(() => {
+    setExplanationState("idle");
+    setExplanationText("");
+    setExplanationModel("");
+  }, [scenario]);
+
   const travelResult = useMemo(() => {
     if (!isCurrentTrack(scenario) || !hasTravelPlan(scenario) || !scenario.reentryDate) {
       return null;
@@ -1405,9 +1316,23 @@ export default function App() {
   const optReady = Boolean(scenario.programEndOnEffectiveDate && septemberLocationAnswered);
   const optAnswered = scenario.optIntent === "no" || scenario.optIntent === "yes";
   const schoolPlanningReady = Boolean(optReady && (optAnswered || scenario.optIntent === "unknown"));
+  const futureBasicsReady = Boolean(futureTrack && scenario.reentryDate && scenario.currentProgramEndDate);
+  const educationAnswered = Boolean(answeredFields.educationLevel || (scenario.educationLevel && scenario.educationLevel !== "unknown"));
+  const transferAnswered = Boolean(answeredFields.schoolTransferPlan || (scenario.schoolTransferPlan && scenario.schoolTransferPlan !== "unknown"));
+  const programChangeAnswered = Boolean(answeredFields.academicProgramChangePlan || (scenario.academicProgramChangePlan && scenario.academicProgramChangePlan !== "unknown"));
+  const nextProgramAnswered = Boolean(answeredFields.nextProgramLevelPlan || (scenario.nextProgramLevelPlan && scenario.nextProgramLevelPlan !== "unknown"));
+  const futureOptAnswered = Boolean(answeredFields.optIntent || scenario.optIntent === "yes" || scenario.optIntent === "no");
+
+  function markAnswered(field: keyof StudentScenario | "startingPoint") {
+    setAnsweredFields((current) => ({ ...current, [field]: true }));
+  }
 
   function update<K extends keyof StudentScenario>(key: K, value: StudentScenario[K]) {
     setScenario((current) => ({ ...current, [key]: value }));
+    markAnswered(key);
+    setExplanationState("idle");
+    setExplanationText("");
+    setExplanationModel("");
     if (key === "narrative") {
       setIntakeExtraction(null);
       setIntakeState("idle");
@@ -1416,15 +1341,20 @@ export default function App() {
 
   function patchScenario(patch: Partial<StudentScenario>) {
     setScenario((current) => ({ ...current, ...patch }));
+    setExplanationState("idle");
+    setExplanationText("");
+    setExplanationModel("");
   }
 
   function chooseStudentPath(value: StartingPosition) {
+    markAnswered("startingPoint");
     if (value === "current_ds_inside_us") {
+      setAnsweredFields({ startingPoint: true });
       patchScenario({
         startingPosition: "current_ds_inside_us",
         admissionBasis: "duration_of_status",
-        inUsOnEffectiveDate: "unknown",
-        maintainingStatusOnEffectiveDate: "unknown",
+        inUsOnEffectiveDate: "yes",
+        maintainingStatusOnEffectiveDate: "yes",
         i94AdmitUntilDate: undefined,
         travelPosture: "unknown",
         returningAfterEffectiveDate: "unknown",
@@ -1439,6 +1369,7 @@ export default function App() {
     }
 
     if (value === "prospective_outside_us") {
+      setAnsweredFields({ startingPoint: true });
       patchScenario({
         startingPosition: "prospective_outside_us",
         admissionBasis: "fixed_period",
@@ -1459,6 +1390,7 @@ export default function App() {
       return;
     }
 
+    setAnsweredFields({ startingPoint: true });
     patchScenario({
       startingPosition: "unknown",
       admissionBasis: "unknown",
@@ -1468,6 +1400,7 @@ export default function App() {
   }
 
   function updateCurrentI20End(value: string | undefined) {
+    markAnswered("programEndOnEffectiveDate");
     setScenario((current) => ({
       ...current,
       programEndOnEffectiveDate: value,
@@ -1476,6 +1409,7 @@ export default function App() {
   }
 
   function updateTransferOrProgramChange(value: YesNoUnknown) {
+    markAnswered("transferOrProgramChange");
     setScenario((current) => ({
       ...current,
       transferOrProgramChange: value,
@@ -1484,6 +1418,7 @@ export default function App() {
   }
 
   function updateI94Basis(value: AdmissionBasis) {
+    markAnswered("admissionBasis");
     setScenario((current) => ({
       ...current,
       admissionBasis: value,
@@ -1492,6 +1427,7 @@ export default function App() {
   }
 
   function updateLeavingUs(value: TravelPosture) {
+    markAnswered("travelPosture");
     setScenario((current) => ({
       ...current,
       travelPosture: value,
@@ -1503,6 +1439,7 @@ export default function App() {
   }
 
   function updateReturnAfterRule(value: YesNoUnknown) {
+    markAnswered("returningAfterEffectiveDate");
     setScenario((current) => ({
       ...current,
       returningAfterEffectiveDate: value,
@@ -1513,6 +1450,7 @@ export default function App() {
   }
 
   function updateOptIntent(value: YesNoUnknown) {
+    markAnswered("optIntent");
     setScenario((current) => ({
       ...current,
       optIntent: value,
@@ -1523,6 +1461,7 @@ export default function App() {
   }
 
   function updateOptKind(value: OptKind) {
+    markAnswered("optStage");
     setScenario((current) => ({
       ...current,
       optStage: optStageFromParts(value, optStatusFromStage(current.optStage))
@@ -1530,6 +1469,7 @@ export default function App() {
   }
 
   function updateOptStatus(value: OptFilingStatus) {
+    markAnswered("optStage");
     setScenario((current) => ({
       ...current,
       optStage: optStageFromParts(optKindFromStage(current.optStage), value)
@@ -1537,6 +1477,7 @@ export default function App() {
   }
 
   function updateSchoolTransfer(value: YesNoUnknown) {
+    markAnswered("schoolTransferPlan");
     setScenario((current) => {
       const combined = combinePlanAnswers(value, current.academicProgramChangePlan ?? "no");
       return {
@@ -1549,6 +1490,7 @@ export default function App() {
   }
 
   function updateAcademicProgramChange(value: YesNoUnknown) {
+    markAnswered("academicProgramChangePlan");
     setScenario((current) => {
       const combined = combinePlanAnswers(current.schoolTransferPlan ?? "no", value);
       return {
@@ -1561,6 +1503,7 @@ export default function App() {
   }
 
   function updateCptIntent(value: YesNoUnknown) {
+    markAnswered("cptPlan");
     update("cptPlan", value === "yes" ? "unknown" : "none");
   }
 
@@ -1608,6 +1551,12 @@ export default function App() {
     const nextScenario = scenarioWithFacts(scenario, intakeExtraction.facts);
     const changes = describeDraftChanges(scenario, nextScenario);
     setScenario(nextScenario);
+    setAnsweredFields((current) =>
+      factsToApply.reduce<Partial<Record<keyof StudentScenario | "startingPoint", boolean>>>(
+        (next, fact) => ({ ...next, [fact.field]: true }),
+        { ...current, startingPoint: nextScenario.startingPosition !== "unknown" }
+      )
+    );
     setDraftNotice(
       changes.length
         ? `Updated ${changes.length} scenario field${changes.length === 1 ? "" : "s"} from ${factsToApply.length} applied fact${factsToApply.length === 1 ? "" : "s"}: ${changes.join(", ")}.`
@@ -1685,7 +1634,44 @@ export default function App() {
     }
   }
 
+  async function calculateResults() {
+    setExplanationState("loading");
+    setExplanationText("");
+    setExplanationModel("");
+
+    try {
+      const response = await fetch("/api/explain", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ scenario, result, travelResult })
+      });
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      const payload = (await response.json()) as ExplanationResponse;
+      setExplanationText(payload.explanation);
+      setExplanationModel(payload.model ?? "OpenAI");
+      setExplanationState("ready");
+    } catch {
+      setExplanationText(buildLocalExplanation(result));
+      setExplanationModel("deterministic fallback");
+      setExplanationState("failed");
+    }
+  }
+
   const applicableFacts = intakeExtraction ? readyFacts(intakeExtraction.facts) : [];
+  const explanationParagraphs = explanationText.split(/\n{2,}/).map((paragraph) => paragraph.trim()).filter(Boolean);
+
+  function showOverviewPage() {
+    window.location.hash = "what-happened";
+    setPage("overview");
+  }
+
+  function showPlannerPage() {
+    window.history.pushState("", document.title, window.location.pathname + window.location.search);
+    setPage("planner");
+  }
 
   return (
     <div className="app">
@@ -1695,25 +1681,16 @@ export default function App() {
           <h1>F-1 rule impact planner</h1>
         </div>
         <nav className="top-links" aria-label="Reference links">
-          <a href="#what-happened">
-            <Info aria-hidden="true" />
-            What happened
-          </a>
-          <a href="https://www.nafsa.org/regulatory-information/dhs-final-rule-ending-duration-status" target="_blank" rel="noreferrer">
-            <FileText aria-hidden="true" />
-            NAFSA overview
-          </a>
-          <a
-            href="https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant"
-            target="_blank"
-            rel="noreferrer"
-          >
-            <FileText aria-hidden="true" />
-            Official rule
-          </a>
+          <button type="button" className="nav-button" onClick={() => (page === "overview" ? showPlannerPage() : showOverviewPage())}>
+            {page === "overview" ? <ArrowLeft aria-hidden="true" /> : <Info aria-hidden="true" />}
+            {page === "overview" ? "Back to planner" : "What happened"}
+          </button>
         </nav>
       </header>
 
+      {page === "overview" ? (
+        <WhatHappenedPage result={result} />
+      ) : (
       <main className="workspace">
         <aside className="intake">
           <section className="panel">
@@ -1725,12 +1702,12 @@ export default function App() {
             <div className="flow-step active">
               <span className="step-kicker">Start</span>
               <Segmented
-                label="Are you already an F-1 student, or will you be one before September 15, 2026?"
+                label="Will you be a valid F-1 student in the United States on September 15, 2026?"
                 value={scenario.startingPosition}
                 options={pathOptions}
                 onChange={chooseStudentPath}
               />
-              <p className="microcopy">For F-1 students and people planning to use F-1 status.</p>
+              <p className="microcopy">This one answer decides whether we start with the old D/S transition rules or the new fixed-date admission rules.</p>
             </div>
 
             {pathChosen && currentTrack && (
@@ -1750,24 +1727,6 @@ export default function App() {
                     )}
                   </details>
                 </div>
-
-                {scenario.programEndOnEffectiveDate && (
-                  <div className="flow-step active">
-                    <span className="step-kicker">September 15 check</span>
-                    <Segmented
-                      label="Will you be inside the United States on September 15, 2026?"
-                      value={scenario.inUsOnEffectiveDate === "yes" && scenario.maintainingStatusOnEffectiveDate === "yes" ? "yes" : scenario.inUsOnEffectiveDate === "no" || scenario.maintainingStatusOnEffectiveDate === "no" ? "no" : "unknown"}
-                      options={yesNoOptions}
-                      onChange={(value) =>
-                        patchScenario({
-                          inUsOnEffectiveDate: value,
-                          maintainingStatusOnEffectiveDate: value === "yes" ? "yes" : value
-                        })
-                      }
-                    />
-                    <p className="microcopy">This matters because the old-rule protection is only for students who are physically in the U.S. when the new rule starts.</p>
-                  </div>
-                )}
 
                 {scenario.programEndOnEffectiveDate && septemberLocationAnswered && (
                   <div className="flow-step active">
@@ -1827,37 +1786,62 @@ export default function App() {
 
                 {schoolPlanningReady && (
                   <div className="flow-step active">
-                    <span className="step-kicker">School changes</span>
+                    <span className="step-kicker">Program level</span>
                     <Segmented
                       label="Are you in an undergraduate or graduate program?"
                       value={scenario.educationLevel ?? "unknown"}
                       options={educationLevelOptions}
                       onChange={(value) => update("educationLevel", value)}
                     />
+                  </div>
+                )}
+
+                {schoolPlanningReady && educationAnswered && (
+                  <div className="flow-step active">
+                    <span className="step-kicker">Transfer</span>
                     <Segmented
                       label="Are you planning to transfer to a different school?"
                       value={scenario.schoolTransferPlan ?? "unknown"}
                       options={planningOptions}
                       onChange={updateSchoolTransfer}
                     />
+                  </div>
+                )}
+
+                {schoolPlanningReady && educationAnswered && transferAnswered && (
+                  <div className="flow-step active">
+                    <span className="step-kicker">Program change</span>
                     <Segmented
                       label="Are you planning to change your academic program?"
                       value={scenario.academicProgramChangePlan ?? "unknown"}
                       options={planningOptions}
                       onChange={updateAcademicProgramChange}
                     />
+                  </div>
+                )}
+
+                {schoolPlanningReady && educationAnswered && transferAnswered && programChangeAnswered && scenario.transferOrProgramChange === "yes" && (
+                  <div className="flow-step active">
+                    <span className="step-kicker">New I-20 date</span>
+                    <DateField
+                      label={
+                        scenario.schoolTransferPlan === "yes" && scenario.academicProgramChangePlan === "yes"
+                          ? "What end date is on the new school or new program I-20?"
+                          : scenario.schoolTransferPlan === "yes"
+                            ? "What program end date is on the I-20 from the new school?"
+                            : "What end date is on the I-20 for the new academic program?"
+                      }
+                      value={scenario.currentProgramEndDate}
+                      onChange={(value) => update("currentProgramEndDate", value)}
+                    />
+                  </div>
+                )}
+
+                {schoolPlanningReady && educationAnswered && transferAnswered && programChangeAnswered && (
+                  <div className="flow-step active">
+                    <span className="step-kicker">Next program</span>
                     {scenario.transferOrProgramChange === "yes" && (
-                      <DateField
-                        label={
-                          scenario.schoolTransferPlan === "yes" && scenario.academicProgramChangePlan === "yes"
-                            ? "What end date is on the new school or new program I-20?"
-                            : scenario.schoolTransferPlan === "yes"
-                              ? "What program end date is on the I-20 from the new school?"
-                              : "What end date is on the I-20 for the new academic program?"
-                        }
-                        value={scenario.currentProgramEndDate}
-                        onChange={(value) => update("currentProgramEndDate", value)}
-                      />
+                      <p className="microcopy">You can keep testing the next questions while you confirm the new I-20 date.</p>
                     )}
                     <Segmented
                       label="After this program, are you considering another program at the same level or a lower level?"
@@ -1865,6 +1849,12 @@ export default function App() {
                       options={nextProgramLevelOptions}
                       onChange={(value) => update("nextProgramLevelPlan", value)}
                     />
+                  </div>
+                )}
+
+                {schoolPlanningReady && educationAnswered && transferAnswered && programChangeAnswered && nextProgramAnswered && (
+                  <div className="flow-step active">
+                    <span className="step-kicker">CPT</span>
                     <Segmented
                       label="Are you planning CPT?"
                       value={scenario.cptPlan === "none" ? "no" : "yes"}
@@ -1890,39 +1880,69 @@ export default function App() {
                   </div>
                 )}
 
-                {scenario.reentryDate && scenario.currentProgramEndDate && (
+                {futureBasicsReady && (
                   <div className="flow-step active">
-                    <span className="step-kicker">Future-student branches</span>
+                    <span className="step-kicker">Program level</span>
                     <Segmented
                       label="Are you entering an undergraduate or graduate program?"
                       value={scenario.educationLevel ?? "unknown"}
                       options={educationLevelOptions}
                       onChange={(value) => update("educationLevel", value)}
                     />
+                  </div>
+                )}
+
+                {futureBasicsReady && educationAnswered && (
+                  <div className="flow-step active">
+                    <span className="step-kicker">Transfer</span>
                     <Segmented
                       label="Are you already thinking about transferring schools?"
                       value={scenario.schoolTransferPlan ?? "unknown"}
                       options={planningOptions}
                       onChange={updateSchoolTransfer}
                     />
+                  </div>
+                )}
+
+                {futureBasicsReady && educationAnswered && transferAnswered && (
+                  <div className="flow-step active">
+                    <span className="step-kicker">Program change</span>
                     <Segmented
                       label="Are you already thinking about changing academic programs?"
                       value={scenario.academicProgramChangePlan ?? "unknown"}
                       options={planningOptions}
                       onChange={updateAcademicProgramChange}
                     />
+                  </div>
+                )}
+
+                {futureBasicsReady && educationAnswered && transferAnswered && programChangeAnswered && (
+                  <div className="flow-step active">
+                    <span className="step-kicker">Next program</span>
                     <Segmented
                       label="After this program, are you considering another program at the same level or a lower level?"
                       value={scenario.nextProgramLevelPlan ?? "unknown"}
                       options={nextProgramLevelOptions}
                       onChange={(value) => update("nextProgramLevelPlan", value)}
                     />
+                  </div>
+                )}
+
+                {futureBasicsReady && educationAnswered && transferAnswered && programChangeAnswered && nextProgramAnswered && (
+                  <div className="flow-step active">
+                    <span className="step-kicker">OPT or STEM OPT</span>
                     <Segmented
                       label="Are you already thinking about post-completion OPT or STEM OPT?"
                       value={scenario.optIntent ?? "unknown"}
                       options={planningOptions}
                       onChange={updateOptIntent}
                     />
+                  </div>
+                )}
+
+                {futureBasicsReady && educationAnswered && transferAnswered && programChangeAnswered && nextProgramAnswered && futureOptAnswered && (
+                  <div className="flow-step active">
+                    <span className="step-kicker">CPT</span>
                     <Segmented
                       label="Are you already thinking about CPT?"
                       value={scenario.cptPlan === "none" ? "no" : "yes"}
@@ -2021,27 +2041,45 @@ export default function App() {
         </aside>
 
         <section className="results">
-          <RuleOverview result={result} />
-
-          <div className={`outcome ${studentOutcome.tone}`}>
-            <p>{studentOutcome.eyebrow}</p>
-            <h2>{studentOutcome.title}</h2>
-            <span>{studentOutcome.detail}</span>
-          </div>
-
-          <AdvisoryPanel scenario={scenario} result={result} travelResult={travelResult} />
-
-          <section className="band impact-surface">
+          <section className="band impact-surface meaning-surface">
             <div className="section-title">
               <Sparkles aria-hidden="true" />
-              <h2>What this means so far</h2>
+              <h2>What this means for you</h2>
             </div>
-            <ImpactCards cards={impactCards} />
+            <div className={`outcome ${studentOutcome.tone}`}>
+              <p>{studentOutcome.eyebrow}</p>
+              <h2>{studentOutcome.title}</h2>
+              <span>{studentOutcome.detail}</span>
+            </div>
+            <ImpactCards cards={impactCards} result={result} />
             <StudentTimelines scenario={scenario} result={result} travelResult={travelResult} />
           </section>
 
+          <section className="band calculated-advisement">
+            <div className="section-title">
+              <Wand2 aria-hidden="true" />
+              <h2>Calculate results</h2>
+            </div>
+            <p className="microcopy">Generate a narrative advisement note from your answers and the source-linked rule findings.</p>
+            <button type="button" className="primary-action" onClick={calculateResults} disabled={explanationState === "loading" || scenario.startingPosition === "unknown"}>
+              {explanationState === "loading" ? <RefreshCw aria-hidden="true" className="spin" /> : <Sparkles aria-hidden="true" />}
+              {explanationState === "loading" ? "Writing your advisement" : "Calculate results"}
+            </button>
+            {explanationState === "failed" && (
+              <p className="muted status-line">OpenAI advisement is not available right now, so this note uses the deterministic rule result only.</p>
+            )}
+            {explanationParagraphs.length > 0 && (
+              <div className="advisement-copy">
+                {explanationModel && <span>{explanationModel}</span>}
+                {explanationParagraphs.map((paragraph) => (
+                  <p key={paragraph}>{paragraph}</p>
+                ))}
+              </div>
+            )}
+          </section>
+
           <details className="band technical-details">
-            <summary>Calculate results</summary>
+            <summary>Rule details and sources</summary>
             <div className="technical-grid">
               <section>
                 <h2>Findings</h2>
@@ -2105,6 +2143,7 @@ export default function App() {
           </details>
         </section>
       </main>
+      )}
     </div>
   );
 }

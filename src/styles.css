@@ -116,7 +116,8 @@ a {
   justify-content: flex-end;
 }
 
-.top-links a {
+.top-links a,
+.top-links .nav-button {
   align-items: center;
   border: 1px solid var(--line);
   border-radius: 7px;
@@ -125,6 +126,10 @@ a {
   gap: 8px;
   padding: 9px 12px;
   text-decoration: none;
+}
+
+.top-links .nav-button {
+  background: var(--surface);
 }
 
 .workspace {
@@ -437,9 +442,65 @@ a:focus-visible {
   min-width: 0;
 }
 
+.overview-page {
+  margin: 0 auto;
+  max-width: 980px;
+  padding: 30px clamp(16px, 3vw, 34px) 60px;
+}
+
+.overview-article {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 18px;
+  padding: clamp(20px, 4vw, 42px);
+}
+
+.overview-article h2 {
+  font-size: clamp(30px, 5vw, 56px);
+  line-height: 1.05;
+  margin: 0;
+  max-width: 14ch;
+}
+
+.overview-article h3 {
+  font-size: 18px;
+  margin: 10px 0 0;
+}
+
+.overview-article > p:not(.eyebrow) {
+  color: var(--ink);
+  font-size: 17px;
+  line-height: 1.58;
+  margin: 0;
+  max-width: 72ch;
+}
+
+.overview-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.overview-links a {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  display: inline-flex;
+  gap: 8px;
+  padding: 9px 12px;
+  text-decoration: none;
+}
+
 .impact-surface {
   display: grid;
   gap: 14px;
+}
+
+.meaning-surface .outcome {
+  border: 1px solid var(--line);
+  border-left-width: 6px;
 }
 
 .overview-panel,
@@ -649,30 +710,35 @@ a:focus-visible {
 .student-timeline ol {
   display: grid;
   gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
 .student-timeline li {
-  border-left: 5px solid var(--blue);
+  background: #fbfcfc;
+  border: 1px solid var(--line);
+  border-top: 5px solid var(--blue);
+  border-radius: var(--radius);
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(110px, 0.3fr) minmax(0, 1fr);
-  padding: 2px 0 2px 12px;
+  grid-template-columns: 1fr;
+  min-height: 138px;
+  padding: 12px;
 }
 
 .student-timeline li.good {
-  border-left-color: var(--green);
+  border-top-color: var(--green);
 }
 
 .student-timeline li.warning,
 .student-timeline li.question {
-  border-left-color: var(--amber);
+  border-top-color: var(--amber);
 }
 
 .student-timeline li.danger {
-  border-left-color: var(--red);
+  border-top-color: var(--red);
 }
 
 .student-timeline li > span {
@@ -697,6 +763,46 @@ a:focus-visible {
   cursor: pointer;
   font-size: 13px;
   font-weight: 760;
+}
+
+.calculated-advisement {
+  display: grid;
+  gap: 12px;
+}
+
+.primary-action {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: white;
+  justify-content: center;
+  max-width: 240px;
+}
+
+.primary-action:hover {
+  background: var(--blue-dark);
+  color: white;
+}
+
+.advisement-copy {
+  background: #fbfcfc;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.advisement-copy > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.advisement-copy p {
+  font-size: 15px;
+  line-height: 1.58;
+  margin: 0;
 }
 
 .technical-grid {
@@ -967,7 +1073,8 @@ a:focus-visible {
     justify-content: stretch;
   }
 
-  .top-links a {
+  .top-links a,
+  .top-links .nav-button {
     justify-content: center;
   }
 
@@ -988,7 +1095,7 @@ a:focus-visible {
     gap: 3px;
   }
 
-  .student-timeline li {
-    grid-template-columns: 1fr;
+  .overview-article h2 {
+    max-width: none;
   }
 }

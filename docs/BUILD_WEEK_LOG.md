@@ -403,3 +403,29 @@ Each entry should capture:
 
 - Added `NAFSA-DS-FINAL-RULE-HUB` to the source index.
 - Added a top-level "NAFSA overview" link beside "What happened" and "Official rule."
+
+### Effective-Date Question and Advisement Flow Pass
+
+**Research**
+
+- Rechecked final-rule and NAFSA language for graduate restrictions. The final rule prohibits graduate-level F-1 students from changing educational objectives during a program, and prohibits graduate transfers unless SEVP authorizes an exception for extenuating circumstances.
+- Rechecked fixed-period admission language. For F-1 entries/reentries after September 15, 2026, the I-94/admission period is date-specific; this should not be hedged as merely "likely" when the rule branch is clear.
+- Smoke-tested the local `/api/explain` endpoint through Netlify dev. It successfully called OpenAI and returned an advisement-style response. A prompt correction was added after the model mentioned the D/S transition cap in an incoming fixed-period scenario where that date was not relevant.
+
+**Decisions**
+
+- Replace the first structured question with: "Will you be a valid F-1 student in the United States on September 15, 2026?" That one fact decides whether the app starts with D/S transition treatment or the new fixed-period admission branch.
+- Move the general "What happened" explanation off the planner screen into a separate article-style page with links to the DHS final rule and NAFSA overview.
+- Collapse the overlapping live result sections into one "What this means for you" surface. The live cards should be student-specific, not generalized rule overview cards.
+- Make future-student follow-up questions unfold one at a time after entry date and I-20 end date: program level, transfer, program change, same/lower next program, OPT/STEM, then CPT.
+- Make "Calculate results" an explicit OpenAI advisement action, with loading state and a plain-prose deterministic fallback if OpenAI is unavailable.
+- Add source chips to the student-specific live cards so source links are available without opening the technical details drawer.
+
+**Codex Assistance**
+
+- Reframed the scenario selection logic around valid F-1 presence in the United States on September 15, 2026 and removed the redundant September 15 question from the current-student flow.
+- Added hash-addressable `#what-happened` overview page and simplified the header to a single What Happened/Back control.
+- Reworked the future-student branch so it no longer dumps six questions at once.
+- Rewired Calculate Results to call `/api/explain` with the base result and optional travel comparison result, and tightened the OpenAI prompt to produce direct, non-markdown advisement copy.
+- Added deterministic source-backed graduate/undergraduate program-level findings so generated advisement has relevant rule support.
+- Reworked the timeline cards into a more horizontal, visual layout on desktop while keeping mobile responsive.
