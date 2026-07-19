@@ -347,7 +347,7 @@ function addOptFindings(
         "opt-filing-after-transition-window",
         "warning",
         "OPT/STEM filing date is outside the transition window",
-        `The tested I-765 filing date (${formatDate(
+        `The I-765 filing date entered (${formatDate(
           scenario.optFilingDate
         )}) is after ${formatDate(OPT_TRANSITION_I765_DEADLINE)}. The special OPT/STEM filing treatment should not be applied to this scenario.`,
         OPT_TRANSITION_RULE.sourceIds
@@ -371,7 +371,7 @@ function addOptFindings(
           "opt-filing-in-window",
           "good",
           "OPT filing date falls inside the transition window",
-          `The tested I-765 filing date (${formatDate(
+          `The I-765 filing date entered (${formatDate(
             scenario.optFilingDate
           )}) is on or before ${formatDate(OPT_TRANSITION_I765_DEADLINE)} and before the protected period expires.`,
           OPT_TRANSITION_RULE.sourceIds
@@ -383,7 +383,7 @@ function addOptFindings(
           "post-opt-after-period-expiration",
           "danger",
           "Post-completion OPT filing is after the protected period",
-          `The tested I-765 filing date (${formatDate(
+          `The I-765 filing date entered (${formatDate(
             scenario.optFilingDate
           )}) is after the calculated departure-period end (${formatDate(options.transitionLatestDepartureDate)}). The no-I-539 exception should not be applied.`,
           OPT_TRANSITION_RULE.sourceIds
@@ -412,7 +412,7 @@ function addOptFindings(
           "stem-filing-in-window",
           "good",
           "STEM OPT filing date fits the transition rule",
-          `The tested STEM OPT filing date (${formatDate(
+          `The STEM OPT filing date entered (${formatDate(
             scenario.optFilingDate
           )}) is on or before ${formatDate(OPT_TRANSITION_I765_DEADLINE)} and before the current OPT EAD end date.`,
           OPT_TRANSITION_RULE.sourceIds
@@ -424,7 +424,7 @@ function addOptFindings(
           "stem-filing-after-current-ead",
           "danger",
           "STEM OPT filing is after the current OPT EAD end date",
-          `The tested STEM OPT filing date (${formatDate(
+          `The STEM OPT filing date entered (${formatDate(
             scenario.optFilingDate
           )}) is after the current OPT EAD end date (${formatDate(scenario.currentEadEndDate)}). The no-I-539 exception should not be applied.`,
           OPT_TRANSITION_RULE.sourceIds
@@ -546,6 +546,19 @@ function addTransferAndCptFindings(scenario: StudentScenario, coverageEnd: strin
     nextActions.push("Before relying on a same-level or lower-level next program, check whether the rule blocks that F-1 path.");
   }
 
+  if (scenario.cptPlan === "unknown") {
+    findings.push(
+      finding(
+        "cpt-timing-needed",
+        "question",
+        "CPT depends on timing and authorization",
+        "The final rule does not eliminate Day One CPT or change the basic CPT approval process. The new timing issue is extension-of-stay timing: if you already have authorized CPT and file a timely extension before your F-1 period ends, the rule can allow CPT to continue while the extension is pending for up to 240 days. If the extension is filed only during the departure period after the F-1 period ends, CPT or other F-1 employment cannot continue or begin until the extension is approved.",
+        ["8CFR-214-2-F5VIII-CPT"]
+      )
+    );
+    nextActions.push("Add when CPT would start and whether it would fall before or after the I-94/protected period ends.");
+  }
+
   if (scenario.cptPlan === "after_admission_end") {
     findings.push(
       finding(
@@ -553,7 +566,7 @@ function addTransferAndCptFindings(scenario: StudentScenario, coverageEnd: strin
         "warning",
         "CPT depends on you still being in F-1 status",
         "This flags CPT as a timing dependency. If practical training would occur after the calculated admission or protected period ends, you need an extension strategy before the CPT period.",
-        ["8CFR-214-1-M1", "8CFR-214-1-A4"]
+        ["8CFR-214-1-M1", "8CFR-214-1-A4", "8CFR-214-2-F5VIII-CPT"]
       )
     );
   } else if (scenario.cptPlan === "before_admission_end" && coverageEnd) {
@@ -561,11 +574,11 @@ function addTransferAndCptFindings(scenario: StudentScenario, coverageEnd: strin
       finding(
         "cpt-before-admission-end",
         "info",
-        "CPT is inside the tested admission window",
+        "CPT is inside this F-1 period",
         `The CPT timing selected is before the calculated status end of ${formatDate(
           coverageEnd
         )}. A separate CPT eligibility checklist is still needed before giving training-specific guidance.`,
-        ["8CFR-214-1-M1", "8CFR-214-1-A4"]
+        ["8CFR-214-1-M1", "8CFR-214-1-A4", "8CFR-214-2-F5VIII-CPT"]
       )
     );
   }
@@ -625,14 +638,14 @@ function buildFixedAdmissionResult(
 
   if (coverageEnd) {
     timelineItems.push(
-      timeline(startDate, isReentry ? "Tested re-entry" : "Tested initial entry", "Admission clock starts from the inspected admission date."),
+      timeline(startDate, isReentry ? "F-1 reentry" : "F-1 entry", "The fixed-period clock starts when CBP admits you."),
       timeline(
         coverageEnd,
-        "Admit-until date to test",
+        "I-94 end date",
         scenario.i94AdmitUntilDate ? "I-94 admit-until date you entered." : "Earlier of program end or four years from admission.",
         extensionNeeded ? "warning" : "good"
       ),
-      timeline(latestDepartureDate!, "F-1 departure/maintain-status period ends", "Thirty days after the tested program, training, or four-year point.")
+      timeline(latestDepartureDate!, "F-1 departure/maintain-status period ends", "Thirty days after the program, training, or four-year point.")
     );
   }
 
@@ -656,7 +669,7 @@ function buildFixedAdmissionResult(
         "fixed-extension-needed",
         "warning",
         "Your program runs past the fixed admission period",
-        `The tested program end (${formatDate(targetProgramEnd)}) is after the four-year admission cap (${formatDate(
+        `Your program end date (${formatDate(targetProgramEnd)}) is after the four-year admission cap (${formatDate(
           coverageEnd
         )}). You should plan an extension-of-stay filing before the admission period expires.`,
         ["8CFR-214-1-A4", "USCIS-G1055-I539"]
@@ -682,7 +695,7 @@ function buildFixedAdmissionResult(
       ? `${scenario.i94AdmitUntilDate ? "I-94 fixed period" : "Fixed-period admission"} through ${formatDate(coverageEnd)}`
       : "Fixed-period admission needs the I-20 program end",
     coverageEnd
-      ? `The fixed admit-until point is ${formatDate(coverageEnd)}, with the fixed-period F-1 30-day period running through ${formatDate(
+      ? `Your fixed F-1 period would end ${formatDate(coverageEnd)}, with the fixed-period F-1 30-day period running through ${formatDate(
           latestDepartureDate
         )}.`
       : "Add the I-20 program end date to turn the fixed-period rule into a specific admit-until date.",
@@ -725,6 +738,48 @@ export function calculateScenario(scenario: StudentScenario): PlannerResult {
       effectiveDateDocumentEnd &&
       isAfter(effectiveDate, effectiveDateDocumentEnd)
   );
+
+  if (
+    isProspective &&
+    scenarioWithEffectiveDate.inUsOnEffectiveDate === "no" &&
+    scenarioWithEffectiveDate.reentryDate &&
+    isOnOrBefore(scenarioWithEffectiveDate.reentryDate, effectiveDate)
+  ) {
+    const findings = [
+      ...dateFindings,
+      finding(
+        "future-entry-before-effective-date-contradiction",
+        "danger",
+        "These two answers do not fit together",
+        `You answered that you will not be an F-1 student in the United States on ${formatDate(
+          effectiveDate
+        )}, but the entry date entered is ${formatDate(
+          scenarioWithEffectiveDate.reentryDate
+        )}. If you enter by that date and stay in valid F-1 status, this should be answered as Yes. If you will not be in the United States then, change the entry date to a later date.`,
+        ["8CFR-214-1-M1", "8CFR-214-1-A4"]
+      )
+    ];
+
+    return baseResult(
+      scenarioWithEffectiveDate,
+      "manual",
+      "manual_review",
+      "Fix the September 15 answer or the entry date",
+      "These answers cannot both be true, so no F-1 timeline is calculated from them.",
+      [TRANSITION_RULE, FIXED_ADMISSION_RULE],
+      findings,
+      [
+        timeline(scenarioWithEffectiveDate.reentryDate, "Entry date entered", "This date is on or before the rule starts.", "danger"),
+        timeline(effectiveDate, "Rule effective date", "Your first answer says you will not be in the United States on this date.", "danger")
+      ].sort((a, b) => (a.date > b.date ? 1 : -1)),
+      [
+        ...dateFollowUpQuestions,
+        "Will you be in the United States in valid F-1 status on September 15, 2026?",
+        "If not, what date will you actually enter the United States in F-1 status?"
+      ],
+      ["Correct one of the two answers before relying on a result."]
+    );
+  }
 
   if (isProspective || isFixedAlready) {
     return buildFixedAdmissionResult(

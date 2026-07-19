@@ -2,7 +2,7 @@ import { formatDate } from "../engine/dateMath";
 import type { PlannerResult } from "../engine/types";
 
 export function buildLocalExplanation(result: PlannerResult): string {
-  const lines = [`Here is what your situation shows from the facts entered so far: ${result.headline}. ${result.summary}`];
+  const lines = [`Under the new rules in your situation, here is what your answers show so far: ${result.headline}. ${result.summary}`];
 
   if (result.coverageEnd) {
     lines.push(`The important end date in this scenario is ${formatDate(result.coverageEnd)}.`);
@@ -25,9 +25,7 @@ export function buildLocalExplanation(result: PlannerResult): string {
     lines.push(`The next detail that would sharpen this result is: ${result.followUpQuestions[0]}`);
   }
 
-  lines.push(
-    "This note uses only the deterministic rule result and the linked source findings already shown here."
-  );
+  lines.push("This note uses only the rule result and source-linked findings already shown here.");
 
   return lines.join("\n\n");
 }

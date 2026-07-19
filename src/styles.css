@@ -208,6 +208,31 @@ a {
   border-left-color: var(--blue);
 }
 
+.flow-note {
+  border: 1px solid var(--line);
+  border-left: 5px solid var(--amber);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+}
+
+.flow-note.danger {
+  background: var(--red-bg);
+  border-left-color: var(--red);
+}
+
+.flow-note strong {
+  font-size: 14px;
+}
+
+.flow-note p {
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0;
+}
+
 .step-kicker {
   color: var(--blue);
   font-size: 11px;
@@ -265,6 +290,29 @@ a:focus-visible {
   display: grid;
   gap: 6px;
   grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+}
+
+.needs-answer .segmented,
+.needs-answer select {
+  animation: answerPulse 1.8s ease-in-out infinite;
+  border-radius: var(--radius);
+}
+
+.answer-prompt {
+  color: var(--amber);
+  font-size: 12px;
+  font-weight: 720;
+}
+
+@keyframes answerPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(154, 100, 16, 0.2);
+  }
+
+  50% {
+    box-shadow: 0 0 0 4px rgba(154, 100, 16, 0.12);
+  }
 }
 
 .segmented button {

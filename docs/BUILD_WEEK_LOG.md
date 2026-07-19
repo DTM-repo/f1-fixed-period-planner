@@ -429,3 +429,36 @@ Each entry should capture:
 - Rewired Calculate Results to call `/api/explain` with the base result and optional travel comparison result, and tightened the OpenAI prompt to produce direct, non-markdown advisement copy.
 - Added deterministic source-backed graduate/undergraduate program-level findings so generated advisement has relevant rule support.
 - Reworked the timeline cards into a more horizontal, visual layout on desktop while keeping mobile responsive.
+
+### Contradiction Guardrails, CPT, and Advisor Voice Pass
+
+**Research**
+
+- Rechecked the Federal Register regulatory text for school/program changes. The final rule text says graduate-level F-1 students may not change educational objectives during the program and may not transfer unless SEVP authorizes an extenuating-circumstances exception.
+- Rechecked Federal Register CPT discussion. DHS declined to eliminate Day One CPT or otherwise change substantive CPT eligibility in this rule. The important new app-facing issue is extension timing: a timely extension filed before the F-1 period ends can allow already-authorized CPT/employment to continue while the extension is pending for up to 240 days, while filing only during the departure period does not allow CPT/employment to continue or begin until approval.
+- Rechecked source-link behavior. Federal Register does not expose clean subsection URLs for every CFR paragraph, so source chips now use browser text-fragment links that point as close as possible to the relevant public text.
+
+**Decisions**
+
+- Contradictory answers must stop calculation before the AI advisement layer. Example: answering that you will not be an F-1 student in the United States on September 15, 2026 but entering on August 20, 2026 cannot produce an incoming fixed-period report.
+- No segmented question should look pre-selected. Default `unknown` values are internal only; the UI should show a pulsing prompt until the student or an applied AI fact actually answers the question.
+- The future voice-first UI should eventually update the “How this affects you” cards live as the student speaks, then offer a “Make changes” path that opens the same structured controls. This session added underlying safety logic, not the final sparse voice interface.
+- CPT should not be a dead switch. If the student is thinking about CPT, the app should surface the Day One CPT/non-elimination point and the pending extension timing issue.
+- Use `gpt-5.6-sol` as the default model for the final narrative advisement report unless an environment variable explicitly overrides it. The report should read like a careful international student advisor, not like a rules-engine trace.
+
+**Codex Assistance**
+
+- Added a deterministic contradiction result for future-student answers that conflict with an entry date on or before September 15, 2026.
+- Disabled “Calculate results” when the deterministic engine finds a contradiction, preventing OpenAI from writing a confident report on impossible facts.
+- Added source-backed CPT findings and live impact cards, including the 240-day pending-extension point and the departure-period limitation.
+- Added `answeredFields` handling to segmented/select controls so `unknown` is not visually selected unless the student actually chose it.
+- Hid contradiction timelines and early unknown-date future timelines so visual results only appear when the facts support them.
+- Tightened `/api/explain` instructions to require direct `you/your` advisor language, ban internal phrases like “tested entry,” and treat the internal `reentryDate` as an expected first entry date for incoming students.
+- Added direct source-chip links for fixed admissions, D/S transition presence, 30-day F-1 period, graduate restrictions, and CPT using Federal Register text fragments.
+- Verified with 23 Vitest engine tests, production build, browser interaction against the contradiction path, and a live Netlify Dev `/api/explain` smoke test returning `gpt-5.6-sol`.
+
+**Open Questions**
+
+- Decide how much source-chip linking belongs on the live cards versus the details drawer once the final UI package lands.
+- Add a richer voice-first architecture where interim speech extraction updates understood facts/cards in real time without requiring a separate “Draft facts” button.
+- Add a better CPT sub-flow if the user needs actual CPT start/end timing, employer authorization, or pending-extension status checked.

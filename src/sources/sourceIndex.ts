@@ -8,12 +8,15 @@ export interface SourceReference {
   lastVerified: string;
 }
 
+const FEDERAL_REGISTER_RULE =
+  "https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant";
+
 export const SOURCE_INDEX: Record<string, SourceReference> = {
   "FR-2026-FINAL-RULE": {
     id: "FR-2026-FINAL-RULE",
     title: "Establishing a Fixed Time Period of Admission and an Extension of Stay Procedure for Nonimmigrant Academic Students, Exchange Visitors, and Representatives of Foreign Information Media",
     locator: "Federal Register final rule, DHS, published July 17, 2026",
-    url: "https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant",
+    url: FEDERAL_REGISTER_RULE,
     published: "2026-07-17",
     effective: "2026-09-15",
     lastVerified: "2026-07-19"
@@ -22,49 +25,56 @@ export const SOURCE_INDEX: Record<string, SourceReference> = {
     id: "8CFR-214-1-A4",
     title: "8 CFR 214.1(a)(4), fixed period of admission",
     locator: "Final rule regulatory text for fixed admissions after the effective date",
-    url: "https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant",
+    url: `${FEDERAL_REGISTER_RULE}#:~:text=may%20be%20admitted%20for%20the%20length%20of%20time%20as%20indicated%20by%20the%20program%20end%20date`,
     lastVerified: "2026-07-19"
   },
   "8CFR-214-1-M1": {
     id: "8CFR-214-1-M1",
     title: "8 CFR 214.1(m)(1), transition treatment for D/S admissions",
     locator: "Final rule transition provisions for F and J nonimmigrants admitted for duration of status",
-    url: "https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant",
+    url: `${FEDERAL_REGISTER_RULE}#:~:text=present%20in%20the%20United%20States%20on%20the%20final%20rule's%20effective%20date`,
     lastVerified: "2026-07-19"
   },
   "8CFR-214-1-M1-OPT": {
     id: "8CFR-214-1-M1-OPT",
     title: "8 CFR 214.1(m)(1)(i)-(ii), transition OPT/STEM OPT filing treatment",
     locator: "Final rule transition provisions for F-1 post-completion OPT and STEM OPT filings",
-    url: "https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant",
+    url: `${FEDERAL_REGISTER_RULE}#:~:text=Pending%20employment%20authorization%20applications%20with%20USCIS%20on%20September%2015%2C%202026`,
     lastVerified: "2026-07-19"
   },
   "8CFR-214-1-C8": {
     id: "8CFR-214-1-C8",
     title: "8 CFR 214.1(c)(8), travel while extension request is pending",
     locator: "Final rule pending extension and departure provisions",
-    url: "https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant",
+    url: `${FEDERAL_REGISTER_RULE}#:~:text=travel%20while%20an%20extension%20of%20stay%20request%20is%20pending`,
     lastVerified: "2026-07-19"
   },
   "8CFR-214-2-F11": {
     id: "8CFR-214-2-F11",
     title: "8 CFR 214.2(f)(11), F-1 practical training extension-of-stay mechanics",
     locator: "Final rule updates for OPT/STEM OPT extension-of-stay filing context",
-    url: "https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant",
+    url: `${FEDERAL_REGISTER_RULE}#:~:text=practical%20training%20following%20completion%20of%20studies`,
     lastVerified: "2026-07-19"
   },
   "8CFR-214-2-F5V": {
     id: "8CFR-214-2-F5V",
     title: "8 CFR 214.2(f)(5)(v), F-1 period of preparation for departure",
     locator: "Final rule fixed-period F-1 30-day departure/maintain-status period",
-    url: "https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant",
+    url: `${FEDERAL_REGISTER_RULE}#:~:text=30%20days%20from%20the%20end%20date%20of%20the%20study%20or%20training`,
     lastVerified: "2026-07-19"
   },
   "8CFR-214-2-F5II": {
     id: "8CFR-214-2-F5II",
     title: "8 CFR 214.2(f)(5)(ii), F-1 school transfer, program change, and education-level limits",
     locator: "Final rule rules for undergraduate first-year changes, graduate changes/transfers, and same/lower-level programs",
-    url: "https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant",
+    url: `${FEDERAL_REGISTER_RULE}#:~:text=graduate%20degree%20level%20or%20above%20may%20not%20change%20educational%20objectives`,
+    lastVerified: "2026-07-19"
+  },
+  "8CFR-214-2-F5VIII-CPT": {
+    id: "8CFR-214-2-F5VIII-CPT",
+    title: "8 CFR 214.2(f)(5)(viii), CPT and employment during a pending extension",
+    locator: "Final rule discussion of CPT, day-one CPT, and employment while an F-1 extension of stay is pending",
+    url: `${FEDERAL_REGISTER_RULE}#:~:text=continue%20engaging%20in%20CPT`,
     lastVerified: "2026-07-19"
   },
   "USCIS-G1055-I539": {

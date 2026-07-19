@@ -68,6 +68,23 @@ describe("calculateScenario", () => {
     expect(findingIds(result)).toContain("fixed-extension-needed");
   });
 
+  it("stops when a future-student answer contradicts an entry date before the rule starts", () => {
+    const result = calculateScenario({
+      ...baseTransitionScenario,
+      startingPosition: "prospective_outside_us",
+      admissionBasis: "fixed_period",
+      inUsOnEffectiveDate: "no",
+      maintainingStatusOnEffectiveDate: "unknown",
+      reentryDate: "2026-08-20",
+      currentProgramEndDate: "2032-05-20"
+    });
+
+    expect(result.status).toBe("manual");
+    expect(result.classification).toBe("manual_review");
+    expect(result.coverageEnd).toBeUndefined();
+    expect(findingIds(result)).toContain("future-entry-before-effective-date-contradiction");
+  });
+
   it("uses an entered I-94 admit-until date for a fixed-period branch", () => {
     const result = calculateScenario({
       ...baseTransitionScenario,
@@ -307,6 +324,17 @@ describe("calculateScenario", () => {
 
     expect(result.status).toBe("risk");
     expect(findingIds(result)).toContain("same-or-lower-next-program");
+  });
+
+  it("explains CPT extension timing instead of treating the CPT button as a no-op", () => {
+    const result = calculateScenario({
+      ...baseTransitionScenario,
+      cptPlan: "unknown"
+    });
+
+    expect(result.status).toBe("manual");
+    expect(findingIds(result)).toContain("cpt-timing-needed");
+    expect(result.findings.find((finding) => finding.id === "cpt-timing-needed")?.detail).toContain("Day One CPT");
   });
 
   it("gives fixed-period context while asking for OPT/STEM return facts", () => {
