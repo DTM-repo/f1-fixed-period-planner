@@ -144,6 +144,20 @@ describe("calculateScenario", () => {
     expect(result.followUpQuestions.length).toBeGreaterThan(0);
   });
 
+  it("does not apply the old D/S transition path when the I-20/EAD date ends before the rule starts", () => {
+    const result = calculateScenario({
+      ...baseTransitionScenario,
+      programEndOnEffectiveDate: "2026-05-31",
+      currentProgramEndDate: "2026-05-31"
+    });
+
+    expect(result.status).toBe("manual");
+    expect(result.classification).toBe("manual_review");
+    expect(result.coverageEnd).toBeUndefined();
+    expect(findingIds(result)).toContain("document-ends-before-effective-date");
+    expect(result.followUpQuestions[0]).toContain("September 15, 2026");
+  });
+
   it("normalizes month-name date input before calculating", () => {
     const result = calculateScenario({
       ...baseTransitionScenario,

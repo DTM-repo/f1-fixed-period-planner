@@ -5,11 +5,15 @@ export const DEFAULT_SCENARIO: StudentScenario = {
   admissionBasis: "unknown",
   inUsOnEffectiveDate: "unknown",
   maintainingStatusOnEffectiveDate: "unknown",
+  optIntent: "unknown",
   optStage: "none",
-  travelPosture: "none",
+  travelPosture: "unknown",
   reentryBasis: "unknown",
   pendingExtensionOnDeparture: "no",
   transferOrProgramChange: "no",
+  schoolTransferPlan: "unknown",
+  academicProgramChangePlan: "unknown",
+  returningAfterEffectiveDate: "unknown",
   cptPlan: "none"
 };
 

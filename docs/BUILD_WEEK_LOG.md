@@ -298,3 +298,26 @@ Each entry should capture:
 - Added live impact cards and a visual branch timeline surface above the detailed findings.
 - Added `i94AdmitUntilDate` to the scenario model, date normalization, OpenAI intake schema, deterministic fixed-period branch, and tests.
 - Hid demo scenarios in a testing drawer and renamed them with student-readable labels.
+
+### Student-Language Flow Correction
+
+**Research**
+
+- Rechecked the current-student flow against David's live testing notes: date entry, D/S wording, early I-20 end dates, travel order, OPT/STEM question shape, transfer/program-change separation, and timeline readability.
+
+**Decisions**
+
+- Fix date controls so partial four-digit year entry does not rewrite or clear the field.
+- Remove visible student-facing phrases like "grandfathered," "stay-put," "calculator treats," and markdown-style explanation output.
+- Ask only "Will you be inside the United States on September 15, 2026?" instead of asking students whether they expect to follow F-1 rules.
+- Split travel into two questions: leaving the U.S., then returning after September 15.
+- Replace the OPT dropdown with plain questions: post-completion OPT/STEM intent, regular vs STEM, and filing/approval status. Pre-completion OPT stays out of the main path unless a specific rule impact is identified.
+- Split transfer and academic program change into separate questions.
+- Hide internal findings/timeline/source output in a closed calculation-details drawer. The main surface should be plain-language result and clearly labeled date events.
+
+**Codex Assistance**
+
+- Fixed the Month/Day/Year DateField bug by waiting for a complete valid four-digit year before committing the date.
+- Added a deterministic guard for I-20/EAD dates ending before September 15, 2026, so the engine asks what F-1 basis exists on the rule date instead of showing a misleading old-rule result.
+- Rebuilt progressive reveal logic so travel, OPT/STEM, and school/CPT questions appear only after earlier answers make them relevant.
+- Replaced the branch-bar timeline with labeled event timelines showing dates and meanings directly.

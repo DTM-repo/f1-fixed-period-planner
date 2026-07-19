@@ -526,6 +526,90 @@ a:focus-visible {
   grid-template-columns: 1fr 1fr 1fr;
 }
 
+.student-timelines {
+  display: grid;
+  gap: 12px;
+}
+
+.student-timeline {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.student-timeline h3 {
+  font-size: 15px;
+  margin: 0 0 4px;
+}
+
+.student-timeline > div > p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0;
+}
+
+.student-timeline ol {
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.student-timeline li {
+  border-left: 5px solid var(--blue);
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(110px, 0.3fr) minmax(0, 1fr);
+  padding: 2px 0 2px 12px;
+}
+
+.student-timeline li.good {
+  border-left-color: var(--green);
+}
+
+.student-timeline li.warning,
+.student-timeline li.question {
+  border-left-color: var(--amber);
+}
+
+.student-timeline li.danger {
+  border-left-color: var(--red);
+}
+
+.student-timeline li > span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.student-timeline strong {
+  display: block;
+  font-size: 14px;
+}
+
+.student-timeline li p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 3px 0 0;
+}
+
+.technical-details summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.technical-grid {
+  display: grid;
+  gap: 16px;
+  margin-top: 14px;
+}
+
 .outcome {
   border-left: 6px solid var(--blue);
   border-radius: var(--radius);
@@ -781,5 +865,9 @@ a:focus-visible {
     align-items: start;
     flex-direction: column;
     gap: 3px;
+  }
+
+  .student-timeline li {
+    grid-template-columns: 1fr;
   }
 }

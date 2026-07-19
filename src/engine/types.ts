@@ -48,6 +48,7 @@ export interface StudentScenario {
   currentProgramEndDate?: DateString;
   eadEndOnEffectiveDate?: DateString;
   currentEadEndDate?: DateString;
+  optIntent?: YesNoUnknown;
   optStage: OptStage;
   optFilingDate?: DateString;
   travelPosture: TravelPosture;
@@ -55,6 +56,9 @@ export interface StudentScenario {
   reentryBasis: ReentryBasis;
   pendingExtensionOnDeparture: YesNoUnknown;
   transferOrProgramChange: YesNoUnknown;
+  schoolTransferPlan?: YesNoUnknown;
+  academicProgramChangePlan?: YesNoUnknown;
+  returningAfterEffectiveDate?: YesNoUnknown;
   cptPlan: CptPlan;
   narrative?: string;
   effectiveDate?: DateString;

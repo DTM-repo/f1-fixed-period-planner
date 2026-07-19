@@ -6,18 +6,15 @@ import {
   HelpCircle,
   Mic,
   RefreshCw,
-  Send,
   Sparkles,
   Square,
   Wand2
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ExplanationResponse } from "./ai/explanationPayload";
 import type { IntakeCandidateFact, IntakeExtractionResponse, IntakeFactField } from "./ai/intakePayload";
-import { buildLocalExplanation } from "./ai/localExplanation";
-import { DEMO_SCENARIOS, DEFAULT_SCENARIO } from "./content/demoScenarios";
-import { calculateScenario } from "./engine/calculateScenario";
-import { formatDate, isValidDateString } from "./engine/dateMath";
+import { DEFAULT_SCENARIO } from "./content/demoScenarios";
+import { calculateScenario, DEFAULT_EFFECTIVE_DATE } from "./engine/calculateScenario";
+import { compareDates, formatDate, isValidDateString } from "./engine/dateMath";
 import type {
   AdmissionBasis,
   CptPlan,
@@ -70,7 +67,7 @@ declare global {
 const yesNoOptions: Array<{ value: YesNoUnknown; label: string }> = [
   { value: "yes", label: "Yes" },
   { value: "no", label: "No" },
-  { value: "unknown", label: "Unknown" }
+  { value: "unknown", label: "I do not know yet" }
 ];
 
 const startingPositionLabels: Record<StartingPosition, string> = {
@@ -251,11 +248,12 @@ function dateValueFromParts(parts: DateParts): string | undefined {
   if (empty) {
     return undefined;
   }
-  if (!parts.month || !parts.day || !parts.year) {
+  if (!parts.month || !parts.day || !/^\d{4}$/.test(parts.year)) {
     return undefined;
   }
 
-  return `${parts.year.padStart(4, "0")}-${parts.month.padStart(2, "0")}-${parts.day.padStart(2, "0")}`;
+  const value = `${parts.year}-${parts.month.padStart(2, "0")}-${parts.day.padStart(2, "0")}`;
+  return isValidDateString(value) ? value : undefined;
 }
 
 function SelectField<T extends string>({
@@ -302,10 +300,15 @@ function DateField({
     const nextParts = { ...parts, [part]: nextValue };
     setParts(nextParts);
 
-    const complete = Boolean(nextParts.month && nextParts.day && nextParts.year);
+    const complete = Boolean(nextParts.month && nextParts.day && /^\d{4}$/.test(nextParts.year));
     const empty = !nextParts.month && !nextParts.day && !nextParts.year;
-    if (complete || empty) {
-      onChange(dateValueFromParts(nextParts));
+    if (empty) {
+      onChange(undefined);
+    } else if (complete) {
+      const nextValue = dateValueFromParts(nextParts);
+      if (nextValue) {
+        onChange(nextValue);
+      }
     }
   }
 
@@ -395,6 +398,37 @@ interface ImpactCard {
   tone: ImpactTone;
 }
 
+interface StudentOutcome {
+  eyebrow: string;
+  title: string;
+  detail: string;
+  tone: "good" | "manual" | "warning";
+}
+
+interface StudentTimelineEvent {
+  label: string;
+  date?: string;
+  detail: string;
+  tone: ImpactTone;
+}
+
+interface StudentTimeline {
+  title: string;
+  detail: string;
+  events: StudentTimelineEvent[];
+}
+
+const yesNoOnlyOptions: Array<{ value: YesNoUnknown; label: string }> = [
+  { value: "no", label: "No" },
+  { value: "yes", label: "Yes" }
+];
+
+const planningOptions: Array<{ value: YesNoUnknown; label: string }> = [
+  { value: "no", label: "No" },
+  { value: "yes", label: "Yes" },
+  { value: "unknown", label: "I do not know yet" }
+];
+
 const pathOptions: Array<{ value: StartingPosition; label: string }> = [
   { value: "current_ds_inside_us", label: "Yes, before Sept. 15" },
   { value: "prospective_outside_us", label: "No, after Sept. 15" },
@@ -410,7 +444,27 @@ const i94Options: Array<{ value: AdmissionBasis; label: string }> = [
 const travelDecisionOptions: Array<{ value: TravelPosture; label: string }> = [
   { value: "none", label: "No" },
   { value: "planned", label: "Yes" },
-  { value: "unknown", label: "Not sure" }
+  { value: "unknown", label: "I do not know yet" }
+];
+
+const returnAfterRuleOptions: Array<{ value: YesNoUnknown; label: string }> = [
+  { value: "yes", label: "Yes" },
+  { value: "no", label: "No" },
+  { value: "unknown", label: "I do not know yet" }
+];
+
+type OptKind = "regular" | "stem";
+type OptFilingStatus = "not_filed" | "pending" | "approved";
+
+const optKindOptions: Array<{ value: OptKind; label: string }> = [
+  { value: "regular", label: "Regular OPT" },
+  { value: "stem", label: "STEM OPT" }
+];
+
+const optStatusOptions: Array<{ value: OptFilingStatus; label: string }> = [
+  { value: "not_filed", label: "Not filed yet" },
+  { value: "pending", label: "Filed, waiting" },
+  { value: "approved", label: "Approved" }
 ];
 
 function isCurrentTrack(scenario: StudentScenario): boolean {
@@ -429,12 +483,140 @@ function hasApprovedOpt(stage: OptStage): boolean {
   return stage === "post_completion_approved" || stage === "stem_approved";
 }
 
+function programEndBeforeRuleStarts(scenario: StudentScenario): boolean {
+  return Boolean(scenario.programEndOnEffectiveDate && compareDates(scenario.programEndOnEffectiveDate, DEFAULT_EFFECTIVE_DATE) < 0);
+}
+
+function optKindFromStage(stage: OptStage): OptKind {
+  return stage.startsWith("stem") ? "stem" : "regular";
+}
+
+function optStatusFromStage(stage: OptStage): OptFilingStatus {
+  if (stage.endsWith("pending")) {
+    return "pending";
+  }
+  if (stage.endsWith("approved")) {
+    return "approved";
+  }
+  return "not_filed";
+}
+
+function optStageFromParts(kind: OptKind, status: OptFilingStatus): OptStage {
+  if (kind === "stem") {
+    return status === "approved" ? "stem_approved" : status === "pending" ? "stem_pending" : "stem_not_filed";
+  }
+
+  return status === "approved" ? "post_completion_approved" : status === "pending" ? "post_completion_pending" : "post_completion_not_filed";
+}
+
+function combinePlanAnswers(first?: YesNoUnknown, second?: YesNoUnknown): YesNoUnknown {
+  if (first === "yes" || second === "yes") {
+    return "yes";
+  }
+  if (first === "unknown" || second === "unknown") {
+    return "unknown";
+  }
+  return "no";
+}
+
+function sortEvents(events: StudentTimelineEvent[]): StudentTimelineEvent[] {
+  return [...events].sort((left, right) => {
+    if (!left.date && !right.date) {
+      return 0;
+    }
+    if (!left.date) {
+      return 1;
+    }
+    if (!right.date) {
+      return -1;
+    }
+    return compareDates(left.date, right.date);
+  });
+}
+
+function buildStudentOutcome(scenario: StudentScenario, result: PlannerView, travelResult: PlannerView | null): StudentOutcome {
+  if (scenario.startingPosition === "unknown") {
+    return {
+      eyebrow: "Start here",
+      title: "Answer one question to see what changes.",
+      detail: "The biggest split is whether F-1 status starts before or after September 15, 2026.",
+      tone: "manual"
+    };
+  }
+
+  if (isCurrentTrack(scenario)) {
+    if (!scenario.programEndOnEffectiveDate) {
+      return {
+        eyebrow: "Current F-1 student",
+        title: "Enter the end date on your current I-20.",
+        detail: "That date is the first date we need before showing a reliable timeline.",
+        tone: "manual"
+      };
+    }
+
+    if (programEndBeforeRuleStarts(scenario) && scenario.optStage === "none" && !scenario.eadEndOnEffectiveDate) {
+      return {
+        eyebrow: "Before the new rule starts",
+        title: "Your I-20 ends before September 15, 2026.",
+        detail:
+          "This I-20 alone does not show that you will still be in F-1 status when the new rule starts. Tell us whether you will have OPT, STEM OPT, or a later I-20.",
+        tone: "manual"
+      };
+    }
+
+    if (result.coverageEnd && result.latestDepartureDate) {
+      return {
+        eyebrow: "If you do not travel",
+        title: `Old D/S rules may last until ${formatDate(result.coverageEnd)}.`,
+        detail: `After that date, the F-1 period to leave the U.S. or take another immigration step runs through ${formatDate(
+          result.latestDepartureDate
+        )}.`,
+        tone: result.status === "ok" ? "good" : result.status === "manual" ? "manual" : "warning"
+      };
+    }
+
+    return {
+      eyebrow: "Need one more answer",
+      title: "We can show the effect once the missing date is clear.",
+      detail: result.followUpQuestions[0] ?? "Add the next answer in the question flow.",
+      tone: "manual"
+    };
+  }
+
+  if (!scenario.reentryDate) {
+    return {
+      eyebrow: "Future F-1 student",
+      title: "Enter the date you expect to enter the U.S.",
+      detail: "For students who enter after the rule starts, the U.S. entry date starts the fixed-date clock.",
+      tone: "manual"
+    };
+  }
+
+  if (!scenario.currentProgramEndDate) {
+    return {
+      eyebrow: "Future F-1 student",
+      title: "Enter the program end date on the I-20.",
+      detail: "The new rule compares that date with four years from U.S. entry.",
+      tone: "manual"
+    };
+  }
+
+  return {
+    eyebrow: "New fixed-date system",
+    title: result.coverageEnd ? `Your first fixed F-1 period may end on ${formatDate(result.coverageEnd)}.` : "One more date is needed.",
+    detail: result.latestDepartureDate
+      ? `After that, the 30-day period to leave the U.S. or take another immigration step runs through ${formatDate(result.latestDepartureDate)}.`
+      : "Add the missing date to see the full timeline.",
+    tone: result.status === "ok" ? "good" : result.status === "manual" ? "manual" : "warning"
+  };
+}
+
 function buildImpactCards(scenario: StudentScenario, result: PlannerView, travelResult: PlannerView | null): ImpactCard[] {
   if (scenario.startingPosition === "unknown") {
     return [
       {
-        title: "Start with the timing split",
-        detail: "The biggest impact changes depending on whether F-1 status is in place before September 15, 2026 or starts after that date.",
+        title: "Before or after September 15?",
+        detail: "That one fact decides whether we look first at the old D/S rules or the new fixed-date system.",
         tone: "question"
       }
     ];
@@ -443,60 +625,67 @@ function buildImpactCards(scenario: StudentScenario, result: PlannerView, travel
   if (isCurrentTrack(scenario)) {
     const cards: ImpactCard[] = [
       {
-        title: "Possible grandfathering path",
+        title: "Check your I-94",
         detail:
-          "For this path, the app assumes the usual current-student I-94 answer: D/S. The student can correct that under “what else could affect this.”",
+          "Most F-1 I-94 records before this change say “D/S,” which means there is no printed end date. If yours has an end date, change it in the I-94 question.",
         tone: "info"
       }
     ];
 
     if (!scenario.programEndOnEffectiveDate) {
       cards.push({
-        title: "Next date controls the first result",
-        detail: "The I-20 end date lets the app show the stay-put transition timeline instead of a general warning.",
+        title: "I-20 end date comes first",
+        detail: "The date on your current I-20 tells us whether the new rule reaches your current study plan.",
+        tone: "question"
+      });
+    } else if (programEndBeforeRuleStarts(scenario) && scenario.optStage === "none" && !scenario.eadEndOnEffectiveDate) {
+      cards.push({
+        title: "This I-20 ends before the new rule starts",
+        detail:
+          "If your F-1 status also ends before September 15, this new rule may not change that timeline. If you will have OPT, STEM OPT, or a later I-20, answer those next.",
         tone: "question"
       });
     } else if (result.coverageEnd && result.latestDepartureDate) {
       cards.push({
-        title: "Stay-put timeline is now visible",
-        detail: `With the facts entered so far, the tested status/admission point is ${formatDate(
+        title: "If you do not travel",
+        detail: `The old D/S rules may cover this path until ${formatDate(
           result.coverageEnd
-        )}, followed by the F-1 departure period through ${formatDate(result.latestDepartureDate)}.`,
+        )}. The period after that date ends ${formatDate(result.latestDepartureDate)}.`,
         tone: result.status === "ok" ? "good" : result.status === "manual" ? "question" : "warning"
       });
     }
 
     if (hasTravelPlan(scenario)) {
       cards.push({
-        title: travelResult?.coverageEnd ? "Travel creates a second branch" : "Travel needs a return date",
+        title: travelResult?.coverageEnd ? "Travel creates a second timeline" : "Travel needs a return date",
         detail: travelResult?.coverageEnd
-          ? `A regular return on ${formatDate(scenario.reentryDate)} tests a fixed-period branch through ${formatDate(
+          ? `If you return on ${formatDate(scenario.reentryDate)}, the new fixed-date system may run through ${formatDate(
               travelResult.coverageEnd
             )}, with 30 days after that.`
-          : "For travel, the return/admission date is the date that starts the new fixed-period comparison.",
+          : "The return date matters because coming back after September 15 can start a new fixed-date I-94 period.",
         tone: travelResult?.coverageEnd ? "info" : "question"
       });
     } else {
       cards.push({
-        title: "Travel is the big fork",
-        detail: "If the student stays in the U.S., the transition branch may remain intact. Leaving and returning after the rule date can create a fixed-period branch.",
+        title: "Travel can change the answer",
+        detail: "If you leave the U.S. and come back after September 15, your return may start a new fixed-date I-94 period.",
         tone: "info"
       });
     }
 
     if (needsOptDate(scenario.optStage)) {
       cards.push({
-        title: "OPT/STEM timing matters",
+        title: "OPT or STEM OPT timing matters",
         detail:
-          "For this rule, the filing date, pending/approved posture, EAD dates, and travel timing matter more than the hoped-for OPT start date alone.",
+          "The important facts are whether it is regular OPT or STEM OPT, whether you filed, whether it is approved, the filing date, EAD dates, and travel timing.",
         tone: "warning"
       });
     }
 
     if (scenario.transferOrProgramChange === "yes") {
       cards.push({
-        title: "Later school or program changes may outgrow the transition period",
-        detail: "The app compares the I-20 date in place on September 15 with the later program date being tested.",
+        title: "A transfer or new program can change the timeline",
+        detail: "We need the I-20 end date for the new school or new program before saying whether an extension may be needed.",
         tone: "warning"
       });
     }
@@ -508,7 +697,7 @@ function buildImpactCards(scenario: StudentScenario, result: PlannerView, travel
     {
       title: "Fixed-period admission path",
       detail:
-        "Students who first enter F-1 after September 15, 2026 are tested under a fixed admission period tied to the I-20 program end, capped at four years, plus 30 days.",
+        "If you first enter F-1 after September 15, 2026, your I-94 will likely have an end date. It is tied to the I-20 program end, but cannot be more than four years from entry.",
       tone: "info"
     }
   ];
@@ -516,7 +705,7 @@ function buildImpactCards(scenario: StudentScenario, result: PlannerView, travel
   if (!scenario.reentryDate) {
     cards.push({
       title: "Entry date starts the clock",
-      detail: "Add the expected U.S. entry date so the app can place the four-year cap on the timeline.",
+      detail: "Add the expected U.S. entry date so we can place the four-year limit.",
       tone: "question"
     });
   }
@@ -524,13 +713,13 @@ function buildImpactCards(scenario: StudentScenario, result: PlannerView, travel
   if (!scenario.currentProgramEndDate) {
     cards.push({
       title: "I-20 end date controls the comparison",
-      detail: "The fixed-period result compares the I-20 end date with four years from admission.",
+      detail: "The new rule compares the I-20 end date with four years from the date you enter.",
       tone: "question"
     });
   } else if (result.coverageEnd && result.latestDepartureDate) {
     cards.push({
-      title: "Fixed-period date is now visible",
-      detail: `With the facts entered so far, the tested admit-until point is ${formatDate(
+      title: "Your first I-94 end date is now visible",
+      detail: `With the answers so far, the fixed-date period may end ${formatDate(
         result.coverageEnd
       )}, followed by 30 days through ${formatDate(result.latestDepartureDate)}.`,
       tone: result.status === "ok" ? "good" : result.status === "manual" ? "question" : "warning"
@@ -538,9 +727,9 @@ function buildImpactCards(scenario: StudentScenario, result: PlannerView, travel
   }
 
   cards.push({
-    title: "Transfers, program changes, and change of status need their own branch",
+    title: "Transfers and program changes need separate questions",
     detail:
-      "This prototype flags those issues as possible rule impacts while we finish the dedicated question path for new students.",
+      "The next version will break out first-year transfer limits, graduate program changes, and change of status inside the U.S.",
     tone: "warning"
   });
 
@@ -560,7 +749,118 @@ function ImpactCards({ cards }: { cards: ImpactCard[] }) {
   );
 }
 
-function BranchTimeline({
+function buildStudentTimelines(scenario: StudentScenario, result: PlannerView, travelResult: PlannerView | null): StudentTimeline[] {
+  const timelines: StudentTimeline[] = [];
+
+  if (isCurrentTrack(scenario) && scenario.programEndOnEffectiveDate) {
+    const events: StudentTimelineEvent[] = [
+      {
+        label: "I-20 ends",
+        date: scenario.programEndOnEffectiveDate,
+        detail: "The program end date printed on your current I-20.",
+        tone: programEndBeforeRuleStarts(scenario) ? "warning" : "info"
+      },
+      {
+        label: "New rule starts",
+        date: result.effectiveDate,
+        detail: "This is the date when the new fixed-date system starts.",
+        tone: "info"
+      }
+    ];
+
+    if (result.coverageEnd) {
+      events.push({
+        label: programEndBeforeRuleStarts(scenario) ? "Current I-20 path ends" : "Old D/S period ends",
+        date: result.coverageEnd,
+        detail: programEndBeforeRuleStarts(scenario)
+          ? "This is before the new rule starts. We need to know what F-1 basis you will have on September 15."
+          : "This is the last day from the current I-20/EAD dates, unless another rule or extension changes it.",
+        tone: programEndBeforeRuleStarts(scenario) ? "warning" : "good"
+      });
+    }
+
+    if (result.latestDepartureDate) {
+      events.push({
+        label: "60-day period ends",
+        date: result.latestDepartureDate,
+        detail: "This is time to leave the U.S. or take another immigration step. It is not extra study or work time.",
+        tone: programEndBeforeRuleStarts(scenario) ? "warning" : "info"
+      });
+    }
+
+    timelines.push({
+      title: "If you do not leave the U.S.",
+      detail: programEndBeforeRuleStarts(scenario)
+        ? "This timeline explains why an I-20 ending before September 15 needs another F-1 fact."
+        : "This is the current-student path if you stay in the U.S. after the new rule starts.",
+      events: sortEvents(events)
+    });
+  }
+
+  if (isCurrentTrack(scenario) && hasTravelPlan(scenario) && scenario.returningAfterEffectiveDate === "yes") {
+    timelines.push({
+      title: "If you leave and return after September 15",
+      detail: "Coming back after the rule starts can create a new fixed-date I-94 period.",
+      events: sortEvents([
+        {
+          label: "You return to the U.S.",
+          date: scenario.reentryDate,
+          detail: "This return date starts the travel comparison.",
+          tone: scenario.reentryDate ? "info" : "question"
+        },
+        {
+          label: "New fixed period may end",
+          date: travelResult?.coverageEnd,
+          detail: "For a regular F-1 return, this is based on the I-20 end date or four years from return, whichever comes first.",
+          tone: travelResult?.coverageEnd ? "warning" : "question"
+        },
+        {
+          label: "30-day period ends",
+          date: travelResult?.latestDepartureDate,
+          detail: "For the new fixed-date system, the period after the fixed end date is 30 days.",
+          tone: travelResult?.latestDepartureDate ? "info" : "question"
+        }
+      ])
+    });
+  }
+
+  if (scenario.startingPosition === "prospective_outside_us") {
+    timelines.push({
+      title: "Your first F-1 entry after the new rule starts",
+      detail: "This is the new fixed-date system for future F-1 students.",
+      events: sortEvents([
+        {
+          label: "You enter the U.S.",
+          date: scenario.reentryDate,
+          detail: "This starts the fixed-date clock.",
+          tone: scenario.reentryDate ? "info" : "question"
+        },
+        {
+          label: "I-20 program ends",
+          date: scenario.currentProgramEndDate,
+          detail: "The program end date on the I-20 used for entry.",
+          tone: scenario.currentProgramEndDate ? "info" : "question"
+        },
+        {
+          label: "Fixed period may end",
+          date: result.coverageEnd,
+          detail: "This is the I-20 end date or four years from entry, whichever comes first.",
+          tone: result.coverageEnd ? "warning" : "question"
+        },
+        {
+          label: "30-day period ends",
+          date: result.latestDepartureDate,
+          detail: "This is time to leave the U.S. or take another immigration step.",
+          tone: result.latestDepartureDate ? "info" : "question"
+        }
+      ])
+    });
+  }
+
+  return timelines;
+}
+
+function StudentTimelines({
   scenario,
   result,
   travelResult
@@ -569,70 +869,30 @@ function BranchTimeline({
   result: PlannerView;
   travelResult: PlannerView | null;
 }) {
-  const rows: Array<{
-    label: string;
-    start?: string;
-    activityEnd?: string;
-    finalEnd?: string;
-    tone: ImpactTone;
-    note: string;
-  }> = [];
-
-  if (isCurrentTrack(scenario)) {
-    rows.push({
-      label: "If you stay in the U.S.",
-      start: result.effectiveDate,
-      activityEnd: result.coverageEnd,
-      finalEnd: result.latestDepartureDate,
-      tone: result.status === "ok" ? "good" : result.status === "manual" ? "question" : "warning",
-      note: "Transition path based on the September 15 facts."
-    });
-
-    if (hasTravelPlan(scenario)) {
-      rows.push({
-        label: "If you leave and return",
-        start: scenario.reentryDate,
-        activityEnd: travelResult?.coverageEnd,
-        finalEnd: travelResult?.latestDepartureDate,
-        tone: travelResult?.status === "ok" ? "good" : travelResult ? "warning" : "question",
-        note: "Fixed-period comparison after return."
-      });
-    }
-  } else if (scenario.startingPosition === "prospective_outside_us") {
-    rows.push({
-      label: "First F-1 entry",
-      start: scenario.reentryDate ?? result.effectiveDate,
-      activityEnd: result.coverageEnd,
-      finalEnd: result.latestDepartureDate,
-      tone: result.status === "ok" ? "good" : result.status === "manual" ? "question" : "warning",
-      note: "Fixed-period admission path."
-    });
-  }
-
-  if (!rows.length) {
+  const timelines = buildStudentTimelines(scenario, result, travelResult);
+  if (!timelines.length) {
     return null;
   }
 
   return (
-    <div className="branch-timeline">
-      {rows.map((row) => (
-        <article key={row.label} className={`branch-row ${row.tone}`}>
-          <div className="branch-copy">
-            <strong>{row.label}</strong>
-            <span>{row.note}</span>
+    <div className="student-timelines">
+      {timelines.map((timeline) => (
+        <article key={timeline.title} className="student-timeline">
+          <div>
+            <h3>{timeline.title}</h3>
+            <p>{timeline.detail}</p>
           </div>
-          <div className="branch-track" aria-hidden="true">
-            <span className="branch-dot" />
-            <span className="branch-main" />
-            <span className="branch-dot" />
-            <span className="branch-grace" />
-            <span className="branch-dot end" />
-          </div>
-          <div className="branch-dates">
-            <span>{formatDate(row.start)}</span>
-            <span>{formatDate(row.activityEnd)}</span>
-            <span>{formatDate(row.finalEnd)}</span>
-          </div>
+          <ol>
+            {timeline.events.map((event) => (
+              <li key={`${event.label}-${event.date ?? "missing"}`} className={event.tone}>
+                <span>{formatDate(event.date)}</span>
+                <div>
+                  <strong>{event.label}</strong>
+                  <p>{event.detail}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
         </article>
       ))}
     </div>
@@ -646,8 +906,6 @@ export default function App() {
   const [draftNotice, setDraftNotice] = useState("");
   const [intakeExtraction, setIntakeExtraction] = useState<IntakeExtractionResponse | null>(null);
   const [intakeState, setIntakeState] = useState<"idle" | "loading" | "failed" | "ready">("idle");
-  const [aiExplanation, setAiExplanation] = useState<string>("");
-  const [aiState, setAiState] = useState<"idle" | "loading" | "failed" | "fallback" | "ready">("idle");
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const result = useMemo(() => calculateScenario(scenario), [scenario]);
   const travelResult = useMemo(() => {
@@ -664,9 +922,23 @@ export default function App() {
     });
   }, [scenario]);
   const impactCards = useMemo(() => buildImpactCards(scenario, result, travelResult), [scenario, result, travelResult]);
+  const studentOutcome = useMemo(() => buildStudentOutcome(scenario, result, travelResult), [scenario, result, travelResult]);
   const currentTrack = isCurrentTrack(scenario);
   const futureTrack = scenario.startingPosition === "prospective_outside_us";
   const pathChosen = scenario.startingPosition !== "unknown";
+  const septemberLocationAnswered = scenario.inUsOnEffectiveDate !== "unknown";
+  const travelAnswered =
+    scenario.travelPosture === "none" ||
+    (hasTravelPlan(scenario) &&
+      scenario.returningAfterEffectiveDate !== "unknown" &&
+      (scenario.returningAfterEffectiveDate !== "yes" || Boolean(scenario.reentryDate)));
+  const optReady = Boolean(
+    scenario.programEndOnEffectiveDate &&
+      septemberLocationAnswered &&
+      travelAnswered
+  );
+  const optAnswered = scenario.optIntent === "no" || scenario.optIntent === "yes";
+  const schoolPlanningReady = Boolean(optReady && optAnswered);
 
   function update<K extends keyof StudentScenario>(key: K, value: StudentScenario[K]) {
     setScenario((current) => ({ ...current, [key]: value }));
@@ -674,14 +946,10 @@ export default function App() {
       setIntakeExtraction(null);
       setIntakeState("idle");
     }
-    setAiExplanation("");
-    setAiState("idle");
   }
 
   function patchScenario(patch: Partial<StudentScenario>) {
     setScenario((current) => ({ ...current, ...patch }));
-    setAiExplanation("");
-    setAiState("idle");
   }
 
   function chooseStudentPath(value: StartingPosition) {
@@ -689,9 +957,15 @@ export default function App() {
       patchScenario({
         startingPosition: "current_ds_inside_us",
         admissionBasis: "duration_of_status",
-        inUsOnEffectiveDate: "yes",
-        maintainingStatusOnEffectiveDate: "yes",
-        i94AdmitUntilDate: undefined
+        inUsOnEffectiveDate: "unknown",
+        maintainingStatusOnEffectiveDate: "unknown",
+        i94AdmitUntilDate: undefined,
+        travelPosture: "unknown",
+        returningAfterEffectiveDate: "unknown",
+        optIntent: "unknown",
+        optStage: "none",
+        schoolTransferPlan: "unknown",
+        academicProgramChangePlan: "unknown"
       });
       return;
     }
@@ -704,7 +978,13 @@ export default function App() {
         maintainingStatusOnEffectiveDate: "unknown",
         programEndOnEffectiveDate: undefined,
         eadEndOnEffectiveDate: undefined,
-        pendingExtensionOnDeparture: "no"
+        pendingExtensionOnDeparture: "no",
+        returningAfterEffectiveDate: "unknown",
+        optIntent: "unknown",
+        optStage: "none",
+        travelPosture: "unknown",
+        schoolTransferPlan: "unknown",
+        academicProgramChangePlan: "unknown"
       });
       return;
     }
@@ -723,8 +1003,6 @@ export default function App() {
       programEndOnEffectiveDate: value,
       currentProgramEndDate: current.transferOrProgramChange === "yes" ? current.currentProgramEndDate : value
     }));
-    setAiExplanation("");
-    setAiState("idle");
   }
 
   function updateTransferOrProgramChange(value: YesNoUnknown) {
@@ -733,20 +1011,87 @@ export default function App() {
       transferOrProgramChange: value,
       currentProgramEndDate: value === "yes" ? current.currentProgramEndDate : current.programEndOnEffectiveDate ?? current.currentProgramEndDate
     }));
-    setAiExplanation("");
-    setAiState("idle");
   }
 
-  function loadDemo(id: string) {
-    const demo = DEMO_SCENARIOS.find((item) => item.id === id);
-    if (demo) {
-      setScenario(demo.scenario);
-      setDraftNotice("");
-      setIntakeExtraction(null);
-      setIntakeState("idle");
-      setAiExplanation("");
-      setAiState("idle");
-    }
+  function updateI94Basis(value: AdmissionBasis) {
+    setScenario((current) => ({
+      ...current,
+      admissionBasis: value,
+      i94AdmitUntilDate: value === "fixed_period" ? current.i94AdmitUntilDate : undefined
+    }));
+  }
+
+  function updateLeavingUs(value: TravelPosture) {
+    setScenario((current) => ({
+      ...current,
+      travelPosture: value,
+      returningAfterEffectiveDate: value === "planned" ? current.returningAfterEffectiveDate ?? "unknown" : value === "unknown" ? "unknown" : "no",
+      reentryDate: value === "planned" ? current.reentryDate : undefined,
+      reentryBasis: value === "planned" ? current.reentryBasis : "unknown",
+      pendingExtensionOnDeparture: value === "planned" ? current.pendingExtensionOnDeparture : "no"
+    }));
+  }
+
+  function updateReturnAfterRule(value: YesNoUnknown) {
+    setScenario((current) => ({
+      ...current,
+      returningAfterEffectiveDate: value,
+      reentryDate: value === "yes" ? current.reentryDate : undefined,
+      reentryBasis: value === "yes" ? current.reentryBasis : "unknown",
+      pendingExtensionOnDeparture: value === "yes" ? current.pendingExtensionOnDeparture : "no"
+    }));
+  }
+
+  function updateOptIntent(value: YesNoUnknown) {
+    setScenario((current) => ({
+      ...current,
+      optIntent: value,
+      optStage: value === "yes" ? (current.optStage === "none" || current.optStage === "pre_completion" ? "post_completion_not_filed" : current.optStage) : "none",
+      optFilingDate: value === "yes" ? current.optFilingDate : undefined,
+      currentEadEndDate: value === "yes" ? current.currentEadEndDate : undefined
+    }));
+  }
+
+  function updateOptKind(value: OptKind) {
+    setScenario((current) => ({
+      ...current,
+      optStage: optStageFromParts(value, optStatusFromStage(current.optStage))
+    }));
+  }
+
+  function updateOptStatus(value: OptFilingStatus) {
+    setScenario((current) => ({
+      ...current,
+      optStage: optStageFromParts(optKindFromStage(current.optStage), value)
+    }));
+  }
+
+  function updateSchoolTransfer(value: YesNoUnknown) {
+    setScenario((current) => {
+      const combined = combinePlanAnswers(value, current.academicProgramChangePlan ?? "no");
+      return {
+        ...current,
+        schoolTransferPlan: value,
+        transferOrProgramChange: combined,
+        currentProgramEndDate: combined === "yes" ? current.currentProgramEndDate : current.programEndOnEffectiveDate ?? current.currentProgramEndDate
+      };
+    });
+  }
+
+  function updateAcademicProgramChange(value: YesNoUnknown) {
+    setScenario((current) => {
+      const combined = combinePlanAnswers(current.schoolTransferPlan ?? "no", value);
+      return {
+        ...current,
+        academicProgramChangePlan: value,
+        transferOrProgramChange: combined,
+        currentProgramEndDate: combined === "yes" ? current.currentProgramEndDate : current.programEndOnEffectiveDate ?? current.currentProgramEndDate
+      };
+    });
+  }
+
+  function updateCptIntent(value: YesNoUnknown) {
+    update("cptPlan", value === "yes" ? "unknown" : "none");
   }
 
   async function applyNarrativeDraft() {
@@ -773,8 +1118,6 @@ export default function App() {
       const payload = (await response.json()) as IntakeExtractionResponse;
       setIntakeExtraction(payload);
       setIntakeState("ready");
-      setAiExplanation("");
-      setAiState("idle");
       setDraftNotice(
         payload.facts.length
           ? `I found ${payload.facts.length} candidate fact${payload.facts.length === 1 ? "" : "s"}. Review what I understood before applying it.`
@@ -794,8 +1137,6 @@ export default function App() {
     const nextScenario = scenarioWithFacts(scenario, intakeExtraction.facts);
     const changes = describeDraftChanges(scenario, nextScenario);
     setScenario(nextScenario);
-    setAiExplanation("");
-    setAiState("idle");
     setDraftNotice(
       changes.length
         ? `Applied ${changes.length} confirmed fact${changes.length === 1 ? "" : "s"}: ${changes.join(", ")}.`
@@ -845,8 +1186,6 @@ export default function App() {
         setDraftNotice("Press Draft facts to turn the story into calculator inputs.");
         setIntakeExtraction(null);
         setIntakeState("idle");
-        setAiExplanation("");
-        setAiState("idle");
       }
     };
     recognition.onerror = (event) => {
@@ -873,28 +1212,6 @@ export default function App() {
     }
   }
 
-  async function explainWithAi() {
-    setAiState("loading");
-    setAiExplanation("");
-    try {
-      const response = await fetch("/api/explain", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ scenario, result })
-      });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-      const payload = (await response.json()) as ExplanationResponse;
-      setAiExplanation(payload.explanation);
-      setAiState("ready");
-    } catch {
-      setAiExplanation(buildLocalExplanation(result));
-      setAiState("fallback");
-    }
-  }
-
-  const statusTone = result.status === "ok" ? "good" : result.status === "manual" ? "manual" : "warning";
   const applicableFacts = intakeExtraction ? readyFacts(intakeExtraction.facts) : [];
 
   return (
@@ -902,7 +1219,7 @@ export default function App() {
       <header className="topbar">
         <div>
           <p className="eyebrow">F-1 fixed-period planner</p>
-          <h1>D/S transition and admission scenario calculator</h1>
+          <h1>F-1 rule impact planner</h1>
         </div>
         <a
           href="https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant"
@@ -930,22 +1247,31 @@ export default function App() {
                 options={pathOptions}
                 onChange={chooseStudentPath}
               />
-              <p className="microcopy">This app is for F-1 students and people planning to use F-1 status.</p>
+              <p className="microcopy">For F-1 students and people planning to use F-1 status.</p>
             </div>
 
             {pathChosen && currentTrack && (
               <>
                 <div className="flow-step active">
-                  <span className="step-kicker">Your current document</span>
+                  <span className="step-kicker">I-94 check</span>
+                  <p className="microcopy">Most F-1 I-94 records before this change say “D/S.” That means there is no printed end date.</p>
+                  <Segmented label="Does your I-94 say D/S?" value={scenario.admissionBasis} options={i94Options} onChange={updateI94Basis} />
+                  {scenario.admissionBasis === "fixed_period" && (
+                    <DateField label="What end date is printed on your I-94?" value={scenario.i94AdmitUntilDate} onChange={(value) => update("i94AdmitUntilDate", value)} />
+                  )}
+                </div>
+
+                <div className="flow-step active">
+                  <span className="step-kicker">Current I-20</span>
                   <DateField label="What is the program end date on your current I-20?" value={scenario.programEndOnEffectiveDate} onChange={updateCurrentI20End} />
-                  <p className="microcopy">This is the date printed on the I-20 that will be active on September 15, 2026.</p>
+                  <p className="microcopy">Use the end date printed on the I-20 you have now.</p>
                 </div>
 
                 {scenario.programEndOnEffectiveDate && (
                   <div className="flow-step active">
                     <span className="step-kicker">September 15 check</span>
                     <Segmented
-                      label="Do you expect to be in the U.S. and following F-1 rules on September 15, 2026?"
+                      label="Will you be inside the United States on September 15, 2026?"
                       value={scenario.inUsOnEffectiveDate === "yes" && scenario.maintainingStatusOnEffectiveDate === "yes" ? "yes" : scenario.inUsOnEffectiveDate === "no" || scenario.maintainingStatusOnEffectiveDate === "no" ? "no" : "unknown"}
                       options={yesNoOptions}
                       onChange={(value) =>
@@ -955,60 +1281,100 @@ export default function App() {
                         })
                       }
                     />
-                    <p className="microcopy">Most current F-1 students have D/S on the I-94 today. We assume that here, and you can correct it below.</p>
+                    <p className="microcopy">This matters because the old rules only help students who are in the U.S. when the new rule starts.</p>
                   </div>
                 )}
 
-                {scenario.programEndOnEffectiveDate && scenario.inUsOnEffectiveDate !== "unknown" && (
+                {scenario.programEndOnEffectiveDate && septemberLocationAnswered && (
                   <div className="flow-step active">
-                    <span className="step-kicker">Plans that can change the impact</span>
-                    <SelectField label="Are you planning OPT or STEM OPT?" value={scenario.optStage} options={optLabels} onChange={(value) => update("optStage", value)} />
-                    {needsOptDate(scenario.optStage) && (
+                    <span className="step-kicker">Travel</span>
+                    <Segmented
+                      label="Are you planning to leave the U.S.?"
+                      value={hasTravelPlan(scenario) ? "planned" : scenario.travelPosture === "unknown" ? "unknown" : "none"}
+                      options={travelDecisionOptions}
+                      onChange={updateLeavingUs}
+                    />
+                    {hasTravelPlan(scenario) && (
                       <>
-                        <DateField label="When did you file, or when do you plan to file, the I-765?" value={scenario.optFilingDate} onChange={(value) => update("optFilingDate", value)} />
-                        {hasApprovedOpt(scenario.optStage) && (
-                          <DateField label="If you already have the EAD card, when does it end?" value={scenario.currentEadEndDate} onChange={(value) => update("currentEadEndDate", value)} />
+                        <Segmented
+                          label="Will you return to the U.S. after September 15, 2026?"
+                          value={scenario.returningAfterEffectiveDate ?? "unknown"}
+                          options={returnAfterRuleOptions}
+                          onChange={updateReturnAfterRule}
+                        />
+                        {scenario.returningAfterEffectiveDate === "yes" && (
+                          <>
+                            <DateField label="What date would you come back to the U.S.?" value={scenario.reentryDate} onChange={(value) => update("reentryDate", value)} />
+                            <SelectField label="How would you come back?" value={scenario.reentryBasis} options={reentryLabels} onChange={(value) => update("reentryBasis", value)} />
+                            <Segmented
+                              label="Will an F-1 extension request be pending when you leave?"
+                              value={scenario.pendingExtensionOnDeparture}
+                              options={yesNoOptions}
+                              onChange={(value) => update("pendingExtensionOnDeparture", value)}
+                            />
+                          </>
                         )}
                       </>
                     )}
                   </div>
                 )}
 
-                {scenario.programEndOnEffectiveDate && (
+                {optReady && (
                   <div className="flow-step active">
-                    <span className="step-kicker">Travel fork</span>
+                    <span className="step-kicker">OPT or STEM OPT</span>
                     <Segmented
-                      label="Are you planning to leave the U.S. and come back after September 15, 2026?"
-                      value={scenario.travelPosture}
-                      options={travelDecisionOptions}
-                      onChange={(value) => update("travelPosture", value)}
+                      label="Are you planning post-completion OPT or STEM OPT?"
+                      value={scenario.optIntent ?? "unknown"}
+                      options={planningOptions}
+                      onChange={updateOptIntent}
                     />
-                    {hasTravelPlan(scenario) && (
+                    {needsOptDate(scenario.optStage) && (
                       <>
-                        <DateField label="When would you come back to the U.S.?" value={scenario.reentryDate} onChange={(value) => update("reentryDate", value)} />
-                        <SelectField label="How would you come back?" value={scenario.reentryBasis} options={reentryLabels} onChange={(value) => update("reentryBasis", value)} />
+                        <Segmented label="Which kind?" value={optKindFromStage(scenario.optStage)} options={optKindOptions} onChange={updateOptKind} />
+                        <Segmented label="Have you filed the I-765?" value={optStatusFromStage(scenario.optStage)} options={optStatusOptions} onChange={updateOptStatus} />
+                        <DateField label="When did you file, or when do you plan to file, the I-765?" value={scenario.optFilingDate} onChange={(value) => update("optFilingDate", value)} />
+                        {hasApprovedOpt(scenario.optStage) && (
+                          <DateField label="What end date is on the EAD card?" value={scenario.currentEadEndDate} onChange={(value) => update("currentEadEndDate", value)} />
+                        )}
                       </>
                     )}
                   </div>
                 )}
 
-                {scenario.programEndOnEffectiveDate && (
+                {schoolPlanningReady && (
                   <div className="flow-step active">
-                    <span className="step-kicker">School and training plans</span>
+                    <span className="step-kicker">School changes</span>
                     <Segmented
-                      label="Are you planning to transfer schools or change academic programs?"
-                      value={scenario.transferOrProgramChange}
-                      options={yesNoOptions}
-                      onChange={updateTransferOrProgramChange}
+                      label="Are you planning to transfer to a different school?"
+                      value={scenario.schoolTransferPlan ?? "unknown"}
+                      options={planningOptions}
+                      onChange={updateSchoolTransfer}
+                    />
+                    <Segmented
+                      label="Are you planning to change your academic program?"
+                      value={scenario.academicProgramChangePlan ?? "unknown"}
+                      options={planningOptions}
+                      onChange={updateAcademicProgramChange}
                     />
                     {scenario.transferOrProgramChange === "yes" && (
                       <DateField
-                        label="What later I-20 end date should we test?"
+                        label={
+                          scenario.schoolTransferPlan === "yes" && scenario.academicProgramChangePlan === "yes"
+                            ? "What end date is on the new school or new program I-20?"
+                            : scenario.schoolTransferPlan === "yes"
+                              ? "What program end date is on the I-20 from the new school?"
+                              : "What end date is on the I-20 for the new academic program?"
+                        }
                         value={scenario.currentProgramEndDate}
                         onChange={(value) => update("currentProgramEndDate", value)}
                       />
                     )}
-                    <SelectField label="Are you trying to understand CPT timing?" value={scenario.cptPlan} options={cptLabels} onChange={(value) => update("cptPlan", value)} />
+                    <Segmented
+                      label="Are you planning CPT?"
+                      value={scenario.cptPlan === "none" ? "no" : "yes"}
+                      options={yesNoOnlyOptions}
+                      onChange={updateCptIntent}
+                    />
                   </div>
                 )}
               </>
@@ -1032,67 +1398,33 @@ export default function App() {
                   <div className="flow-step active">
                     <span className="step-kicker">Future-student branches</span>
                     <Segmented
-                      label="Are you already thinking about transferring schools or changing programs?"
-                      value={scenario.transferOrProgramChange}
-                      options={yesNoOptions}
-                      onChange={(value) => update("transferOrProgramChange", value)}
+                      label="Are you already thinking about transferring schools?"
+                      value={scenario.schoolTransferPlan ?? "unknown"}
+                      options={planningOptions}
+                      onChange={updateSchoolTransfer}
                     />
-                    <SelectField label="Are you already thinking about OPT or STEM OPT?" value={scenario.optStage} options={optLabels} onChange={(value) => update("optStage", value)} />
-                    <SelectField label="CPT timing, if you know it" value={scenario.cptPlan} options={cptLabels} onChange={(value) => update("cptPlan", value)} />
+                    <Segmented
+                      label="Are you already thinking about changing academic programs?"
+                      value={scenario.academicProgramChangePlan ?? "unknown"}
+                      options={planningOptions}
+                      onChange={updateAcademicProgramChange}
+                    />
+                    <Segmented
+                      label="Are you already thinking about post-completion OPT or STEM OPT?"
+                      value={scenario.optIntent ?? "unknown"}
+                      options={planningOptions}
+                      onChange={updateOptIntent}
+                    />
+                    <Segmented
+                      label="Are you already thinking about CPT?"
+                      value={scenario.cptPlan === "none" ? "no" : "yes"}
+                      options={yesNoOnlyOptions}
+                      onChange={updateCptIntent}
+                    />
                   </div>
                 )}
               </>
             )}
-
-            <details className="edge-cases">
-              <summary>What else could affect this?</summary>
-              <div className="edge-grid">
-                <article>
-                  <h3>I-94 does not say D/S</h3>
-                  <p>Most current F-1 students should see D/S. If yours shows a date, enter it here.</p>
-                  <Segmented label="What does your I-94 show?" value={scenario.admissionBasis} options={i94Options} onChange={(value) => update("admissionBasis", value)} />
-                  {scenario.admissionBasis === "fixed_period" && (
-                    <DateField label="What is the I-94 admit-until date?" value={scenario.i94AdmitUntilDate} onChange={(value) => update("i94AdmitUntilDate", value)} />
-                  )}
-                </article>
-                <article>
-                  <h3>Travel with a pending extension</h3>
-                  <p>This matters if an I-539 is pending when the student leaves the U.S.</p>
-                  <Segmented
-                    label="Will an extension request be pending when you depart?"
-                    value={scenario.pendingExtensionOnDeparture}
-                    options={yesNoOptions}
-                    onChange={(value) => update("pendingExtensionOnDeparture", value)}
-                  />
-                </article>
-                <article>
-                  <h3>EAD active on September 15</h3>
-                  <p>If an approved EAD is already active on the rule date, its end date may affect the transition calculation.</p>
-                  <DateField label="EAD end date on September 15, 2026" value={scenario.eadEndOnEffectiveDate} onChange={(value) => update("eadEndOnEffectiveDate", value)} />
-                </article>
-                <article>
-                  <h3>Passport or unusual travel facts</h3>
-                  <p>Passport expiration, automatic visa revalidation, and unusual travel facts belong in the travel branch before relying on a final plan.</p>
-                  <SelectField
-                    label="Travel type, if unusual"
-                    value={scenario.travelPosture}
-                    options={travelLabels}
-                    onChange={(value) => update("travelPosture", value)}
-                  />
-                </article>
-              </div>
-            </details>
-
-            <details className="example-loader">
-              <summary>Load testing examples</summary>
-              <div className="demo-row">
-                {DEMO_SCENARIOS.map((demo) => (
-                  <button key={demo.id} type="button" onClick={() => loadDemo(demo.id)}>
-                    {demo.label}
-                  </button>
-                ))}
-              </div>
-            </details>
           </section>
 
           <section className="panel narrative">
@@ -1176,142 +1508,84 @@ export default function App() {
         </aside>
 
         <section className="results">
-          <div className={`outcome ${statusTone}`}>
-            <p>{result.classification.replaceAll("_", " ")}</p>
-            <h2>{result.headline}</h2>
-            <span>{result.summary}</span>
+          <div className={`outcome ${studentOutcome.tone}`}>
+            <p>{studentOutcome.eyebrow}</p>
+            <h2>{studentOutcome.title}</h2>
+            <span>{studentOutcome.detail}</span>
           </div>
 
           <section className="band impact-surface">
             <div className="section-title">
               <Sparkles aria-hidden="true" />
-              <h2>What this answer changes</h2>
+              <h2>What this means so far</h2>
             </div>
             <ImpactCards cards={impactCards} />
-            <BranchTimeline scenario={scenario} result={result} travelResult={travelResult} />
+            <StudentTimelines scenario={scenario} result={result} travelResult={travelResult} />
           </section>
 
-          <div className="metric-grid">
-            <div>
-              <span>Rule effective date</span>
-              <strong>{formatDate(result.effectiveDate)}</strong>
-            </div>
-            <div>
-              <span>Transition cap</span>
-              <strong>{formatDate(result.transitionCapDate)}</strong>
-            </div>
-            <div>
-              <span>Status/admission end</span>
-              <strong>{formatDate(result.coverageEnd)}</strong>
-            </div>
-            <div>
-              <span>Departure-period end</span>
-              <strong>{formatDate(result.latestDepartureDate)}</strong>
-            </div>
-          </div>
+          <details className="band technical-details">
+            <summary>Calculation details and sources</summary>
+            <div className="technical-grid">
+              <section>
+                <h2>Findings</h2>
+                <div className="finding-list">
+                  {result.findings.map((item) => (
+                    <article key={item.id} className={`finding ${item.tone}`}>
+                      {findingIcon(item.tone)}
+                      <div>
+                        <h3>{item.title}</h3>
+                        <p>{item.detail}</p>
+                        <small>{item.sourceIds.join(" · ")}</small>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </section>
 
-          <section className="band">
-            <div className="section-title">
-              <AlertTriangle aria-hidden="true" />
-              <h2>Findings</h2>
-            </div>
-            <div className="finding-list">
-              {result.findings.map((item) => (
-                <article key={item.id} className={`finding ${item.tone}`}>
-                  {findingIcon(item.tone)}
+              {(result.followUpQuestions.length > 0 || result.nextActions.length > 0) && (
+                <section className="split">
                   <div>
-                    <h3>{item.title}</h3>
-                    <p>{item.detail}</p>
-                    <small>{item.sourceIds.join(" · ")}</small>
+                    <h2>Follow-ups</h2>
+                    {result.followUpQuestions.length ? (
+                      <ul>
+                        {result.followUpQuestions.map((question) => (
+                          <li key={question}>{question}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>No blocking fact gaps in this scenario.</p>
+                    )}
                   </div>
-                </article>
-              ))}
-            </div>
-          </section>
-
-          <section className="band">
-            <div className="section-title">
-              <CalendarClock aria-hidden="true" />
-              <h2>Timeline</h2>
-            </div>
-            <ol className="timeline">
-              {result.timeline.map((item, index) => (
-                <li key={`${item.date}-${index}`} className={item.tone}>
-                  <time>{formatDate(item.date)}</time>
                   <div>
-                    <strong>{item.title}</strong>
-                    <p>{item.detail}</p>
+                    <h2>Next actions</h2>
+                    {result.nextActions.length ? (
+                      <ul>
+                        {result.nextActions.map((action) => (
+                          <li key={action}>{action}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p>No extra action flags from the deterministic engine.</p>
+                    )}
                   </div>
-                </li>
-              ))}
-            </ol>
-          </section>
+                </section>
+              )}
 
-          {(result.followUpQuestions.length > 0 || result.nextActions.length > 0) && (
-            <section className="band split">
-              <div>
-                <h2>Follow-ups</h2>
-                {result.followUpQuestions.length ? (
-                  <ul>
-                    {result.followUpQuestions.map((question) => (
-                      <li key={question}>{question}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>No blocking fact gaps in this scenario.</p>
-                )}
-              </div>
-              <div>
-                <h2>Next actions</h2>
-                {result.nextActions.length ? (
-                  <ul>
-                    {result.nextActions.map((action) => (
-                      <li key={action}>{action}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p>No extra action flags from the deterministic engine.</p>
-                )}
-              </div>
-            </section>
-          )}
-
-          <section className="band">
-            <div className="section-title">
-              <Sparkles aria-hidden="true" />
-              <h2>Plain-language explanation</h2>
+              <section className="sources">
+                <h2>Sources</h2>
+                <ul>
+                  {result.citations.map((citation) => (
+                    <li key={citation.id}>
+                      <a href={citation.url} target="_blank" rel="noreferrer">
+                        {citation.id}
+                      </a>
+                      <span>{citation.locator}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             </div>
-            <div className="button-row">
-              <button type="button" onClick={explainWithAi} disabled={aiState === "loading"}>
-                {aiState === "loading" ? <RefreshCw aria-hidden="true" className="spin" /> : <Send aria-hidden="true" />}
-                Explain
-              </button>
-            </div>
-            {aiState === "failed" && (
-              <p className="muted">The explanation call failed. The calculator result above is still available.</p>
-            )}
-            {aiState === "fallback" && (
-              <p className="muted">The model endpoint is not connected in this local preview, so this explanation comes from the calculator result.</p>
-            )}
-            {aiExplanation && <div className="ai-output">{aiExplanation}</div>}
-          </section>
-
-          <section className="band sources">
-            <div className="section-title">
-              <FileText aria-hidden="true" />
-              <h2>Sources</h2>
-            </div>
-            <ul>
-              {result.citations.map((citation) => (
-                <li key={citation.id}>
-                  <a href={citation.url} target="_blank" rel="noreferrer">
-                    {citation.id}
-                  </a>
-                  <span>{citation.locator}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
+          </details>
         </section>
       </main>
     </div>

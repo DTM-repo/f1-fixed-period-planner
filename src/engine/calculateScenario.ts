@@ -642,6 +642,13 @@ export function calculateScenario(scenario: StudentScenario): PlannerResult {
   const isProspective = scenarioWithEffectiveDate.startingPosition === "prospective_outside_us";
   const isFixedAlready =
     scenarioWithEffectiveDate.admissionBasis === "fixed_period" || scenarioWithEffectiveDate.startingPosition === "readmitted_fixed_period";
+  const effectiveDateDocumentEnd = maxDate(scenarioWithEffectiveDate.programEndOnEffectiveDate, scenarioWithEffectiveDate.eadEndOnEffectiveDate);
+  const currentDocumentEndsBeforeEffectiveDate = Boolean(
+    !isProspective &&
+      !isFixedAlready &&
+      effectiveDateDocumentEnd &&
+      isAfter(effectiveDate, effectiveDateDocumentEnd)
+  );
 
   if (isProspective || isFixedAlready) {
     return buildFixedAdmissionResult(
@@ -649,6 +656,46 @@ export function calculateScenario(scenario: StudentScenario): PlannerResult {
       scenarioWithEffectiveDate.startingPosition === "readmitted_fixed_period",
       dateFindings,
       dateFollowUpQuestions
+    );
+  }
+
+  if (currentDocumentEndsBeforeEffectiveDate) {
+    const latestDepartureDate = effectiveDateDocumentEnd
+      ? addDays(effectiveDateDocumentEnd, F1_TRANSITION_DEPARTURE_PERIOD_DAYS)
+      : undefined;
+    const findings = [
+      ...dateFindings,
+      finding(
+        "document-ends-before-effective-date",
+        "question",
+        "F-1 basis on September 15 needs confirmation",
+        `The I-20/EAD date entered (${formatDate(
+          effectiveDateDocumentEnd
+        )}) is before the rule starts on ${formatDate(effectiveDate)}. Confirm whether the student will have OPT/STEM OPT, a later I-20, or another F-1 basis on September 15 before using the old D/S rule path.`,
+        ["8CFR-214-1-M1"]
+      )
+    ];
+
+    return baseResult(
+      scenarioWithEffectiveDate,
+      "manual",
+      "manual_review",
+      "Confirm F-1 basis on September 15, 2026",
+      "The current I-20/EAD date entered ends before the new rule starts, so the transition calculation needs the student's F-1 basis on the rule date.",
+      [TRANSITION_RULE],
+      findings,
+      [
+        timeline(effectiveDateDocumentEnd!, "Current I-20/EAD date entered", "This date is before the rule starts.", "warning"),
+        ...(latestDepartureDate
+          ? [timeline(latestDepartureDate, "F-1 departure period from that date", "Sixty days after the I-20/EAD date entered.", "warning")]
+          : []),
+        timeline(effectiveDate, "Rule effective date", "The old D/S rule path depends on the student still having a qualifying F-1 basis on this date.", "warning")
+      ].sort((a, b) => (a.date > b.date ? 1 : -1)),
+      [
+        ...dateFollowUpQuestions,
+        "What F-1 basis will the student have on September 15, 2026: OPT/STEM OPT, a later I-20, or something else?"
+      ],
+      ["Collect the OPT/STEM, later I-20, or extension facts before relying on an old D/S rule result."]
     );
   }
 
