@@ -29,7 +29,6 @@ import { calculateScenario, DEFAULT_EFFECTIVE_DATE, scenarioForFixedReentry } fr
 import { addYears, compareDates, formatDate, isValidDateString } from "./engine/dateMath";
 import type {
   AdmissionBasis,
-  CptPlan,
   EducationLevel,
   Finding,
   NextProgramLevelPlan,
@@ -143,7 +142,7 @@ const factLabels: Record<IntakeFactField, string> = {
   earlyEndSituation: "Early end or withdrawal",
   earlyEndDate: "Actual end date",
   returningAfterEffectiveDate: "Return after September 15, 2026",
-  cptPlan: "CPT timing"
+  cptPlan: "CPT plan"
 };
 
 const dateFacts = new Set<IntakeFactField>([
@@ -182,7 +181,7 @@ const allowedFactValues: Partial<Record<IntakeFactField, readonly string[]>> = {
   hasF2Dependents: ["yes", "no", "unknown"],
   earlyEndSituation: ["none", "completed_early", "authorized_withdrawal", "status_violation", "unknown"],
   returningAfterEffectiveDate: ["yes", "no", "unknown"],
-  cptPlan: ["none", "before_admission_end", "after_admission_end", "unknown"]
+  cptPlan: ["none", "planned", "unknown"]
 };
 
 const factValueLabels: Partial<Record<IntakeFactField, Record<string, string>>> = {
@@ -213,7 +212,7 @@ const factValueLabels: Partial<Record<IntakeFactField, Record<string, string>>> 
   dsoRecommendedOpt: { yes: "Yes", no: "No", unknown: "Not yet known" },
   hasF2Dependents: { yes: "Yes", no: "No", unknown: "Not yet known" },
   earlyEndSituation: { none: "No", completed_early: "Completed early", authorized_withdrawal: "Authorized withdrawal", status_violation: "Possible status violation", unknown: "Not yet known" },
-  cptPlan: { none: "No CPT", before_admission_end: "CPT before the study period ends", after_admission_end: "CPT near or after the study period ends", unknown: "Timing not yet known" }
+  cptPlan: { none: "No CPT planned", planned: "Plans to use CPT", unknown: "Not yet known" }
 };
 
 function supportedFact(fact: IntakeCandidateFact): boolean {
@@ -417,7 +416,7 @@ function appendTravelQuestions(scenario: StudentScenario, answered: Set<string>,
   return true;
 }
 
-function buildQuestions(scenario: StudentScenario, answered: Set<string>, raisedTopics: IntakeTopic[], protectedStudyEnd?: string): Question[] {
+export function buildQuestions(scenario: StudentScenario, answered: Set<string>, raisedTopics: IntakeTopic[], protectedStudyEnd?: string): Question[] {
   const questions: Question[] = [
     {
       id: "presence",
@@ -608,19 +607,22 @@ function buildQuestions(scenario: StudentScenario, answered: Set<string>, raised
   });
   if (!answered.has("nextProgram")) return questions;
 
-  questions.push({ id: "cptIntent", eyebrow: "Work during your program", prompt: "Are you planning to use CPT?", kind: "choice", choices: yesNoUnknown, value: scenario.cptPlan === "none" ? "no" : scenario.cptPlan === "unknown" ? "unknown" : "yes", answerLabel: scenario.cptPlan === "none" ? "No" : scenario.cptPlan === "unknown" ? "I do not know yet" : "Yes" });
-  if (!answered.has("cptIntent")) return questions;
-  if (scenario.cptPlan !== "none" && scenario.cptPlan !== "unknown") {
+  const admissionEndsBeforeProgram = Boolean(
+    protectedStudyEnd &&
+    scenario.currentProgramEndDate &&
+    compareDates(protectedStudyEnd, scenario.currentProgramEndDate) < 0
+  );
+  if (admissionEndsBeforeProgram || raisedTopics.includes("cpt")) {
     questions.push({
-      id: "cptTiming",
-      eyebrow: "CPT timing",
-      prompt: protectedStudyEnd
-        ? `Could you still be using CPT after ${formatDate(protectedStudyEnd)}?`
-        : "Could your CPT continue past the end date shown for your authorized study period?",
-      help: "This tells us whether you need to file an extension early enough to avoid a break in authorized work.",
+      id: "cptIntent",
+      eyebrow: "Work during your program",
+      prompt: "Are you planning to use CPT during this program?",
+      help: admissionEndsBeforeProgram && protectedStudyEnd
+        ? `Your projected F-1 study period ends on ${formatDate(protectedStudyEnd)}, before your I-20 program ends. If you will have CPT then, filing your extension before that date can prevent a break in authorized work.`
+        : "CPT can continue only through the end date authorized by your DSO and cannot continue past your I-20 program end date.",
       kind: "choice",
-      choices: [{ value: "after_admission_end", label: "Yes" }, { value: "before_admission_end", label: "No" }, { value: "unknown", label: "I do not know yet" }],
-      value: scenario.cptPlan,
+      choices: yesNoUnknown,
+      value: scenario.cptPlan === "planned" ? "yes" : scenario.cptPlan === "unknown" ? "unknown" : "no",
       answerLabel: factValueLabels.cptPlan?.[scenario.cptPlan]
     });
   }
@@ -1122,8 +1124,7 @@ export default function App() {
       case "programChange": patch.academicProgramChangePlan = value as YesNoUnknown; patch.transferOrProgramChange = value === "yes" || scenario.schoolTransferPlan === "yes" ? "yes" : "no"; break;
       case "firstAcademicYear": patch.firstAcademicYearCompleted = value as YesNoUnknown; break;
       case "nextProgram": patch.nextProgramLevelPlan = value as NextProgramLevelPlan; break;
-      case "cptIntent": patch.cptPlan = value === "yes" ? "before_admission_end" : value === "no" ? "none" : "unknown"; break;
-      case "cptTiming": patch.cptPlan = value as CptPlan; break;
+      case "cptIntent": patch.cptPlan = value === "yes" ? "planned" : value === "no" ? "none" : "unknown"; break;
     }
     patchScenario(patch);
     setAnswered((current) => {
@@ -1194,7 +1195,7 @@ export default function App() {
     if (id === "programChange") next.academicProgramChangePlan = "unknown";
     if (id === "firstAcademicYear") next.firstAcademicYearCompleted = "unknown";
     if (id === "nextProgram") next.nextProgramLevelPlan = "unknown";
-    if (id === "cptIntent" || id === "cptTiming") next.cptPlan = "none";
+    if (id === "cptIntent") next.cptPlan = "none";
     return next;
   }
 
@@ -1232,7 +1233,7 @@ export default function App() {
       academicProgramChangePlan: ["programChange"],
       firstAcademicYearCompleted: ["firstAcademicYear"],
       nextProgramLevelPlan: ["nextProgram"],
-      cptPlan: ["cptIntent", "cptTiming"]
+      cptPlan: ["cptIntent"]
     };
     const mapped = usableFacts(facts).flatMap((fact) => {
       if (fact.field === "optStage") {

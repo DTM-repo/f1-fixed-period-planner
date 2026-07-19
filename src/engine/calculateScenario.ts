@@ -288,42 +288,59 @@ function addAcademicFindings(scenario: StudentScenario, findings: Finding[], nex
   }
 }
 
-function addCptFindings(scenario: StudentScenario, activityEnd: string | undefined, i94End: string | undefined, findings: Finding[], nextActions: string[]) {
+function addCptFindings(
+  scenario: StudentScenario,
+  activityEnd: string | undefined,
+  stayEnd: string | undefined,
+  departurePeriodDays: number,
+  findings: Finding[],
+  nextActions: string[]
+) {
   if (scenario.cptPlan === "none") return;
+  const programContinues = Boolean(
+    scenario.currentProgramEndDate &&
+    activityEnd &&
+    isAfter(scenario.currentProgramEndDate, activityEnd)
+  );
+
   if (scenario.cptPlan === "unknown") {
+    if (programContinues && activityEnd) {
+      findings.push(
+        finding(
+          "cpt-plan-needed",
+          "question",
+          `CPT could make ${formatDate(activityEnd)} an important filing date`,
+          `If you will have CPT authorized beyond ${formatDate(activityEnd)}, USCIS must receive your complete extension request before that date for the already-authorized CPT to continue automatically while the request is pending. CPT can never continue beyond the end date authorized by your DSO.`,
+          ["8CFR-214-2-F5VIII-CPT", "8CFR-214-2-F7-TIMELY"]
+        )
+      );
+    }
+    return;
+  }
+
+  if (!programContinues) {
     findings.push(
       finding(
-        "cpt-date-needed",
-        "question",
-        "CPT timing needs one more date",
-        "The rule does not eliminate Day One CPT. The important new issue is whether a required extension reaches USCIS before your study or training period ends.",
+        "cpt-within-program",
+        "info",
+        "Your CPT remains tied to your program dates",
+        `The new rule does not create an earlier CPT deadline based on the dates you entered. CPT can continue only through the end date authorized by your DSO and cannot continue past your I-20 program end date${scenario.currentProgramEndDate ? ` of ${formatDate(scenario.currentProgramEndDate)}` : ""}.`,
         ["8CFR-214-2-F5VIII-CPT"]
       )
     );
     return;
   }
-  if (scenario.cptPlan === "before_admission_end") {
-    findings.push(
-      finding(
-        "cpt-before-period-end",
-        "info",
-        "A timely extension can preserve already-authorized CPT while it is pending",
-        `If USCIS receives a complete extension before your study or training period ends${activityEnd ? ` on ${formatDate(activityEnd)}` : ""}, already-authorized CPT can continue while the extension is pending for up to 240 days, subject to the CPT end date and the rule's other requirements.`,
-        ["8CFR-214-2-F5VIII-CPT", "8CFR-214-2-F7-TIMELY"]
-      )
-    );
-  } else {
-    findings.push(
-      finding(
-        "cpt-final-thirty-days",
-        "danger",
-        "Filing during the final 30 days does not preserve CPT",
-        `An I-539 can still be timely if USCIS receives it by the I-94 date${i94End ? ` of ${formatDate(i94End)}` : ""}, but CPT and other F-1 employment cannot continue or begin until the extension is approved if the filing arrives only during those final 30 days.`,
-        ["8CFR-214-2-F5VIII-CPT", "8CFR-214-2-F7-TIMELY"]
-      )
-    );
-    nextActions.push("Plan the filing before the study or training period ends if uninterrupted CPT or on-campus work matters.");
-  }
+
+  findings.push(
+    finding(
+      "cpt-extension-filing-deadline",
+      "warning",
+      `File before ${formatDate(activityEnd!)} to avoid a CPT interruption`,
+      `Your I-20 program continues beyond ${formatDate(activityEnd!)}. If your DSO has authorized CPT beyond that date, USCIS must receive your complete Form I-539 before ${formatDate(activityEnd!)} for the already-authorized CPT to continue automatically while the request is pending. That continuation lasts no more than 240 days and ends sooner if your CPT authorization ends. Filing after ${formatDate(activityEnd!)} during the following ${departurePeriodDays}-day departure period${stayEnd ? ` through ${formatDate(stayEnd)}` : ""} does not automatically preserve CPT.`,
+      ["8CFR-214-2-F5VIII-CPT", "8CFR-214-2-F7-TIMELY"]
+    )
+  );
+  nextActions.push(`If uninterrupted CPT matters, have USCIS receive the complete extension request before ${formatDate(activityEnd!)}.`);
 }
 
 function addTravelAndDependentFindings(scenario: StudentScenario, findings: Finding[], nextActions: string[]) {
@@ -621,7 +638,7 @@ function buildFixedResult(
 
   addAcademicFindings(scenario, findings, actions);
   if (findings.some((item) => item.id.startsWith("graduate-") || item.id.startsWith("undergraduate-") || item.id === "same-or-lower-next-program")) rules.push(ACADEMIC_MOBILITY_RULE);
-  addCptFindings(scenario, activityEnd, i94End, findings, actions);
+  addCptFindings(scenario, activityEnd, i94End, F1_FIXED_DEPARTURE_PERIOD_DAYS, findings, actions);
   addTravelAndDependentFindings(scenario, findings, actions);
   addEarlyEndFinding(scenario, findings, timelineItems);
   addOptFindings(scenario, activityEnd, i94End, findings, actions);
@@ -855,7 +872,7 @@ export function calculateScenario(input: StudentScenario): PlannerResult {
 
   addAcademicFindings(scenario, findings, actions);
   if (findings.some((item) => item.id.startsWith("graduate-") || item.id.startsWith("undergraduate-") || item.id === "same-or-lower-next-program")) rules.push(ACADEMIC_MOBILITY_RULE);
-  addCptFindings(scenario, activityEnd, latestDepartureDate, findings, actions);
+  addCptFindings(scenario, activityEnd, latestDepartureDate, F1_TRANSITION_DEPARTURE_PERIOD_DAYS, findings, actions);
   addTravelAndDependentFindings(scenario, findings, actions);
   const timelineItems = [
     timeline(effectiveDate, "The new rule begins", "Your current D/S protection is measured on this date."),

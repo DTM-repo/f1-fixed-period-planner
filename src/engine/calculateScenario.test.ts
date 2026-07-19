@@ -340,16 +340,29 @@ describe("school, work, and unusual facts", () => {
     expect(ids(result)).toContain("same-or-lower-next-program");
   });
 
-  it("explains continued CPT when the I-539 arrives before the study period ends", () => {
-    const result = calculateScenario({ ...incoming, cptPlan: "before_admission_end" });
-    expect(ids(result)).toContain("cpt-before-period-end");
-    expect(result.findings.find((item) => item.id === "cpt-before-period-end")?.detail).toContain("240 days");
+  it("gives the early filing deadline when an I-94 limit can interrupt CPT", () => {
+    const result = calculateScenario({ ...incoming, cptPlan: "planned" });
+    expect(ids(result)).toContain("cpt-extension-filing-deadline");
+    expect(result.findings.find((item) => item.id === "cpt-extension-filing-deadline")?.title).toContain("Sep 1, 2030");
+    expect(result.findings.find((item) => item.id === "cpt-extension-filing-deadline")?.detail).toContain("240 days");
   });
 
-  it("warns that filing in the final 30 days does not preserve CPT", () => {
-    const result = calculateScenario({ ...incoming, cptPlan: "after_admission_end" });
-    expect(result.status).toBe("risk");
-    expect(ids(result)).toContain("cpt-final-thirty-days");
+  it("does not suggest that CPT can continue after the I-20 program ends", () => {
+    const result = calculateScenario({
+      ...transition,
+      programEndOnEffectiveDate: "2028-05-22",
+      currentProgramEndDate: "2028-05-22",
+      cptPlan: "planned"
+    });
+    expect(ids(result)).toContain("cpt-within-program");
+    expect(ids(result)).not.toContain("cpt-extension-filing-deadline");
+    expect(result.findings.find((item) => item.id === "cpt-within-program")?.detail).toContain("cannot continue past your I-20 program end date");
+  });
+
+  it("keeps unknown CPT conditional instead of inventing a filing plan", () => {
+    const result = calculateScenario({ ...incoming, cptPlan: "unknown" });
+    expect(ids(result)).toContain("cpt-plan-needed");
+    expect(ids(result)).not.toContain("cpt-extension-filing-deadline");
   });
 
   it("includes F-2 dependents in an extension strategy", () => {

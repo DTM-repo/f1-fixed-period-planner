@@ -613,3 +613,30 @@ Each entry should capture:
 - `tsc --noEmit`: passed.
 - Production Vite build: passed.
 - Browser checks passed for the initial gate, current-student path, incoming undergraduate OPT path, date editing, concise result, source anchors, timelines, and test-case export.
+
+### CPT Relevance and Filing-Deadline Correction
+
+**Research**
+
+- David identified an impossible interview question: a student whose I-20 ends May 22, 2028 was asked whether CPT might continue after May 22, 2028.
+- Rechecked the final regulatory text at 8 CFR 214.2(f)(5)(viii). The automatic continuation applies to current, already-authorized CPT while a timely extension is pending, for no more than 240 days and never beyond the CPT end date authorized by the DSO.
+- The old flow incorrectly used the student's supposed CPT timing as a proxy for the date an extension would be filed. Those are separate facts and could produce a false warning.
+
+**Decisions**
+
+- Never ask whether CPT will continue past the I-20 program end date.
+- Ask about CPT only when the student raises it or when a fixed/transition activity deadline arrives before the I-20 program end and could interrupt otherwise-valid work.
+- Do not ask the student to predict a CPT-versus-admission timing category. Use the verified I-20 and admission dates to calculate whether an earlier filing deadline exists.
+- When an earlier deadline exists, give a conditional instruction: if CPT is authorized beyond that date, USCIS must receive the complete Form I-539 before the date to preserve automatic continuation. Filing afterward does not automatically preserve CPT.
+
+**Codex Assistance**
+
+- Traced the issue through the interview, scenario type, AI extraction schema, and deterministic findings and found that the same overloaded enum was controlling both CPT intent and extension timing.
+- Replaced it with a simple CPT plan, removed the impossible follow-up, and made the rule engine derive relevance from the verified dates.
+- Added regression coverage for the exact May 22, 2028 case, the earlier-admission-deadline case, and student-raised CPT questions.
+
+**Verification**
+
+- Vitest: 55/55 passed.
+- `tsc --noEmit` and the production Vite build passed.
+- Browser walkthrough of a current graduate student with a May 22, 2028 I-20 confirmed that the interview ends without asking about CPT when CPT was not raised and no earlier admission deadline exists.

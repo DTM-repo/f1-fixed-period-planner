@@ -64,8 +64,10 @@ Deterministic result:
 ## CPT, Travel, and Unusual Endings
 
 - The rule did not eliminate Day One CPT or rewrite substantive CPT eligibility.
-- If a complete I-539 is received before the study period ends, already-authorized work may continue for up to 240 days while the extension is pending.
-- Filing only during the final 30-day period does not preserve or start CPT while the extension remains pending.
+- CPT remains limited by the DSO-authorized CPT end date on the I-20 and cannot continue beyond the underlying program period.
+- The pending-extension issue arises only when the student's fixed or transition activity deadline arrives before an otherwise-valid I-20 and CPT authorization would end.
+- If USCIS receives a complete I-539 before that earlier activity deadline, already-authorized CPT may continue while the extension is pending for up to 240 days or the DSO-authorized CPT end date, whichever comes first.
+- Filing only after the employment-authorized activity period ends does not automatically preserve or start CPT while the extension remains pending.
 - Automatic visa revalidation and a pending-I-539 return for a longer period are routed to explicit caution rather than an ordinary projection.
 - F-2 dependents are included in the extension plan.
 - Early completion uses 30 days, authorized withdrawal uses 15 days, and a status violation receives no departure period.

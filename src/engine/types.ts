@@ -37,7 +37,7 @@ export type ReentryBasis =
   | "automatic_visa_revalidation"
   | "unknown";
 
-export type CptPlan = "none" | "before_admission_end" | "after_admission_end" | "unknown";
+export type CptPlan = "none" | "planned" | "unknown";
 export type EducationLevel = "undergraduate" | "graduate" | "other" | "unknown";
 export type NextProgramLevelPlan = "higher" | "same_or_lower" | "not_planning" | "unknown";
 export type ProgramType =

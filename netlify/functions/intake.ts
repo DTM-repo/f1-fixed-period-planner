@@ -59,6 +59,7 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
         "A school transfer and a change of major or education level are separate facts. Never infer one from the other. Prefer schoolTransferPlan and academicProgramChangePlan over the legacy summary transferOrProgramChange.",
         "If the student explicitly says no OPT, return optIntent=no and optStage=none. If an incoming student only describes a future plan to use OPT, return optIntent=yes and optStage=none. STEM OPT is a later extension of regular post-completion OPT, never an alternative first OPT type. Return a STEM stage only when the student says they are already on post-completion OPT or are preparing, filing, or approved for the STEM extension.",
         "If the student says bachelor, associate, undergraduate, or undergrad, use educationLevel=undergraduate. If the student says master's, PhD, doctorate, doctoral, graduate school, or graduate program, use educationLevel=graduate.",
+        "If the student explicitly says they use or plan to use CPT, return cptPlan=planned. If they explicitly say they will not use CPT, return cptPlan=none. Never infer an extension filing date or whether CPT crosses an admission deadline from a general CPT plan.",
         "Use programType=english_language_training only for a language-training program, programType=public_high_school only for a public or charter high school, and programType=private_high_school only for a private high school.",
         "Use startingPosition=change_status_inside_us only when the student says they will request F-1 status without leaving the United States.",
         "If the student says they want a second program at the same level or a lower level, including a second master's, second bachelor's, another associate degree, or a lower degree after completing a higher one, use nextProgramLevelPlan=same_or_lower with needsConfirmation=true unless the level is unmistakable.",
@@ -109,7 +110,7 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
         earlyEndSituation: ["none", "completed_early", "authorized_withdrawal", "status_violation", "unknown"],
         earlyEndDate: "YYYY-MM-DD",
         returningAfterEffectiveDate: ["yes", "no", "unknown"],
-        cptPlan: ["none", "before_admission_end", "after_admission_end", "unknown"]
+        cptPlan: ["none", "planned", "unknown"]
       },
       currentScenario: payload.currentScenario,
       studentNarrative: payload.narrative

@@ -1,6 +1,6 @@
 # Test Scenarios
 
-The deterministic engine has 39 automated regression cases. Last full run: July 19, 2026, all passing.
+The deterministic engine has 45 automated regression cases, with 55 tests across the full suite. Last full run: July 19, 2026, all passing.
 
 ## Current D/S Cases
 
@@ -45,8 +45,10 @@ The deterministic engine has 39 automated regression cases. Last full run: July 
 - Graduate program-change ban and school-transfer exception shown separately.
 - Undergraduate change during and after the first academic year.
 - Later same- or lower-level program.
-- CPT continuation after a timely pre-end filing, up to the rule's 240-day limit.
-- CPT not preserved by filing only in the final 30 days.
+- No CPT timing question when the I-20 program end and protected activity end are the same date.
+- CPT relevance appears when an earlier admission deadline can interrupt otherwise-valid CPT.
+- Timely pre-deadline filing can continue already-authorized CPT for up to 240 days, never beyond the DSO-authorized CPT end date.
+- Filing after the employment-authorized activity period ends does not automatically preserve CPT.
 - F-2 dependents included in extension planning.
 - Early completion, authorized withdrawal, and status violation periods.
 - Extension process, current fee links, biometrics language, and no premium-processing promise.
