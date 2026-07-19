@@ -514,3 +514,25 @@ Each entry should capture:
 - Monitor whether DHS or SEVP delays the academic-mobility restrictions before September 15, 2026.
 - Add public-demo rate and spending controls before broad distribution.
 - Decide on production transcription, multilingual review, and document-assisted intake after the core calculator is advisor-reviewed.
+
+### Voice Intake Request-Starvation Fix
+
+**Research**
+
+- David's live voice test showed that speech recognition and transcription worked, but the interface stayed in its understanding state and never displayed extracted facts.
+- Netlify Dev logs showed many `/api/intake` requests completing successfully with HTTP 200 in roughly 5 to 10 seconds. The failure was therefore in client coordination, not speech capture, the OpenAI key, or the intake model.
+- Each finalized speech chunk changed the narrative and triggered React effect cleanup, which aborted the browser request already in progress. OpenAI still completed server-side, but the browser discarded the response. Continuous natural speech could starve the UI indefinitely.
+
+**Decisions**
+
+- Keep only one intake request active at a time and retain only the latest queued transcript. This controls cost and guarantees forward progress without losing the student's newest words.
+- Allow an initial understanding to appear while the student continues speaking, then run one follow-up pass for words added during that request.
+- Replace the misleading loading-state button label "Keep talking" with an explicit "I am done talking" action while recording. After the student stops, show "Finishing what I understood" until the current transcript is ready.
+- Do not let a loading-state button move the student into the interview with an empty or stale extraction.
+
+**Codex Assistance**
+
+- Diagnosed the mismatch between successful server responses and the permanently loading browser state from live function logs and React lifecycle code.
+- Replaced abort-on-every-chunk behavior with a serialized active-plus-latest queue.
+- Added explicit stop-and-finish behavior, current-transcript checks before review, stale-request cleanup on restart, and clearer live status copy.
+- Re-ran TypeScript, all 39 deterministic tests, and the production build successfully.

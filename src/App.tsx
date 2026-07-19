@@ -666,12 +666,20 @@ export default function App() {
   const [intake, setIntake] = useState<IntakeExtractionResponse | null>(null);
   const [intakeState, setIntakeState] = useState<IntakeState>("idle");
   const [intakeNotice, setIntakeNotice] = useState("");
+  const [understoodNarrative, setUnderstoodNarrative] = useState("");
   const [recording, setRecording] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState("");
   const [report, setReport] = useState<ExplanationResponse | null>(null);
   const [reportState, setReportState] = useState<ReportState>("idle");
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const reportAbortRef = useRef<AbortController | null>(null);
+  const latestScenarioRef = useRef(scenario);
+  const recordingRef = useRef(recording);
+  const intakeControllerRef = useRef<AbortController | null>(null);
+  const intakeInFlightRef = useRef(false);
+  const activeIntakeNarrativeRef = useRef("");
+  const queuedIntakeNarrativeRef = useRef<string | null>(null);
+  const lastUnderstoodNarrativeRef = useRef("");
 
   useEffect(() => {
     const onHash = () => setPage(window.location.hash === "#what-happened" ? "overview" : "planner");
@@ -679,17 +687,104 @@ export default function App() {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
 
+  useEffect(() => () => {
+    intakeControllerRef.current?.abort();
+    recognitionRef.current?.stop();
+  }, []);
+
+  useEffect(() => {
+    latestScenarioRef.current = scenario;
+  }, [scenario]);
+
+  useEffect(() => {
+    recordingRef.current = recording;
+  }, [recording]);
+
   useEffect(() => {
     reportAbortRef.current?.abort();
     setReport(null);
     setReportState("idle");
   }, [scenario]);
 
+  async function understandNarrative(rawNarrative: string) {
+    const narrative = rawNarrative.trim();
+    if (narrative.length < 12) return;
+    if (/\bN\d{10}\b/i.test(narrative)) {
+      setIntakeState("failed");
+      setIntakeNotice("Please remove the SEVIS ID before continuing. We do not need it.");
+      return;
+    }
+    if (lastUnderstoodNarrativeRef.current === narrative) {
+      setIntakeState("ready");
+      return;
+    }
+    if (intakeInFlightRef.current) {
+      if (activeIntakeNarrativeRef.current !== narrative) queuedIntakeNarrativeRef.current = narrative;
+      setIntakeState("loading");
+      setIntakeNotice(recordingRef.current ? "I have a first pass underway and will add your latest words next." : "I am finishing the latest part of your story.");
+      return;
+    }
+
+    const controller = new AbortController();
+    intakeControllerRef.current = controller;
+    intakeInFlightRef.current = true;
+    activeIntakeNarrativeRef.current = narrative;
+    setIntakeState("loading");
+    setIntakeNotice(recordingRef.current ? "I am building your first results while you speak." : "I am reading your story now.");
+    let succeeded = false;
+
+    try {
+      const response = await fetch("/api/intake", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ narrative, currentScenario: { ...latestScenarioRef.current, narrative } }),
+        signal: controller.signal
+      });
+      if (!response.ok) throw new Error(`Intake failed: ${response.status}`);
+      const body = await response.json() as IntakeExtractionResponse;
+      if (controller.signal.aborted) return;
+      setIntake(body);
+      setUnderstoodNarrative(narrative);
+      lastUnderstoodNarrativeRef.current = narrative;
+      succeeded = true;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setIntakeState("failed");
+      setIntakeNotice("Your words are saved, but I could not understand them yet. Try again.");
+    } finally {
+      if (intakeControllerRef.current !== controller) return;
+      intakeControllerRef.current = null;
+      intakeInFlightRef.current = false;
+      activeIntakeNarrativeRef.current = "";
+      if (controller.signal.aborted) return;
+
+      const queuedNarrative = queuedIntakeNarrativeRef.current;
+      queuedIntakeNarrativeRef.current = null;
+      if (queuedNarrative && queuedNarrative !== lastUnderstoodNarrativeRef.current) {
+        setIntakeState("loading");
+        setIntakeNotice("I found the first details. Now I am adding the rest.");
+        window.setTimeout(() => void understandNarrative(queuedNarrative), 0);
+        return;
+      }
+      if (succeeded) {
+        setIntakeState("ready");
+        setIntakeNotice(recordingRef.current ? "Your results are updating below. Keep speaking, or tell me when you are done." : "I found the details below. Review them when you are ready.");
+      }
+    }
+  }
+
   useEffect(() => {
     if (experience !== "story") return;
     const narrative = scenario.narrative?.trim() ?? "";
     if (narrative.length < 12) {
+      intakeControllerRef.current?.abort();
+      intakeControllerRef.current = null;
+      intakeInFlightRef.current = false;
+      activeIntakeNarrativeRef.current = "";
+      queuedIntakeNarrativeRef.current = null;
+      lastUnderstoodNarrativeRef.current = "";
       setIntake(null);
+      setUnderstoodNarrative("");
       setIntakeState("idle");
       return;
     }
@@ -698,33 +793,8 @@ export default function App() {
       setIntakeNotice("Please remove the SEVIS ID before continuing. We do not need it.");
       return;
     }
-    let controller: AbortController | null = null;
-    const timer = window.setTimeout(async () => {
-      controller = new AbortController();
-      setIntakeState("loading");
-      setIntakeNotice("Listening for dates, plans, and documents...");
-      try {
-        const response = await fetch("/api/intake", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ narrative, currentScenario: scenario }),
-          signal: controller.signal
-        });
-        if (!response.ok) throw new Error(`Intake failed: ${response.status}`);
-        const body = await response.json() as IntakeExtractionResponse;
-        setIntake(body);
-        setIntakeState("ready");
-        setIntakeNotice("Your story has been read. Keep talking or typing to add more.");
-      } catch (error) {
-        if (error instanceof DOMException && error.name === "AbortError") return;
-        setIntakeState("failed");
-        setIntakeNotice("Your words are still here. Try again after checking the local AI connection.");
-      }
-    }, recording ? 1400 : 850);
-    return () => {
-      window.clearTimeout(timer);
-      controller?.abort();
-    };
+    const timer = window.setTimeout(() => void understandNarrative(narrative), recording ? 1200 : 500);
+    return () => window.clearTimeout(timer);
   }, [experience, recording, scenario.narrative]);
 
   const draftScenario = useMemo(() => intake ? mergeFacts(scenario, intake.facts) : scenario, [intake, scenario]);
@@ -744,6 +814,17 @@ export default function App() {
   const activeQuestion = questions.find((question) => !answered.has(question.id));
   const completedQuestions = questions.filter((question) => answered.has(question.id));
   const contradiction = result.findings.some((item) => item.id === "future-entry-before-effective-date-contradiction");
+  const currentNarrative = scenario.narrative?.trim() ?? "";
+  const storyReady = Boolean(intake && intakeState === "ready" && understoodNarrative === currentNarrative);
+  const storyActionLabel = recording
+    ? "I am done talking"
+    : intakeState === "loading"
+      ? "Finishing what I understood"
+      : storyReady
+        ? "Review what I understood"
+        : intakeState === "failed"
+          ? "Try understanding again"
+          : "Understand my story";
 
   function navigateOverview(show: boolean) {
     window.location.hash = show ? "what-happened" : "";
@@ -876,20 +957,44 @@ export default function App() {
   }
 
   function finishStory() {
-    if (intake) {
-      setScenario(draftScenario);
-      markFactsAnswered(intake.facts);
+    if (!intake || !storyReady) {
+      void understandNarrative(currentNarrative);
+      return;
     }
+    setScenario(draftScenario);
+    markFactsAnswered(intake.facts);
     recognitionRef.current?.stop();
+    recordingRef.current = false;
     setRecording(false);
     setExperience("interview");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function stopTalking() {
+    recognitionRef.current?.stop();
+    recordingRef.current = false;
+    setRecording(false);
+    setIntakeState("loading");
+    setIntakeNotice("Got it. I am finishing what I heard.");
+    const narrative = latestScenarioRef.current.narrative?.trim() ?? "";
+    if (narrative.length >= 12) void understandNarrative(narrative);
+  }
+
+  function handleStoryAction() {
+    if (recording) {
+      stopTalking();
+      return;
+    }
+    if (storyReady) {
+      finishStory();
+      return;
+    }
+    void understandNarrative(currentNarrative);
+  }
+
   function toggleSpeech() {
     if (recording) {
-      recognitionRef.current?.stop();
-      setRecording(false);
+      stopTalking();
       return;
     }
     const Recognition = window.SpeechRecognition ?? window.webkitSpeechRecognition;
@@ -911,13 +1016,28 @@ export default function App() {
       }
       setInterimTranscript(interim);
       if (finalText.trim()) {
-        setScenario((current) => ({ ...current, narrative: `${current.narrative ?? ""} ${finalText}`.trim() }));
+        setScenario((current) => {
+          const next = { ...current, narrative: `${current.narrative ?? ""} ${finalText}`.trim() };
+          latestScenarioRef.current = next;
+          return next;
+        });
       }
     };
-    recognition.onerror = () => { setRecording(false); setIntakeNotice("Voice input stopped. Your transcript is saved below."); };
-    recognition.onend = () => { setRecording(false); setInterimTranscript(""); };
+    recognition.onerror = () => {
+      recordingRef.current = false;
+      setRecording(false);
+      setIntakeNotice("Voice input stopped. Your transcript is saved below.");
+    };
+    recognition.onend = () => {
+      recordingRef.current = false;
+      setRecording(false);
+      setInterimTranscript("");
+      const narrative = latestScenarioRef.current.narrative?.trim() ?? "";
+      if (narrative.length >= 12) void understandNarrative(narrative);
+    };
     recognitionRef.current = recognition;
     recognition.start();
+    recordingRef.current = true;
     setRecording(true);
     setIntakeNotice("I am listening. Speak naturally; pauses are fine.");
   }
@@ -945,9 +1065,22 @@ export default function App() {
   }
 
   function restart() {
+    intakeControllerRef.current?.abort();
+    intakeControllerRef.current = null;
+    intakeInFlightRef.current = false;
+    activeIntakeNarrativeRef.current = "";
+    queuedIntakeNarrativeRef.current = null;
+    lastUnderstoodNarrativeRef.current = "";
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+    recordingRef.current = false;
     setScenario(DEFAULT_SCENARIO);
     setAnswered(new Set());
     setIntake(null);
+    setUnderstoodNarrative("");
+    setIntakeState("idle");
+    setIntakeNotice("");
+    setRecording(false);
     setReport(null);
     setExperience("welcome");
   }
@@ -991,8 +1124,11 @@ export default function App() {
           {interimTranscript && <p className="interim-text">{interimTranscript}</p>}
           <div className="story-controls">
             <button type="button" className="round-control" onClick={toggleSpeech} title={recording ? "Stop listening" : "Start listening"}>{recording ? <Square aria-hidden="true" /> : <Mic aria-hidden="true" />}</button>
-            <span aria-live="polite">{intakeState === "loading" ? "Understanding your story..." : intakeNotice || "Do not include a SEVIS ID or passport number."}</span>
-            <button type="button" className="finish-story" onClick={finishStory} disabled={!scenario.narrative?.trim()}>{intakeState === "loading" ? "Keep talking" : "Review what I understood"}<ArrowRight aria-hidden="true" /></button>
+            <span aria-live="polite">{recording ? (intake ? "Your results are updating as you speak." : "Listening and building your first results...") : intakeNotice || "Do not include a SEVIS ID or passport number."}</span>
+            <button type="button" className="finish-story" onClick={handleStoryAction} disabled={!recording && (!currentNarrative || intakeState === "loading")}>
+              {storyActionLabel}
+              {recording ? <Square aria-hidden="true" /> : intakeState === "loading" ? <RefreshCw className="spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
+            </button>
           </div>
         </section>
         {(intake || scenario.narrative) && (
