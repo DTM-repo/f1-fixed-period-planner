@@ -41,6 +41,7 @@ export type CptPlan = "none" | "before_admission_end" | "after_admission_end" | 
 export interface StudentScenario {
   startingPosition: StartingPosition;
   admissionBasis: AdmissionBasis;
+  i94AdmitUntilDate?: DateString;
   inUsOnEffectiveDate: YesNoUnknown;
   maintainingStatusOnEffectiveDate: YesNoUnknown;
   programEndOnEffectiveDate?: DateString;

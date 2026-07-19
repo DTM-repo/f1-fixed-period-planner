@@ -1,12 +1,10 @@
 import type { StudentScenario } from "../engine/types";
 
 export const DEFAULT_SCENARIO: StudentScenario = {
-  startingPosition: "current_ds_inside_us",
-  admissionBasis: "duration_of_status",
-  inUsOnEffectiveDate: "yes",
-  maintainingStatusOnEffectiveDate: "yes",
-  programEndOnEffectiveDate: "2031-05-15",
-  currentProgramEndDate: "2031-05-15",
+  startingPosition: "unknown",
+  admissionBasis: "unknown",
+  inUsOnEffectiveDate: "unknown",
+  maintainingStatusOnEffectiveDate: "unknown",
   optStage: "none",
   travelPosture: "none",
   reentryBasis: "unknown",
@@ -18,12 +16,25 @@ export const DEFAULT_SCENARIO: StudentScenario = {
 export const DEMO_SCENARIOS: Array<{ id: string; label: string; scenario: StudentScenario }> = [
   {
     id: "transition-long-program",
-    label: "Current D/S, long program",
-    scenario: DEFAULT_SCENARIO
+    label: "Current student, long program",
+    scenario: {
+      startingPosition: "current_ds_inside_us",
+      admissionBasis: "duration_of_status",
+      inUsOnEffectiveDate: "yes",
+      maintainingStatusOnEffectiveDate: "yes",
+      programEndOnEffectiveDate: "2031-05-15",
+      currentProgramEndDate: "2031-05-15",
+      optStage: "none",
+      travelPosture: "none",
+      reentryBasis: "unknown",
+      pendingExtensionOnDeparture: "no",
+      transferOrProgramChange: "no",
+      cptPlan: "none"
+    }
   },
   {
     id: "incoming",
-    label: "Incoming F-1",
+    label: "Incoming after rule date",
     scenario: {
       startingPosition: "prospective_outside_us",
       admissionBasis: "fixed_period",
@@ -40,7 +51,7 @@ export const DEMO_SCENARIOS: Array<{ id: string; label: string; scenario: Studen
   },
   {
     id: "transition-travel",
-    label: "Travel reset test",
+    label: "Current student with travel",
     scenario: {
       startingPosition: "current_ds_inside_us",
       admissionBasis: "duration_of_status",
@@ -59,7 +70,7 @@ export const DEMO_SCENARIOS: Array<{ id: string; label: string; scenario: Studen
   },
   {
     id: "opt-transition",
-    label: "Post-OPT transition",
+    label: "Current student planning OPT",
     scenario: {
       startingPosition: "current_ds_inside_us",
       admissionBasis: "duration_of_status",

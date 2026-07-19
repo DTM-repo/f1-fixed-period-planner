@@ -68,6 +68,25 @@ describe("calculateScenario", () => {
     expect(findingIds(result)).toContain("fixed-extension-needed");
   });
 
+  it("uses an entered I-94 admit-until date for a fixed-period branch", () => {
+    const result = calculateScenario({
+      ...baseTransitionScenario,
+      startingPosition: "prospective_outside_us",
+      admissionBasis: "fixed_period",
+      inUsOnEffectiveDate: "no",
+      maintainingStatusOnEffectiveDate: "unknown",
+      reentryDate: "2027-01-10",
+      currentProgramEndDate: "2032-05-20",
+      i94AdmitUntilDate: "2029-12-31"
+    });
+
+    expect(result.classification).toBe("incoming_fixed_period");
+    expect(result.coverageEnd).toBe("2029-12-31");
+    expect(result.latestDepartureDate).toBe("2030-01-30");
+    expect(result.extensionNeededBy).toBe("2029-12-31");
+    expect(findingIds(result)).toContain("fixed-i94-date-provided");
+  });
+
   it("uses an effective-date EAD end when it is later than the I-20 but before the transition cap", () => {
     const result = calculateScenario({
       ...baseTransitionScenario,

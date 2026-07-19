@@ -45,6 +45,7 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
         "Do not invent a day when the student gives only a month and year.",
         "A graduation/program-completion date is not an OPT filing date, OPT start date, or EAD end date unless the student says so.",
         "If the student gives the active I-20/program end date and does not mention a different I-20 before the rule effective date, return currentProgramEndDate and also return programEndOnEffectiveDate with needsConfirmation=true.",
+        "Only return i94AdmitUntilDate when the student explicitly gives an I-94 admit-until, expiration, or end date. Do not confuse it with an I-20 date, visa expiration date, passport date, OPT date, or graduation date.",
         "For incoming students outside the United States, use startingPosition=prospective_outside_us, admissionBasis=fixed_period, and inUsOnEffectiveDate=no only if the narrative supports it.",
         "For current students in the United States on D/S, use startingPosition=current_ds_inside_us and admissionBasis=duration_of_status only if the narrative supports it.",
         "If the narrative mentions travel but not how the student will return, use travelPosture=planned and reentryBasis=unknown.",
@@ -53,6 +54,7 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
       allowedFields: {
         startingPosition: ["current_ds_inside_us", "prospective_outside_us", "readmitted_fixed_period", "transfer_or_program_change", "unknown"],
         admissionBasis: ["duration_of_status", "fixed_period", "unknown"],
+        i94AdmitUntilDate: "YYYY-MM-DD",
         inUsOnEffectiveDate: ["yes", "no", "unknown"],
         maintainingStatusOnEffectiveDate: ["yes", "no", "unknown"],
         programEndOnEffectiveDate: "YYYY-MM-DD",
@@ -107,6 +109,7 @@ const intakeSchema = {
             enum: [
               "startingPosition",
               "admissionBasis",
+              "i94AdmitUntilDate",
               "inUsOnEffectiveDate",
               "maintainingStatusOnEffectiveDate",
               "programEndOnEffectiveDate",

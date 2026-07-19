@@ -3,6 +3,7 @@ import type { StudentScenario } from "../engine/types";
 export type IntakeFactField =
   | "startingPosition"
   | "admissionBasis"
+  | "i94AdmitUntilDate"
   | "inUsOnEffectiveDate"
   | "maintainingStatusOnEffectiveDate"
   | "programEndOnEffectiveDate"

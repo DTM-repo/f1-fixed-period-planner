@@ -51,6 +51,7 @@ function uniqueSources(rules: AppliedRule[], findings: Finding[]) {
 }
 
 const DATE_FIELDS: Array<[keyof StudentScenario, string, ("date" | "effectiveDate")?]> = [
+  ["i94AdmitUntilDate", "I-94 admit-until date"],
   ["programEndOnEffectiveDate", "I-20 end on September 15, 2026"],
   ["currentProgramEndDate", "program end date"],
   ["eadEndOnEffectiveDate", "EAD end on September 15, 2026"],
@@ -531,7 +532,8 @@ function buildFixedAdmissionResult(
   const startDate = scenario.reentryDate ?? effectiveDate;
   const fourYearEnd = addYears(startDate, 4);
   const targetProgramEnd = scenario.currentProgramEndDate;
-  const coverageEnd = targetProgramEnd ? minDate(targetProgramEnd, fourYearEnd) : undefined;
+  const projectedCoverageEnd = targetProgramEnd ? minDate(targetProgramEnd, fourYearEnd) : undefined;
+  const coverageEnd = scenario.i94AdmitUntilDate ?? projectedCoverageEnd;
   const latestDepartureDate = coverageEnd ? addDays(coverageEnd, F1_FIXED_DEPARTURE_PERIOD_DAYS) : undefined;
   const extensionNeeded = coverageEnd && targetProgramEnd ? isAfter(targetProgramEnd, coverageEnd) : false;
   const appliedRules = [FIXED_ADMISSION_RULE];
@@ -548,8 +550,27 @@ function buildFixedAdmissionResult(
   if (coverageEnd) {
     timelineItems.push(
       timeline(startDate, isReentry ? "Tested re-entry" : "Tested initial entry", "Admission clock starts from the inspected admission date."),
-      timeline(coverageEnd, "Admit-until date to test", "Earlier of program end or four years from admission.", extensionNeeded ? "warning" : "good"),
+      timeline(
+        coverageEnd,
+        "Admit-until date to test",
+        scenario.i94AdmitUntilDate ? "I-94 admit-until date entered by the student." : "Earlier of program end or four years from admission.",
+        extensionNeeded ? "warning" : "good"
+      ),
       timeline(latestDepartureDate!, "F-1 departure/maintain-status period ends", "Thirty days after the tested program, training, or four-year point.")
+    );
+  }
+
+  if (scenario.i94AdmitUntilDate) {
+    findings.push(
+      finding(
+        "fixed-i94-date-provided",
+        "info",
+        "I-94 admit-until date provided",
+        `This scenario uses the I-94 admit-until date the student entered (${formatDate(
+          scenario.i94AdmitUntilDate
+        )}) as the tested fixed-period end. The program end date still matters for extension planning.`,
+        ["8CFR-214-1-A4"]
+      )
     );
   }
 
@@ -582,10 +603,10 @@ function buildFixedAdmissionResult(
     status,
     isReentry ? "fixed_period_reentry" : "incoming_fixed_period",
     coverageEnd
-      ? `Fixed-period admission through ${formatDate(coverageEnd)}`
+      ? `${scenario.i94AdmitUntilDate ? "I-94 fixed period" : "Fixed-period admission"} through ${formatDate(coverageEnd)}`
       : "Fixed-period admission needs the I-20 program end",
     coverageEnd
-      ? `The tested program/training or four-year point is ${formatDate(coverageEnd)}, with the fixed-period F-1 30-day period running through ${formatDate(
+      ? `The tested admit-until point is ${formatDate(coverageEnd)}, with the fixed-period F-1 30-day period running through ${formatDate(
           latestDepartureDate
         )}.`
       : "Add the I-20 program end date to turn the fixed-period rule into a specific admit-until date.",

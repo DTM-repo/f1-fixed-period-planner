@@ -275,3 +275,26 @@ Each entry should capture:
 **Codex Assistance**
 
 - Updated the apply step so narrative intake does not undo prior student input.
+
+### Blooming Flow Prototype
+
+**Research**
+
+- Reviewed David's attached single-file prototype for useful visual patterns, especially the side-by-side stay-put transition branch and travel/reentry branch timeline.
+- Rechecked the local deterministic engine field meanings before relabeling: `programEndOnEffectiveDate` is the active I-20 end date on September 15, 2026; `currentProgramEndDate` is the I-20/program end being tested for fixed-period or later-plan branches.
+
+**Decisions**
+
+- Replace the expert worksheet UI with a staged, typed interview flow. The first split asks whether the student is already/will be F-1 before September 15, 2026 or will enter after that date.
+- Treat current F-1 students as D/S by default, because that is the normal current-student I-94 posture, but make it easy to correct in a “what else could affect this?” card.
+- Move unusual or less common facts out of the main funnel: non-D/S I-94 dates, pending extension travel, EAD active on the rule date, passport/unusual travel facts.
+- Show impact cards as soon as the first answer is given, then update those cards as the student adds I-20, travel, OPT/STEM, transfer/change, and CPT facts.
+- Show travel visually as a branch comparison: stay in the U.S. under the transition path versus leave and return under a fixed-period comparison.
+- Add an explicit `i94AdmitUntilDate` fact so an unusual I-94 end date is not forced into an unrelated I-20/program field.
+
+**Codex Assistance**
+
+- Rebuilt the main scenario panel into a progressive “Build your scenario” flow while keeping the deterministic engine as the calculation source.
+- Added live impact cards and a visual branch timeline surface above the detailed findings.
+- Added `i94AdmitUntilDate` to the scenario model, date normalization, OpenAI intake schema, deterministic fixed-period branch, and tests.
+- Hid demo scenarios in a testing drawer and renamed them with student-readable labels.
