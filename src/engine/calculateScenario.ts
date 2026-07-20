@@ -564,8 +564,8 @@ function buildFixedResult(
   const timelineItems: TimelineItem[] = [];
   if (scenario.programStartDate) timelineItems.push(timeline(scenario.programStartDate, "Program starts", "The four-year maximum is measured from this I-20 date."));
   if (scenario.reentryDate) timelineItems.push(timeline(scenario.reentryDate, isReentry ? "You return to the United States" : "You enter in F-1 status", "CBP issues the controlling I-94 at entry."));
-  if (activityEnd) timelineItems.push(timeline(activityEnd, "Study or training period ends", actualI94 ? "This is 30 days before your I-94 admit-until date." : `Earlier of the I-20 end and the ${fixedProgramLabel(scenario)}.`, extensionNeeded ? "warning" : "good"));
-  if (i94End) timelineItems.push(timeline(i94End, "I-94 admit-until date", "This includes the final 30 days to leave or take action to maintain lawful status.", extensionNeeded ? "warning" : "neutral"));
+  if (activityEnd) timelineItems.push(timeline(activityEnd, "Program or approved training ends", actualI94 ? "This is 30 days before your I-94 end date." : `Earlier of the I-20 end and the ${fixedProgramLabel(scenario)}.`, extensionNeeded ? "warning" : "good"));
+  if (i94End) timelineItems.push(timeline(i94End, actualI94 ? "Your I-94 ends" : "Projected I-94 end date", "This date already includes the final 30 days to leave or take another action to maintain lawful status.", extensionNeeded ? "warning" : "neutral"));
 
   if (scenario.reentryDate && scenario.programStartDate) {
     const lead = daysBetween(scenario.reentryDate, scenario.programStartDate);
@@ -688,7 +688,7 @@ function buildClarificationResult(
     summary,
     appliedRules: [TRANSITION_RULE, FIXED_ADMISSION_RULE],
     findings,
-    timeline: [timeline(effectiveDate, "The new rule begins", "Your location and valid F-1 status on this date decide the first branch.", "warning")],
+    timeline: [timeline(effectiveDate, "The new rule begins", "Your location and valid F-1 status on this date determine which rules apply.", "warning")],
     followUpQuestions: [...new Set(questions)],
     nextActions: []
   });
@@ -878,9 +878,9 @@ export function calculateScenario(input: StudentScenario): PlannerResult {
   addCptFindings(scenario, activityEnd, latestDepartureDate, F1_TRANSITION_DEPARTURE_PERIOD_DAYS, findings, actions);
   addTravelAndDependentFindings(scenario, findings, actions);
   const timelineItems = [
-    timeline(effectiveDate, "The new rule begins", "Your current D/S protection is measured on this date."),
-    timeline(activityEnd, "Protected study or training ends", qualifyingApprovedOpt ? "Your approved EAD end date." : "The later active I-20 or EAD date, capped at four years.", extensionNeeded ? "warning" : "good"),
-    timeline(latestDepartureDate, "Old-rule 60-day period ends", "Last day of the transition departure period.", extensionNeeded ? "warning" : "neutral")
+    timeline(effectiveDate, "The new rule begins", "You must be in the United States in valid F-1 status on this date to keep the old rules."),
+    timeline(activityEnd, "Your old-rule study period ends", qualifyingApprovedOpt ? "This is your approved EAD end date." : "This is the later I-20 or approved EAD date in effect on September 15, capped at September 15, 2030.", extensionNeeded ? "warning" : "good"),
+    timeline(latestDepartureDate, "Your 60-day period ends", "This is the final day included after study or approved training under the old rules.", extensionNeeded ? "warning" : "neutral")
   ];
   addEarlyEndFinding(scenario, findings, timelineItems);
   addOptFindings(scenario, activityEnd, latestDepartureDate, findings, actions);

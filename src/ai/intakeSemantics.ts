@@ -1,6 +1,7 @@
 import type { IntakeCandidateFact, IntakeTopic } from "./intakePayload";
 
 const TOPICS: IntakeTopic[] = [
+  "stay_length",
   "travel",
   "opt",
   "stem_opt",
@@ -8,6 +9,9 @@ const TOPICS: IntakeTopic[] = [
   "extension",
   "school_transfer",
   "program_change",
+  "later_program",
+  "dependents",
+  "early_end",
   "change_of_status"
 ];
 
@@ -27,13 +31,17 @@ const MONTHS = [
 ];
 
 const TOPIC_PATTERNS: Record<IntakeTopic, RegExp> = {
-  travel: /\b(?:travel|trip|fly|flying|return|re-?enter|come back|go abroad|leave the (?:u\.?s\.?|united states))\b/i,
+  stay_length: /\b(?:how long (?:can|may|will) i stay|stay in the (?:u\.?s\.?|united states)|i-?94|duration of status|d\/s)\b/i,
+  travel: /\b(?:travel|trip|fly|flying|return|re-?enter|come back|go abroad|go home|visit home|vacation|leave the (?:u\.?s\.?|united states))\b/i,
   opt: /\b(?:opt|optional practical training)\b/i,
   stem_opt: /\b(?:stem[ -]?opt|stem optional practical training)\b/i,
   cpt: /\b(?:cpt|curricular practical training|day[ -]?1 cpt)\b/i,
   extension: /\b(?:i-?539|extension of stay|uscis extension|extension with uscis|need(?:ing)? (?:an )?extension|avoid[^.!?\n]{0,35}extension|extend my (?:stay|status|program))\b/i,
   school_transfer: /\b(?:transfer(?:ring)? (?:schools?|to another school)|school transfer)\b/i,
   program_change: /\b(?:change (?:my )?(?:major|program|degree|education level)|switch (?:my )?(?:major|program|degree))\b/i,
+  later_program: /\b(?:another|later|next|second|new) (?:degree|program)|(?:same|lower|higher) (?:degree|education) level\b/i,
+  dependents: /\b(?:f-?2|dependent|spouse|husband|wife|child|children)\b/i,
+  early_end: /\b(?:finish|complete|graduate) early|\bwithdraw(?:al|ing)?\b|\bstop studying\b/i,
   change_of_status: /\b(?:change of status|change (?:my )?status (?:to|into) f-?1)\b/i
 };
 
@@ -161,14 +169,17 @@ export function buildIntakeHighlights(
   if (topics.includes("cpt")) generated.push("Has a CPT question");
   if (topics.includes("school_transfer")) generated.push("Considering a school transfer");
   if (topics.includes("program_change")) generated.push("Considering a program change");
+  if (topics.includes("later_program")) generated.push("Considering another U.S. program");
+  if (topics.includes("dependents")) generated.push("Has F-2 family questions");
+  if (topics.includes("early_end")) generated.push("May finish early or withdraw");
 
   const category = (item: string): string | undefined => {
+    if (/(?:^|[^a-z])opt(?:[^a-z]|$)/i.test(item)) return "opt";
+    if (/\b(?:travel|trip|return|visit home)\b/i.test(item)) return "travel";
     if (/\b(?:current|incoming).*\bF-?1\b/i.test(item)) return "f1-position";
     if (/\b(?:first|second|third|fourth|fifth)[ -]?year\b/i.test(item)) return "year";
     if (/\b(?:undergraduate|graduate)\b/i.test(item)) return "education";
     if (/\b(?:graduat|complet|finish)/i.test(item)) return "graduation";
-    if (/\bOPT\b/i.test(item)) return "opt";
-    if (/\b(?:travel|trip|return)\b/i.test(item)) return "travel";
     if (/\bCPT\b/i.test(item)) return "cpt";
     if (/\b(?:I-?539|USCIS extension|extension of stay)\b/i.test(item)) return "extension";
     if (/\btransfer/i.test(item)) return "transfer";
@@ -200,5 +211,12 @@ export function buildIntakeHighlights(
   const concise = [...generated, ...additional]
     .map((item) => item.replace(/[.]+$/, "").trim())
     .filter((item) => item.length > 0 && item.length <= 80);
-  return unique(concise).slice(0, 6);
+  const seenCategories = new Set<string>();
+  return unique(concise).filter((item) => {
+    const itemCategory = category(item);
+    if (!itemCategory) return true;
+    if (seenCategories.has(itemCategory)) return false;
+    seenCategories.add(itemCategory);
+    return true;
+  }).slice(0, 6);
 }

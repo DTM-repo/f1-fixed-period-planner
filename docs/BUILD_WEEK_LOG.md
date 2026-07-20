@@ -674,3 +674,50 @@ Each entry should capture:
 - Vitest: 56/56 passed.
 - TypeScript and the production Vite build passed.
 - Browser verification of the incoming undergraduate OPT path showed only the substantive regular-OPT/STEM-OPT sequence, with no skipped-question commentary and no console errors.
+
+### Concern-First Impact Map and Rule Advisor
+
+**Research**
+
+- Reframed the product from a long funnel into overlapping impact categories. The September 15 question still selects the legal starting point, but the student's own concern now controls order and emphasis.
+- Rechecked the final rule's regulatory text for transition D/S, fixed admissions, OPT, CPT, school and program changes, departure periods, and extensions. Deep links now open the relevant PDF page instead of the top of the same rule every time.
+- Confirmed that the final rule PDF has 156 pages. F-1 extension biometrics and interviews are discussed on PDF page 135; premium processing is discussed on PDF page 48. A prior `#page=165` link was invalid and was removed.
+- A live browser scenario exposed a false OPT recommendation: a May 2028 graduate was told to file before an October 2026 return to preserve an exception that closes before the student's normal OPT window opens. The rule requires the normal filing window to open in time, and filing before departure controls the eligible travel case.
+- Live report generation exposed two model-quality failures that a successful JSON response alone did not catch: internal composition debris and a paragraph ending mid-date. Both became deterministic rejection conditions.
+
+**Decisions**
+
+- Flow: September 15 gate; student's concern; concise concern-first effects; all other applicable effects; optional deeper areas; one controlling question at a time; AI advisor report; rule-scoped follow-up.
+- Use one concise main conclusion and atomic impact claims. Never repeat the headline as a card. Keep card titles to 14 words and details to 48 words in regression tests.
+- Show every applicable category, but place student-raised travel, OPT, extension, CPT, transfer, program, family, or early-ending concerns first.
+- Keep the deterministic engine as the source of dates and classifications. GPT-5.6 Sol may synthesize priorities and interactions, but it cannot recalculate or contradict those facts.
+- For current students with an eligible one-time OPT window and post-rule travel, ask the controlling question directly: whether USCIS will receive Form I-765 before departure.
+- Split extension fee, biometrics/interview, and premium-processing facts into separate source-linked claims so each link supports exactly what the card says.
+- Use OpenAI Responses background mode for the full report. Netlify can return a response ID quickly, and the browser polls until the report completes instead of losing a high-quality generation to a local function timeout.
+- The open-ended rule advisor can extract newly stated facts, update the deterministic impact map, and refresh the full report. Its answer remains visible throughout the refresh.
+
+**Codex Assistance**
+
+- Built the typed impact-map layer and concern catalog, replaced the all-topics questionnaire, and preserved still-valid answers when an earlier answer changes.
+- Added the rule-scoped follow-up function and full report background polling, including structured outputs, source IDs, prompt-injection boundaries, plain-prose checks, and one automatic regeneration after a failed quality check.
+- Found and corrected the impossible OPT-before-travel recommendation during browser testing, then added the filing-before-departure fact across the scenario type, AI extraction schema, interview, follow-up updates, impact map, and tests.
+- Rewrote deterministic cards and timelines in literal student language: old rules, dated I-94, program end, 30-day period, 60-day period, and direct form names.
+- Added exact source-page mappings, extension process details, print/save-PDF, sharing, privacy-safe test-case export, and responsive timeline verification.
+- Tested current, future, contradictory, story, travel, OPT, edit-preservation, report, follow-up, overview, and mobile paths in the browser and checked browser logs.
+
+**Verification**
+
+- Vitest: 78/78 passing after the concern-first rebuild.
+- TypeScript and production Vite build: passing.
+- Live GPT-5.6 Sol report: background start, polling, quality validation, and display passed.
+- Live follow-up: answered the travel-before-OPT question, stayed visible, and refreshed the complete report without returning to the form.
+- Story intake: extracted current student, third year, December 2026 graduation, OPT, and travel as compact bullets; duplicate concern bullets are now rejected by regression coverage.
+- 390-pixel browser checks: no horizontal overflow on the welcome, overview, or planner; no console warnings or errors.
+
+**Final quality-first model and route audit**
+
+- OpenAI's live GPT-5.6 guidance says omitted reasoning defaults to medium and recommends reserving `max` for the hardest quality-first work. We made the choice explicit instead of silently inheriting a default: Sol at medium for narrative extraction and interactive follow-ups, and max for the final advisor synthesis. Each level remains configurable through a Netlify environment variable.
+- A live `high`-effort follow-up exhausted its original reasoning budget at the edge of the synchronous function window. Medium returned the tested travel-and-OPT answer reliably, while the final report can safely use max because it runs in background mode.
+- Split extension consequences by route. A known travel return can no longer inherit an extension warning that belongs only to the student's stay-in-the-United-States timeline.
+- Added a deterministic check before saying that a return may avoid Form I-539: the projected admission must actually reach the current program end date. Otherwise the app describes travel only as a separate way to request more time, with CBP making the admission decision.
+- Added regression coverage for both the helpful travel case and the case where the projected returned admission still ends too early.

@@ -8,6 +8,10 @@ describe("voice intake semantics", () => {
     expect(deriveNarrativeTopics(story, [])).toEqual(expect.arrayContaining(["travel", "opt"]));
   });
 
+  it("recognizes ordinary ways students describe personal travel", () => {
+    expect(deriveNarrativeTopics("Can I visit home before I file for OPT?", [])).toEqual(expect.arrayContaining(["travel", "opt"]));
+  });
+
   it("does not invent a travel concern from an unsupported model topic", () => {
     const narrative = "I am a current F-1 student in the last year of a graduate program. I will graduate next spring.";
     expect(deriveNarrativeTopics(narrative, ["travel"])).not.toContain("travel");
@@ -44,5 +48,19 @@ describe("voice intake semantics", () => {
       "Has a travel question"
     ]));
     expect(highlights.every((highlight) => highlight.length <= 80)).toBe(true);
+  });
+
+  it("shows each concern only once when the model and deterministic summary use different words", () => {
+    const highlights = buildIntakeHighlights(
+      "I want to do OPT and visit home.",
+      [
+        { field: "optIntent", value: "yes", confidence: "high", needsConfirmation: false },
+        { field: "travelPosture", value: "planned", confidence: "high", needsConfirmation: false }
+      ],
+      ["Plans OPT", "Travel question"],
+      ["opt", "travel"]
+    );
+    expect(highlights.filter((highlight) => /\bOPT\b/i.test(highlight))).toHaveLength(1);
+    expect(highlights.filter((highlight) => /\b(?:travel|trip)\b/i.test(highlight))).toHaveLength(1);
   });
 });

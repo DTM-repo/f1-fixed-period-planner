@@ -49,6 +49,7 @@ const completedCoreAnswers = new Set([
   "presence",
   "programEnd",
   "educationLevel",
+  "programType",
   "optIntent",
   "travelIntent",
   "schoolTransfer",
@@ -66,6 +67,7 @@ function currentStudent(programEnd: string): StudentScenario {
     programEndOnEffectiveDate: programEnd,
     currentProgramEndDate: programEnd,
     educationLevel: "graduate",
+    programType: "college_or_university",
     optIntent: "no",
     travelPosture: "none",
     schoolTransferPlan: "no",
@@ -82,10 +84,15 @@ describe("CPT interview relevance", () => {
     expect(questions.map((question) => question.id)).not.toContain("cptTiming");
   });
 
-  it("asks only whether CPT is planned when an earlier admission deadline matters", () => {
+  it("does not ask about CPT merely because an earlier admission deadline exists", () => {
     const questions = buildQuestions(currentStudent("2031-05-22"), completedCoreAnswers, [], "2030-09-15");
-    expect(questions.map((question) => question.id)).toContain("cptIntent");
+    expect(questions.map((question) => question.id)).not.toContain("cptIntent");
     expect(questions.map((question) => question.id)).not.toContain("cptTiming");
+  });
+
+  it("asks about CPT when the student chooses to explore it", () => {
+    const questions = buildQuestions(currentStudent("2031-05-22"), completedCoreAnswers, ["cpt"], "2030-09-15");
+    expect(questions.map((question) => question.id)).toContain("cptIntent");
   });
 
   it("keeps a student-raised CPT question visible without inventing impossible timing", () => {

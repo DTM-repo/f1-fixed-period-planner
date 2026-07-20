@@ -10,6 +10,9 @@ export interface SourceReference {
 
 const FEDERAL_REGISTER_RULE =
   "https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant";
+const FEDERAL_REGISTER_PDF =
+  "https://www.govinfo.gov/content/pkg/FR-2026-07-17/pdf/2026-14439.pdf";
+const rulePage = (page: number) => `${FEDERAL_REGISTER_PDF}#page=${page}`;
 
 export const SOURCE_INDEX: Record<string, SourceReference> = {
   "FR-2026-FINAL-RULE": {
@@ -25,91 +28,91 @@ export const SOURCE_INDEX: Record<string, SourceReference> = {
     id: "8CFR-214-1-A4",
     title: "8 CFR 214.1(a)(4), fixed period of admission",
     locator: "Final rule regulatory text for fixed admissions after the effective date",
-    url: `${FEDERAL_REGISTER_RULE}#p-1748`,
+    url: rulePage(147),
     lastVerified: "2026-07-19"
   },
   "8CFR-214-1-M1": {
     id: "8CFR-214-1-M1",
     title: "8 CFR 214.1(m)(1), transition treatment for D/S admissions",
     locator: "Final rule transition provisions for F and J nonimmigrants admitted for duration of status",
-    url: `${FEDERAL_REGISTER_RULE}#p-1731`,
+    url: rulePage(148),
     lastVerified: "2026-07-19"
   },
   "8CFR-214-1-M1-OPT": {
     id: "8CFR-214-1-M1-OPT",
     title: "8 CFR 214.1(m)(1)(i)-(ii), transition OPT/STEM OPT filing treatment",
     locator: "Final rule transition provisions for F-1 post-completion OPT and STEM OPT filings",
-    url: `${FEDERAL_REGISTER_RULE}#p-1732`,
+    url: rulePage(148),
     lastVerified: "2026-07-19"
   },
   "8CFR-214-1-C8": {
     id: "8CFR-214-1-C8",
     title: "8 CFR 214.1(c)(8), travel while extension request is pending",
     locator: "Final rule pending extension and departure provisions",
-    url: `${FEDERAL_REGISTER_RULE}#p-1728`,
+    url: rulePage(148),
     lastVerified: "2026-07-19"
   },
   "8CFR-214-2-F11": {
     id: "8CFR-214-2-F11",
     title: "8 CFR 214.2(f)(11), F-1 practical training extension-of-stay mechanics",
     locator: "Final rule updates for OPT/STEM OPT extension-of-stay filing context",
-    url: `${FEDERAL_REGISTER_RULE}#p-1732`,
+    url: rulePage(152),
     lastVerified: "2026-07-19"
   },
   "8CFR-214-2-F5V": {
     id: "8CFR-214-2-F5V",
     title: "8 CFR 214.2(f)(5)(v), F-1 period of preparation for departure",
     locator: "Final rule fixed-period F-1 30-day departure/maintain-status period",
-    url: `${FEDERAL_REGISTER_RULE}#p-1760`,
+    url: rulePage(150),
     lastVerified: "2026-07-19"
   },
   "8CFR-214-2-F5II": {
     id: "8CFR-214-2-F5II",
     title: "8 CFR 214.2(f)(5)(ii), F-1 school transfer, program change, and education-level limits",
     locator: "Final rule rules for undergraduate first-year changes, graduate changes/transfers, and same/lower-level programs",
-    url: `${FEDERAL_REGISTER_RULE}#p-1754`,
+    url: rulePage(150),
     lastVerified: "2026-07-19"
   },
   "8CFR-214-2-F5VIII-CPT": {
     id: "8CFR-214-2-F5VIII-CPT",
     title: "8 CFR 214.2(f)(5)(viii), CPT and employment during a pending extension",
     locator: "Final rule discussion of CPT, day-one CPT, and employment while an F-1 extension of stay is pending",
-    url: `${FEDERAL_REGISTER_RULE}#p-1768`,
+    url: rulePage(151),
     lastVerified: "2026-07-19"
   },
   "FR-FOUR-YEAR-START": {
     id: "FR-FOUR-YEAR-START",
     title: "DHS explanation of the four-year calculation",
     locator: "Final rule preamble: the maximum period is calculated from the Form I-20 program start date",
-    url: `${FEDERAL_REGISTER_RULE}#p-537`,
+    url: rulePage(41),
     lastVerified: "2026-07-19"
   },
   "8CFR-214-2-F7": {
     id: "8CFR-214-2-F7",
     title: "8 CFR 214.2(f)(7), F-1 extension of stay",
     locator: "Eligibility, filing requirements, timing, dependents, and extension length",
-    url: `${FEDERAL_REGISTER_RULE}#p-1769`,
+    url: rulePage(151),
     lastVerified: "2026-07-19"
   },
   "8CFR-214-2-F7-TIMELY": {
     id: "8CFR-214-2-F7-TIMELY",
     title: "8 CFR 214.2(f)(7)(iii)(B), timely extension filing",
     locator: "USCIS receipt deadline and work limits during the final 30 days",
-    url: `${FEDERAL_REGISTER_RULE}#p-1780`,
+    url: rulePage(151),
     lastVerified: "2026-07-19"
   },
   "8CFR-214-2-F5-EXCEPTIONS": {
     id: "8CFR-214-2-F5-EXCEPTIONS",
     title: "8 CFR 214.2(f)(5)(i), shorter fixed-period limits",
     locator: "English-language training, public high school, pending OPT, and F-2 limits",
-    url: `${FEDERAL_REGISTER_RULE}#p-1749`,
+    url: rulePage(149),
     lastVerified: "2026-07-19"
   },
   "8CFR-214-2-F5II-DELAY": {
     id: "8CFR-214-2-F5II-DELAY",
     title: "8 CFR 214.2(f)(5)(ii)(E), possible implementation delay",
     locator: "DHS authority to delay or suspend academic-mobility restrictions through September 14, 2028",
-    url: `${FEDERAL_REGISTER_RULE}#p-1758`,
+    url: rulePage(150),
     lastVerified: "2026-07-19"
   },
   "USCIS-G1055-I539": {
@@ -119,11 +122,18 @@ export const SOURCE_INDEX: Record<string, SourceReference> = {
     url: "https://www.uscis.gov/g-1055?topic_id=97292",
     lastVerified: "2026-07-19"
   },
-  "USCIS-I539-PREMIUM": {
-    id: "USCIS-I539-PREMIUM",
-    title: "USCIS premium processing bulletin for certain Form I-539 F/M/J change-of-status requests",
-    locator: "USCIS bulletin describing premium processing for certain change-of-status I-539 filings and biometrics timing",
-    url: "https://content.govdelivery.com/accounts/USDHSCIS/bulletins/35fa3e4",
+  "FR-F1-EXTENSION-PROCESS": {
+    id: "FR-F1-EXTENSION-PROCESS",
+    title: "DHS discussion of F-1 extension processing",
+    locator: "Final rule discussion of possible biometrics and interviews for F-1 extension applicants",
+    url: rulePage(135),
+    lastVerified: "2026-07-19"
+  },
+  "FR-I539-PREMIUM": {
+    id: "FR-I539-PREMIUM",
+    title: "DHS discussion of premium processing for Form I-539",
+    locator: "Final rule response explaining that premium processing is not currently available for this extension request",
+    url: rulePage(48),
     lastVerified: "2026-07-19"
   },
   "USCIS-OPT-STEM": {

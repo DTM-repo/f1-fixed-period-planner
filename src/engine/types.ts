@@ -70,6 +70,7 @@ export interface StudentScenario {
   optIntent?: YesNoUnknown;
   optStage: OptStage;
   optFilingDate?: DateString;
+  optFiledBeforeDeparture?: YesNoUnknown;
   travelPosture: TravelPosture;
   reentryDate?: DateString;
   reentryBasis: ReentryBasis;

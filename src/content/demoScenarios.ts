@@ -8,6 +8,7 @@ export const DEFAULT_SCENARIO: StudentScenario = {
   departBeforeEffectiveDate: "unknown",
   optIntent: "unknown",
   optStage: "none",
+  optFiledBeforeDeparture: "unknown",
   travelPosture: "unknown",
   reentryBasis: "unknown",
   pendingExtensionOnDeparture: "unknown",

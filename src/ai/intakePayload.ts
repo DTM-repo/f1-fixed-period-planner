@@ -15,6 +15,7 @@ export type IntakeFactField =
   | "optIntent"
   | "optStage"
   | "optFilingDate"
+  | "optFiledBeforeDeparture"
   | "travelPosture"
   | "reentryDate"
   | "reentryBasis"
@@ -38,6 +39,7 @@ export type IntakeFactField =
 export type IntakeConfidence = "high" | "medium" | "low";
 
 export type IntakeTopic =
+  | "stay_length"
   | "travel"
   | "opt"
   | "stem_opt"
@@ -45,6 +47,9 @@ export type IntakeTopic =
   | "extension"
   | "school_transfer"
   | "program_change"
+  | "later_program"
+  | "dependents"
+  | "early_end"
   | "change_of_status";
 
 export interface IntakeCandidateFact {
