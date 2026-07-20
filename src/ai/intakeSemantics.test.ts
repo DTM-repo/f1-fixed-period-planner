@@ -105,4 +105,21 @@ describe("voice intake semantics", () => {
     ]));
     expect(topics).toEqual(expect.arrayContaining(["opt", "later_program"]));
   });
+
+  it("keeps a month-year graduation event when the student says May of 2027", () => {
+    const narrative = "I am an undergraduate and I plan to graduate in May of 2027, then do OPT. I am worried about how these rules might affect me, especially travel.";
+    const facts = addExplicitNarrativeFacts(narrative, [
+      { field: "optIntent", value: "yes", confidence: "high", needsConfirmation: false },
+      { field: "optStage", value: "none", confidence: "high", needsConfirmation: false }
+    ]);
+    const topics = deriveNarrativeTopics(narrative, ["travel", "opt"], facts);
+    const highlights = buildIntakeHighlights(narrative, facts, [], topics);
+
+    expect(facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "currentProgramEndDate", value: "2027-05" }),
+      expect.objectContaining({ field: "educationLevel", value: "undergraduate" }),
+      expect.objectContaining({ field: "programType", value: "college_or_university" })
+    ]));
+    expect(highlights).toContain("Graduating May 2027");
+  });
 });

@@ -1,9 +1,9 @@
-import type { IntakeExtractionRequest, IntakeExtractionResponse } from "../../src/ai/intakePayload";
+import type { IntakeCaseEvent, IntakeExtractionRequest, IntakeExtractionResponse } from "../../src/ai/intakePayload";
 import { addCurrentStudentAssumptions, addExplicitNarrativeFacts, buildIntakeHighlights, deriveNarrativeTopics } from "../../src/ai/intakeSemantics";
 import { DEFAULT_EFFECTIVE_DATE } from "../../src/engine/calculateScenario";
 import { reasoningEffort } from "./_shared/openai-config";
 
-const DEFAULT_MODEL = "gpt-5.6-sol";
+const DEFAULT_MODEL = "gpt-5.6-luna";
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -35,7 +35,7 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
   return JSON.stringify(
     {
       task:
-        "Extract candidate facts from an F-1 student's narrative for a deterministic fixed-period admission planner. Do not calculate legal results, deadlines, or status outcomes.",
+        "Build a structured temporal case brief from an F-1 student's narrative. Extract facts, distinguish separate past/current/future events, and identify concerns. Do not calculate legal results, deadlines, or status outcomes.",
       appKnownFacts: {
         ruleEffectiveDate: DEFAULT_EFFECTIVE_DATE
       },
@@ -48,6 +48,10 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
         "Do not convert numeric slash dates like 6/2/2029 because date order differs by country.",
         "Do not invent a day when the student gives only a month and year.",
         "A graduation/program-completion date is not an OPT filing date, OPT start date, or EAD end date unless the student says so.",
+        "Represent each distinct program, approved training period, planned trip, later program, and pending immigrant petition as its own event. Never collapse a completed program, current OPT, and a future program into one event.",
+        "Use completed_program for a program already finished, active_program for the program covering current study, incoming_program for the first program of a future student, approved_opt only for approved current OPT, planned_opt for future OPT, and future_program for a later program after the current phase.",
+        "Event dates use the same date rule as facts: YYYY-MM-DD when the day is known, YYYY-MM for month and year, YYYY for year only, and an empty string when the narrative gives no date.",
+        "Event labels are short neutral descriptions such as Current undergraduate program, Planned post-completion OPT, or Second master's program. Do not put advice or legal conclusions in an event label.",
         "The I-20 program start date and program end date are different facts. Never infer one from the other.",
         "For a current D/S student who will be in the United States on the rule effective date, if the student gives an I-20/program end date on or after the effective date and does not mention a different I-20, return currentProgramEndDate and also return programEndOnEffectiveDate with needsConfirmation=true. If the stated program end is before the effective date, return it as currentProgramEndDate only so the app can ask what later I-20 or approved EAD covers the effective date. Do not return programEndOnEffectiveDate for an incoming student or a change-of-status case.",
         "Only return i94AdmitUntilDate when the student explicitly gives an I-94 admit-until, expiration, or end date. Do not confuse it with an I-20 date, visa expiration date, passport date, OPT date, or graduation date.",
@@ -78,15 +82,15 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
       allowedFields: {
         startingPosition: ["current_ds_inside_us", "prospective_outside_us", "change_status_inside_us", "readmitted_fixed_period", "transfer_or_program_change", "unknown"],
         admissionBasis: ["duration_of_status", "fixed_period", "unknown"],
-        i94AdmitUntilDate: "YYYY-MM-DD",
+        i94AdmitUntilDate: "YYYY-MM-DD, YYYY-MM, or YYYY",
         inUsOnEffectiveDate: ["yes", "no", "unknown"],
         maintainingStatusOnEffectiveDate: ["yes", "no", "unknown"],
         departBeforeEffectiveDate: ["yes", "no", "unknown"],
-        programStartDate: "YYYY-MM-DD",
-        programEndOnEffectiveDate: "YYYY-MM-DD",
-        currentProgramEndDate: "YYYY-MM-DD",
-        eadEndOnEffectiveDate: "YYYY-MM-DD",
-        currentEadEndDate: "YYYY-MM-DD",
+        programStartDate: "YYYY-MM-DD, YYYY-MM, or YYYY",
+        programEndOnEffectiveDate: "YYYY-MM-DD, YYYY-MM, or YYYY",
+        currentProgramEndDate: "YYYY-MM-DD, YYYY-MM, or YYYY",
+        eadEndOnEffectiveDate: "YYYY-MM-DD, YYYY-MM, or YYYY",
+        currentEadEndDate: "YYYY-MM-DD, YYYY-MM, or YYYY",
         optIntent: ["yes", "no", "unknown"],
         optStage: [
           "none",
@@ -98,13 +102,13 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
           "stem_pending",
           "stem_approved"
         ],
-        optFilingDate: "YYYY-MM-DD",
+        optFilingDate: "YYYY-MM-DD, YYYY-MM, or YYYY",
         optFiledBeforeDeparture: ["yes", "no", "unknown"],
         travelPosture: ["none", "planned", "completed", "automatic_visa_revalidation", "unknown"],
-        reentryDate: "YYYY-MM-DD",
+        reentryDate: "YYYY-MM-DD, YYYY-MM, or YYYY",
         reentryBasis: ["same_i20_balance", "new_f1_admission", "longer_program_i20", "automatic_visa_revalidation", "unknown"],
-        returnProgramStartDate: "YYYY-MM-DD",
-        returnProgramEndDate: "YYYY-MM-DD",
+        returnProgramStartDate: "YYYY-MM-DD, YYYY-MM, or YYYY",
+        returnProgramEndDate: "YYYY-MM-DD, YYYY-MM, or YYYY",
         pendingExtensionOnDeparture: ["yes", "no", "unknown"],
         transferOrProgramChange: ["yes", "no", "unknown"],
         schoolTransferPlan: ["yes", "no", "unknown"],
@@ -113,15 +117,19 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
         programType: ["college_or_university", "english_language_training", "public_high_school", "private_high_school", "other", "unknown"],
         firstAcademicYearCompleted: ["yes", "no", "unknown"],
         nextProgramLevelPlan: ["higher", "same_or_lower", "not_planning", "unknown"],
-        nextProgramStartDate: "YYYY-MM-DD",
-        nextProgramEndDate: "YYYY-MM-DD",
+        nextProgramStartDate: "YYYY-MM-DD, YYYY-MM, or YYYY",
+        nextProgramEndDate: "YYYY-MM-DD, YYYY-MM, or YYYY",
         dsoRecommendedOpt: ["yes", "no", "unknown"],
         hasF2Dependents: ["yes", "no", "unknown"],
         earlyEndSituation: ["none", "completed_early", "authorized_withdrawal", "status_violation", "unknown"],
-        earlyEndDate: "YYYY-MM-DD",
+        earlyEndDate: "YYYY-MM-DD, YYYY-MM, or YYYY",
         returningAfterEffectiveDate: ["yes", "no", "unknown"],
         cptPlan: ["none", "planned", "unknown"],
         pendingEmploymentImmigrantPetition: ["yes", "no", "unknown"]
+      },
+      allowedEvents: {
+        kinds: ["program", "practical_training", "travel", "later_program", "immigrant_petition"],
+        roles: ["completed_program", "active_program", "incoming_program", "approved_opt", "planned_opt", "planned_return", "future_program", "pending_petition"]
       },
       currentScenario: payload.currentScenario,
       studentNarrative: payload.narrative
@@ -134,7 +142,7 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
 const intakeSchema = {
   type: "object",
   additionalProperties: false,
-  required: ["highlights", "topics", "facts"],
+  required: ["highlights", "topics", "facts", "events"],
   properties: {
     highlights: {
       type: "array",
@@ -205,9 +213,52 @@ const intakeSchema = {
           needsConfirmation: { type: "boolean" }
         }
       }
+    },
+    events: {
+      type: "array",
+      maxItems: 12,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["kind", "role", "label", "startDate", "endDate", "educationLevel", "confidence", "needsConfirmation"],
+        properties: {
+          kind: { type: "string", enum: ["program", "practical_training", "travel", "later_program", "immigrant_petition"] },
+          role: { type: "string", enum: ["completed_program", "active_program", "incoming_program", "approved_opt", "planned_opt", "planned_return", "future_program", "pending_petition"] },
+          label: { type: "string", minLength: 2, maxLength: 80 },
+          startDate: { type: "string", maxLength: 10 },
+          endDate: { type: "string", maxLength: 10 },
+          educationLevel: { type: "string", enum: ["undergraduate", "graduate", "other", "unknown"] },
+          confidence: { type: "string", enum: ["high", "medium", "low"] },
+          needsConfirmation: { type: "boolean" }
+        }
+      }
     }
   }
 };
+
+const EVENT_KINDS = new Set(["program", "practical_training", "travel", "later_program", "immigrant_petition"]);
+const EVENT_ROLES = new Set(["completed_program", "active_program", "incoming_program", "approved_opt", "planned_opt", "planned_return", "future_program", "pending_petition"]);
+const EVENT_LEVELS = new Set(["undergraduate", "graduate", "other", "unknown"]);
+
+function validEventDate(value: string): boolean {
+  return value === "" || /^20\d{2}$/.test(value) || /^20\d{2}-(?:0[1-9]|1[0-2])$/.test(value) || /^20\d{2}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12]\d|3[01])$/.test(value);
+}
+
+function normalizeEvents(value: unknown): IntakeCaseEvent[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((event): event is IntakeCaseEvent => Boolean(
+    event &&
+    typeof event === "object" &&
+    EVENT_KINDS.has((event as IntakeCaseEvent).kind) &&
+    EVENT_ROLES.has((event as IntakeCaseEvent).role) &&
+    EVENT_LEVELS.has((event as IntakeCaseEvent).educationLevel) &&
+    typeof (event as IntakeCaseEvent).label === "string" &&
+    validEventDate((event as IntakeCaseEvent).startDate) &&
+    validEventDate((event as IntakeCaseEvent).endDate) &&
+    ["high", "medium", "low"].includes((event as IntakeCaseEvent).confidence) &&
+    typeof (event as IntakeCaseEvent).needsConfirmation === "boolean"
+  )).slice(0, 12);
+}
 
 function normalizeExtraction(value: unknown, model: string, narrative: string): IntakeExtractionResponse {
   const parsed = value as IntakeExtractionResponse;
@@ -224,6 +275,7 @@ function normalizeExtraction(value: unknown, model: string, narrative: string): 
     highlights: buildIntakeHighlights(semanticNarrative, facts, parsed.highlights, topics),
     topics,
     facts,
+    events: normalizeEvents(parsed.events),
     model
   };
 }
@@ -258,7 +310,7 @@ export default async (request: Request): Promise<Response> => {
   }
 
   const model = Netlify.env.get("OPENAI_INTAKE_MODEL") ?? Netlify.env.get("OPENAI_MODEL") ?? DEFAULT_MODEL;
-  const effort = reasoningEffort(Netlify.env.get("OPENAI_INTAKE_REASONING_EFFORT"), "medium");
+  const effort = reasoningEffort(Netlify.env.get("OPENAI_INTAKE_REASONING_EFFORT"), "low");
   const openaiResponse = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -279,7 +331,7 @@ export default async (request: Request): Promise<Response> => {
           schema: intakeSchema
         }
       },
-      max_output_tokens: 3600,
+      max_output_tokens: 2800,
       store: false
     })
   });
@@ -295,7 +347,7 @@ export default async (request: Request): Promise<Response> => {
   try {
     return json(normalizeExtraction(JSON.parse(text), model, payload.narrative));
   } catch {
-    return json(normalizeExtraction({ highlights: [], topics: [], facts: [] }, `${model}:structured-recovery`, payload.narrative));
+    return json(normalizeExtraction({ highlights: [], topics: [], facts: [], events: [] }, `${model}:structured-recovery`, payload.narrative));
   }
 };
 

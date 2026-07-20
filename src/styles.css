@@ -591,9 +591,6 @@ details[open] > summary svg { transform: rotate(180deg); }
 .impact-index-state { color: #6f7771; font-size: 0.66rem; font-weight: 760; text-transform: uppercase; }
 .impact-index-list > button.active .impact-index-state { color: var(--cyan); }
 .advisement-action {
-  position: sticky;
-  top: 88px;
-  z-index: 5;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -765,7 +762,7 @@ details[open] > summary svg { transform: rotate(180deg); }
   .impact-heading h2 { font-size: 2rem; }
   .impact-index-list > button { grid-template-columns: 26px minmax(0, 1fr); }
   .impact-index-state { grid-column: 2; }
-  .advisement-action { top: 70px; grid-template-columns: 1fr; }
+  .advisement-action { grid-template-columns: 1fr; }
   .advisor-follow-up > h2 { font-size: 1.85rem; }
   .timeline-band { padding: 56px 18px 68px; }
   .timeline-track { display: grid; grid-template-columns: 1fr; gap: 0; padding-left: 26px; }

@@ -75,6 +75,8 @@ function buildPrompt(payload: ExplanationRequest): string {
       ],
       hardRules: [
         "Use only the verified impact map, scenario, conversation, and cited source metadata supplied here.",
+        "Treat the case timeline as one student with distinct past, current, and future events. Never collapse a completed program, approved OPT, a later program, and travel into one current-program fact.",
+        "Cover each rule area marked applies, could_apply, or needs_fact. Omit any area marked not_applicable.",
         "The confirmed facts list identifies what the student actually supplied. Treat no, none, and other placeholder values in the raw scenario as internal defaults unless the confirmed facts, verified impact map, or conversation establishes them.",
         "Never change, recalculate, extend, or contradict a deterministic date or legal outcome.",
         "Never call the reader the student and never refer to the calculator or app in the third person.",
@@ -95,6 +97,8 @@ function buildPrompt(payload: ExplanationRequest): string {
         "Use four to eight focused paragraphs and no more than 800 words. The result should feel like a complete advisor's answer, not an addendum or a list."
       ],
       scenario,
+      caseTimeline: payload.caseEvents ?? [],
+      applicableRuleAreas: payload.applicableRuleAreas ?? [],
       statedConcerns: payload.focusTopics ?? [],
       exploredAreas: payload.exploredTopics ?? [],
       confirmedFacts: payload.confirmedFacts ?? [],

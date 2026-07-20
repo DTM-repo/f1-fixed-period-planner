@@ -64,6 +64,25 @@ export interface IntakeCandidateFact {
   needsConfirmation: boolean;
 }
 
+export interface IntakeCaseEvent {
+  kind: "program" | "practical_training" | "travel" | "later_program" | "immigrant_petition";
+  role:
+    | "completed_program"
+    | "active_program"
+    | "incoming_program"
+    | "approved_opt"
+    | "planned_opt"
+    | "planned_return"
+    | "future_program"
+    | "pending_petition";
+  label: string;
+  startDate: string;
+  endDate: string;
+  educationLevel: "undergraduate" | "graduate" | "other" | "unknown";
+  confidence: IntakeConfidence;
+  needsConfirmation: boolean;
+}
+
 export interface IntakeExtractionRequest {
   narrative: string;
   currentScenario: StudentScenario;
@@ -73,5 +92,6 @@ export interface IntakeExtractionResponse {
   highlights: string[];
   topics: IntakeTopic[];
   facts: IntakeCandidateFact[];
+  events?: IntakeCaseEvent[];
   model?: string;
 }

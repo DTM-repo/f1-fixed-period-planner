@@ -108,7 +108,7 @@ function explicitlyAwayOnEffectiveDate(narrative: string): boolean {
 
 function studyClearlyContinuesPastEffectiveDate(narrative: string): boolean {
   const match = narrative.match(
-    /\b(?:graduat(?:e|ing)|finish(?:ing)?|complet(?:e|ing))\b[^.!?\n]{0,45}\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(20\d{2})\b/i
+    /\b(?:graduat(?:e|ing)|finish(?:ing)?|complet(?:e|ing))\b[^.!?\n]{0,45}\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(?:of\s+)?(20\d{2})\b/i
   );
   if (!match) return /\b(?:third|fourth|fifth)[ -]?year (?:f-?1|international)?\s*student\b/i.test(narrative);
   const month = MONTHS.findIndex((item) => item.toLowerCase() === match[1].toLowerCase()) + 1;
@@ -143,8 +143,9 @@ function addFact(
 function completionMonth(narrative: string): string | undefined {
   const monthPattern = MONTHS.join("|");
   const patterns = [
-    new RegExp(`\\b(?:graduated|completed|finished)(?:\\s+from\\b[^.!?\\n]{0,45})?(?:\\s+(?:this|in|on))?\\s+(${monthPattern})\\s+(20\\d{2})\\b`, "i"),
-    new RegExp(`\\b(?:program|i-?20)\\b[^.!?\\n]{0,35}\\b(?:ended|ends|completion)\\b(?:\\s+(?:in|on))?\\s+(${monthPattern})\\s+(20\\d{2})\\b`, "i")
+    new RegExp(`\\b(?:graduated|completed|finished)(?:\\s+from\\b[^.!?\\n]{0,45})?(?:\\s+(?:this|in|on))?\\s+(${monthPattern})\\s+(?:of\\s+)?(20\\d{2})\\b`, "i"),
+    new RegExp(`\\b(?:program|i-?20)\\b[^.!?\\n]{0,35}\\b(?:ended|ends|completion)\\b(?:\\s+(?:in|on))?\\s+(${monthPattern})\\s+(?:of\\s+)?(20\\d{2})\\b`, "i"),
+    new RegExp(`\\b(?:graduate|graduating|finish|finishing|complete|completing)\\b[^.!?\\n]{0,55}\\b(${monthPattern})\\s+(?:of\\s+)?(20\\d{2})\\b`, "i")
   ];
   for (const pattern of patterns) {
     const match = narrative.match(pattern);
@@ -191,7 +192,7 @@ export function addExplicitNarrativeFacts(
   if (/\b(?:graduate student|graduate program|master'?s|doctorate|doctoral|ph\.?d\.?)\b/i.test(narrative)) {
     addFact(facts, "educationLevel", "graduate");
   }
-  if (/\b(?:college|university|bachelor'?s|master'?s|doctorate|doctoral|ph\.?d\.?)\b/i.test(narrative)) {
+  if (/\b(?:college|university|undergraduate|undergrad|graduate student|graduate program|bachelor'?s|master'?s|doctorate|doctoral|ph\.?d\.?)\b/i.test(narrative)) {
     addFact(facts, "programType", "college_or_university");
   }
   if (/\b(?:second|another|later|next|new)\s+(?:(?:bachelor'?s|master'?s|doctoral|graduate|undergraduate)\s+)?(?:degree|program)|\bsecond\s+(?:bachelor'?s|master'?s|doctorate|ph\.?d\.?)\b/i.test(narrative)) {
@@ -227,10 +228,10 @@ export function addCurrentStudentAssumptions(narrative: string, facts: IntakeCan
 
 function completionHighlight(narrative: string): string | undefined {
   const after = narrative.match(
-    /\b(?:graduate|graduated|graduating|finish|finished|finishing|complete|completed|completing)\b[^.!?\n]{0,65}\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(20\d{2})\b/i
+    /\b(?:graduate|graduated|graduating|finish|finished|finishing|complete|completed|completing)\b[^.!?\n]{0,65}\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(?:of\s+)?(20\d{2})\b/i
   );
   const before = narrative.match(
-    /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(20\d{2})\b[^.!?\n]{0,30}\b(?:graduate|graduated|graduating|finish|finished|finishing|complete|completed|completing)\b/i
+    /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(?:of\s+)?(20\d{2})\b[^.!?\n]{0,30}\b(?:graduate|graduated|graduating|finish|finished|finishing|complete|completed|completing)\b/i
   );
   const match = after ?? before;
   if (!match) return undefined;

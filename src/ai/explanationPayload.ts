@@ -1,4 +1,5 @@
 import type { StudentScenario } from "../engine/types";
+import type { CaseEvent, CaseTopicEvaluation } from "../case/studentCase";
 import type { IntakeTopic } from "./intakePayload";
 import type { AdvisorTurn } from "./followUpPayload";
 
@@ -8,6 +9,8 @@ export interface ExplanationRequest {
   exploredTopics?: IntakeTopic[];
   conversation?: AdvisorTurn[];
   confirmedFacts?: Array<{ question: string; answer: string }>;
+  caseEvents?: CaseEvent[];
+  applicableRuleAreas?: CaseTopicEvaluation[];
 }
 
 export interface ExplanationResponse {

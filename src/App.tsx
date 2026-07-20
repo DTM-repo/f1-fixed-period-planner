@@ -25,6 +25,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExplanationResponse } from "./ai/explanationPayload";
 import type { AdvisorTurn, FollowUpResponse } from "./ai/followUpPayload";
 import type { IntakeCandidateFact, IntakeExtractionResponse, IntakeFactField, IntakeTopic } from "./ai/intakePayload";
+import { applicableCaseTopics, buildStudentCase, type CaseEvent } from "./case/studentCase";
 import { DEFAULT_SCENARIO } from "./content/demoScenarios";
 import { calculateScenario, DEFAULT_EFFECTIVE_DATE, OPT_TRANSITION_I765_DEADLINE, scenarioForFixedReentry } from "./engine/calculateScenario";
 import { addDays, addYears, compareDates, formatDate, isValidDateString } from "./engine/dateMath";
@@ -48,7 +49,6 @@ import {
   type ImpactMap
 } from "./impact/impactMap";
 import {
-  allImpactTopics,
   canonicalTopics,
   topicImpactLine,
   topicForQuestion,
@@ -404,6 +404,12 @@ export function mergeFacts(current: StudentScenario, facts: IntakeCandidateFact[
   if (next.currentProgramEndDate && next.startingPosition === "current_ds_inside_us") {
     next.programEndOnEffectiveDate ??= next.currentProgramEndDate;
   }
+  if (
+    ["undergraduate", "graduate"].includes(next.educationLevel ?? "unknown") &&
+    (!next.programType || next.programType === "unknown")
+  ) {
+    next.programType = "college_or_university";
+  }
   if (next.optStage.endsWith("approved") && next.currentEadEndDate) {
     next.eadEndOnEffectiveDate ??= next.currentEadEndDate;
   }
@@ -419,7 +425,7 @@ function isFuture(scenario: StudentScenario): boolean {
 }
 
 const optStageLabels: Record<OptStage, string> = {
-  none: "Future OPT plan",
+  none: "Planning OPT after graduation",
   pre_completion: "Pre-completion OPT",
   post_completion_not_filed: "Post-completion OPT not filed",
   post_completion_pending: "Post-completion OPT pending",
@@ -444,15 +450,24 @@ function shouldAskOptApplicationQuestions(scenario: StudentScenario): boolean {
   const programEnd = scenario.programEndOnEffectiveDate ?? scenario.currentProgramEndDate;
   if (!programEnd) return false;
   const today = new Date().toISOString().slice(0, 10);
-  return compareDates(programEnd, addYears(today, 1)) <= 0;
+  const normalFilingWindowOpens = addDays(programEnd, -90);
+  return compareDates(normalFilingWindowOpens, today) <= 0;
 }
 
-function appendTravelQuestions(scenario: StudentScenario, answered: Set<string>, questions: Question[], raisedByStudent: boolean): boolean {
+function appendTravelQuestions(
+  scenario: StudentScenario,
+  answered: Set<string>,
+  questions: Question[],
+  raisedByStudent: boolean,
+  connectedToOpt: boolean
+): boolean {
   questions.push({
     id: "travelIntent",
-    eyebrow: raisedByStudent ? "Your travel plans" : "Travel",
+    eyebrow: connectedToOpt ? "Your travel and OPT question" : raisedByStudent ? "Your travel plans" : "Travel",
     prompt: "Are you planning to travel outside the United States?",
-    help: "A return after September 15, 2026 moves you from the old rules to a dated I-94.",
+    help: connectedToOpt
+      ? "A return after September 15 can change both your I-94 and whether your OPT period needs Form I-539."
+      : "A return after September 15, 2026 moves you from the old rules to a dated I-94.",
     kind: "choice",
     choices: [{ value: "planned", label: "Yes" }, { value: "none", label: "No" }, { value: "unknown", label: "I do not know yet" }],
     value: scenario.travelPosture,
@@ -702,17 +717,24 @@ export function buildCoreQuestions(
   }
 
   if (!currentApprovedOpt) {
+    const exactProgramEnd = isCurrent(scenario) ? scenario.programEndOnEffectiveDate : scenario.currentProgramEndDate;
+    const programEndHint = scenario.currentProgramEndDateHint;
     questions.push({
       id: "programEnd",
       eyebrow: "I-20 program end",
       prompt: isCurrent(scenario)
         ? "What program end date do you expect to have on your I-20 on September 15, 2026?"
         : "What program end date will be on your I-20?",
+      help: !exactProgramEnd && programEndHint
+        ? `You said ${formatPartialDate(programEndHint)}. Enter the day printed on your I-20.`
+        : undefined,
       kind: "date",
-      value: isCurrent(scenario) ? scenario.programEndOnEffectiveDate : scenario.currentProgramEndDate,
-      answerLabel: (isCurrent(scenario) ? scenario.programEndOnEffectiveDate : scenario.currentProgramEndDate)
-        ? formatDate((isCurrent(scenario) ? scenario.programEndOnEffectiveDate : scenario.currentProgramEndDate)!)
-        : "I do not know yet",
+      value: exactProgramEnd ?? programEndHint,
+      answerLabel: exactProgramEnd
+        ? formatDate(exactProgramEnd)
+        : programEndHint
+          ? formatPartialDate(programEndHint)
+          : "I do not know yet",
       allowUnknownDate: true
     });
     if (!answered.has("programEnd")) return questions;
@@ -771,7 +793,7 @@ export function buildQuestions(
   const optTravelOrderStillOpen = ["none", "post_completion_not_filed", "stem_not_filed"].includes(scenario.optStage);
   const wantsTravel = selectedTopics.includes("travel") || (isCurrent(scenario) && wantsOpt && optTravelOrderStillOpen);
 
-  if (isCurrent(scenario) && wantsTravel && !appendTravelQuestions(scenario, answered, questions, selectedTopics.includes("travel"))) {
+  if (isCurrent(scenario) && wantsTravel && !appendTravelQuestions(scenario, answered, questions, selectedTopics.includes("travel"), wantsOpt)) {
     return questions;
   }
 
@@ -963,10 +985,12 @@ export function buildQuestions(
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 function DateAnswer({ value, onComplete, onUnknown }: { value?: string; onComplete: (value: string) => void; onUnknown?: () => void }) {
-  const initial = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  const [month, setMonth] = useState(initial ? String(Number(initial[2])) : "");
-  const [day, setDay] = useState(initial ? String(Number(initial[3])) : "");
-  const [year, setYear] = useState(initial?.[1] ?? "");
+  const initialDay = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const initialMonth = value?.match(/^(\d{4})-(\d{2})$/);
+  const initialYear = value?.match(/^(\d{4})$/);
+  const [month, setMonth] = useState(initialDay ? String(Number(initialDay[2])) : initialMonth ? String(Number(initialMonth[2])) : "");
+  const [day, setDay] = useState(initialDay ? String(Number(initialDay[3])) : "");
+  const [year, setYear] = useState(initialDay?.[1] ?? initialMonth?.[1] ?? initialYear?.[1] ?? "");
   const [error, setError] = useState("");
   const onCompleteRef = useRef(onComplete);
 
@@ -1269,7 +1293,11 @@ function displayTimelineItems(events: TimelineItem[]): DisplayTimelineItem[] {
   }));
 }
 
-export function buildDisplayTimeline(scenario: StudentScenario, events: TimelineItem[]): DisplayTimelineItem[] {
+export function buildDisplayTimeline(
+  scenario: StudentScenario,
+  events: TimelineItem[],
+  caseEvents: CaseEvent[] = []
+): DisplayTimelineItem[] {
   const displayed = displayTimelineItems(events);
   const approvedOpt = scenario.optStage.endsWith("approved");
   const programEnd = scenario.currentProgramEndDate ?? scenario.currentProgramEndDateHint;
@@ -1304,6 +1332,31 @@ export function buildDisplayTimeline(scenario: StudentScenario, events: Timeline
         sortKey: `${eadEnd}-99`,
         title: "Your old-rule period ends",
         detail: "The exact date appears as soon as you confirm the day on your EAD.",
+        tone: "neutral"
+      });
+    }
+  }
+
+  for (const event of caseEvents) {
+    const milestones = event.role === "future_program"
+      ? [
+          { point: event.start, title: "Your next program may begin", detail: "The exact day will determine how this program connects to your current stay." },
+          { point: event.end, title: "Your next program may end", detail: "The exact day will determine whether you need additional F-1 time." }
+        ]
+      : event.role === "active_program"
+        ? [{ point: event.end, title: "Your program is expected to end", detail: "Confirm the day printed on your I-20 to calculate the exact OPT and departure dates." }]
+        : event.role === "completed_program"
+          ? [{ point: event.end, title: "Your previous program ended", detail: "A later document or approved training can control your September 15 status." }]
+          : [];
+    for (const milestone of milestones) {
+      if (!milestone.point || milestone.point.precision === "day") continue;
+      const dateLabel = formatPartialDate(milestone.point.value);
+      if (!dateLabel || displayed.some((item) => item.dateLabel === dateLabel && item.title === milestone.title)) continue;
+      displayed.push({
+        dateLabel,
+        sortKey: milestone.point.precision === "month" ? `${milestone.point.value}-15` : `${milestone.point.value}-06-30`,
+        title: milestone.title,
+        detail: milestone.detail,
         tone: "neutral"
       });
     }
@@ -1434,9 +1487,7 @@ export default function App() {
   const [focusTopics, setFocusTopics] = useState<IntakeTopic[]>([]);
   const [focusCaptured, setFocusCaptured] = useState(false);
   const [interviewMode, setInterviewMode] = useState<InterviewMode>("focused");
-  const [activeTopic, setActiveTopic] = useState<CanonicalTopic | null>(null);
   const [exploreTopics, setExploreTopics] = useState<IntakeTopic[]>([]);
-  const [completedExploreTopics, setCompletedExploreTopics] = useState<IntakeTopic[]>([]);
   const [recording, setRecording] = useState(false);
   const [storyFinished, setStoryFinished] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState("");
@@ -1592,6 +1643,20 @@ export default function App() {
     [answered, intake, scenario]
   );
   const activeScenario = experience === "story" ? draftScenario : scenario;
+  const raisedTopics = useMemo(() => intake?.topics ?? [], [intake]);
+  const priorityTopics = useMemo(
+    () => canonicalTopics([...focusTopics, ...exploreTopics]),
+    [exploreTopics, focusTopics]
+  );
+  const caseTopics = experience === "story" ? raisedTopics : priorityTopics;
+  const studentCase = useMemo(
+    () => buildStudentCase(activeScenario, intake?.facts ?? [], caseTopics, intake?.events ?? []),
+    [activeScenario, caseTopics, intake]
+  );
+  const impactTopics = useMemo(
+    () => applicableCaseTopics(studentCase) as CanonicalTopic[],
+    [studentCase]
+  );
   const result = useMemo(() => calculateScenario(activeScenario), [activeScenario]);
   const travelResult = useMemo(() => {
     if (
@@ -1604,16 +1669,13 @@ export default function App() {
   }, [activeScenario]);
   const primaryResult = travelResult ?? result;
   const stayTimeline = useMemo(
-    () => buildDisplayTimeline(activeScenario, result.timeline),
-    [activeScenario, result.timeline]
+    () => buildDisplayTimeline(activeScenario, result.timeline, studentCase.events),
+    [activeScenario, result.timeline, studentCase.events]
   );
   const returnTimeline = useMemo(
     () => travelResult ? displayTimelineItems(travelResult.timeline) : [],
     [travelResult]
   );
-  const raisedTopics = useMemo(() => intake?.topics ?? [], [intake]);
-  const impactTopics = useMemo(() => allImpactTopics(), []);
-  const initialFocusOrder = useMemo(() => canonicalTopics(focusTopics), [focusTopics]);
   const coreQuestions = useMemo(
     () => buildCoreQuestions(scenario, answered, intake?.facts ?? []),
     [scenario, answered, intake]
@@ -1621,16 +1683,16 @@ export default function App() {
   const coreQuestionIds = useMemo(() => new Set(coreQuestions.map((question) => question.id)), [coreQuestions]);
   const coreQuestion = coreQuestions.find((question) => !answered.has(question.id));
   const completedTopics = useMemo(() => {
-    if (interviewMode !== "full") return canonicalTopics(completedExploreTopics);
     if (coreQuestion) return [];
-    return impactTopics.filter((topic) => !buildQuestions(scenario, answered, [topic], result.activityEnd)
+    const topicsToCheck = interviewMode === "full" ? impactTopics : priorityTopics;
+    return topicsToCheck.filter((topic) => !buildQuestions(scenario, answered, [topic], result.activityEnd)
       .some((question) => !coreQuestionIds.has(question.id) && !answered.has(question.id)));
-  }, [answered, completedExploreTopics, coreQuestion, coreQuestionIds, impactTopics, interviewMode, result.activityEnd, scenario]);
+  }, [answered, coreQuestion, coreQuestionIds, impactTopics, interviewMode, priorityTopics, result.activityEnd, scenario]);
   const selectedProminentTopics = useMemo(
     () => interviewMode === "full"
-      ? canonicalTopics([...completedTopics, ...(activeTopic ? [activeTopic] : [])])
-      : canonicalTopics([...focusTopics, ...exploreTopics]),
-    [activeTopic, completedTopics, exploreTopics, focusTopics, interviewMode]
+      ? canonicalTopics(completedTopics)
+      : priorityTopics,
+    [completedTopics, interviewMode, priorityTopics]
   );
   const visibleFocusTopics = experience === "story"
     ? raisedTopics
@@ -1656,21 +1718,21 @@ export default function App() {
         unresolved: []
       }
     : impactMap;
-  const topicQuestion = activeTopic && !coreQuestion
-    ? buildQuestions(scenario, answered, [activeTopic], result.activityEnd)
+  const focusedQuestion = interviewMode === "focused" && !coreQuestion
+    ? buildQuestions(scenario, answered, priorityTopics, result.activityEnd)
       .find((question) => !coreQuestionIds.has(question.id) && !answered.has(question.id))
     : undefined;
-  const fullInterviewQuestion = interviewMode === "full" && !coreQuestion && !activeTopic
+  const fullInterviewQuestion = interviewMode === "full" && !coreQuestion
     ? buildQuestions(scenario, answered, impactTopics, result.activityEnd)
       .find((question) => !coreQuestionIds.has(question.id) && !answered.has(question.id))
     : undefined;
-  const activeQuestion = coreQuestion ?? topicQuestion ?? fullInterviewQuestion;
-  const activeImpactTopic = activeTopic ?? (fullInterviewQuestion ? topicForQuestion(fullInterviewQuestion.id) ?? null : null);
+  const activeQuestion = coreQuestion ?? focusedQuestion ?? fullInterviewQuestion;
+  const activeImpactTopic = activeQuestion ? topicForQuestion(activeQuestion.id) ?? null : null;
   const historyTopics = useMemo(
     () => interviewMode === "full"
       ? impactTopics
-      : canonicalTopics([...focusTopics, ...exploreTopics, ...completedExploreTopics]),
-    [focusTopics, exploreTopics, completedExploreTopics, impactTopics, interviewMode]
+      : priorityTopics,
+    [impactTopics, interviewMode, priorityTopics]
   );
   const questions = useMemo(
     () => buildQuestions(scenario, answered, historyTopics, result.activityEnd),
@@ -1695,25 +1757,6 @@ export default function App() {
           ? "Try understanding again"
           : "Understand my story";
 
-  useEffect(() => {
-    if (experience !== "interview" || coreQuestion) return;
-    const completed = new Set(canonicalTopics(completedExploreTopics));
-    if (activeTopic) {
-      if (topicQuestion) return;
-      completed.add(activeTopic);
-      setCompletedExploreTopics([...completed]);
-      const nextFocus = interviewMode === "focused"
-        ? initialFocusOrder.find((topic) => !completed.has(topic)) ?? null
-        : null;
-      setActiveTopic(nextFocus);
-      return;
-    }
-    if (interviewMode === "focused") {
-      const nextFocus = initialFocusOrder.find((topic) => !completed.has(topic));
-      if (nextFocus) setActiveTopic(nextFocus);
-    }
-  }, [activeTopic, completedExploreTopics, coreQuestion, experience, initialFocusOrder, interviewMode, topicQuestion]);
-
   function navigateOverview(show: boolean) {
     window.location.hash = show ? "what-happened" : "";
   }
@@ -1723,17 +1766,13 @@ export default function App() {
     setFocusCaptured(true);
     setFocusTopics([]);
     setExploreTopics([]);
-    setCompletedExploreTopics([]);
-    setActiveTopic(null);
     setExperience("interview");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function exploreImpact(topic: CanonicalTopic) {
     setExploreTopics((current) => canonicalTopics([...current, topic]));
-    setCompletedExploreTopics((current) => canonicalTopics(current).filter((item) => item !== topic));
-    setActiveTopic(topic);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (!activeQuestion) window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function patchScenario(patch: Partial<StudentScenario>) {
@@ -1955,9 +1994,7 @@ export default function App() {
       const affectedTopics = id === "firstAcademicYear"
         ? ["school_transfer", "program_change"] as CanonicalTopic[]
         : [topic];
-      setCompletedExploreTopics((current) => canonicalTopics(current).filter((item) => !affectedTopics.includes(item)));
       setExploreTopics((current) => canonicalTopics([...current, ...affectedTopics]));
-      setActiveTopic(affectedTopics[0]);
     }
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -1996,7 +2033,10 @@ export default function App() {
     };
     const mapped = usableFacts(facts).flatMap((fact) => {
       if (fact.field === "optStage") {
-        return fact.value === "none" ? [] : ["optIntent", "optStatus"];
+        const explicitFutureOpt = fact.value === "none" && facts.some((item) =>
+          item.field === "optIntent" && item.value === "yes" && item.confidence !== "low"
+        );
+        return fact.value === "none" && !explicitFutureOpt ? [] : ["optIntent", "optStatus"];
       }
       if ((fact.field === "currentEadEndDate" || fact.field === "eadEndOnEffectiveDate") && draftScenario.optStage.endsWith("approved")) {
         return ["effectiveEadEnd", "eadEndDate"];
@@ -2022,9 +2062,7 @@ export default function App() {
     const storyTopics: IntakeTopic[] = intake.topics.length ? intake.topics : ["stay_length"];
     setFocusTopics(storyTopics);
     setInterviewMode("focused");
-    setActiveTopic(canonicalTopics(storyTopics)[0] ?? "stay_length");
     setExploreTopics([]);
-    setCompletedExploreTopics([]);
     setFocusCaptured(true);
     recognitionRef.current?.stop();
     recordingRef.current = false;
@@ -2077,6 +2115,8 @@ export default function App() {
       privacy: "The voice or typed narrative and personal identifiers are excluded.",
       scenario: scenarioWithoutNarrative,
       primaryResult: resultSnapshot(primaryResult),
+      caseEvents: studentCase.events,
+      applicableRuleAreas: studentCase.topicEvaluations,
       impactMap,
       stayInUnitedStatesResult: travelResult ? resultSnapshot(result) : undefined,
       advisorReport: report ? { title: report.title, paragraphs: report.paragraphs } : undefined
@@ -2178,8 +2218,12 @@ export default function App() {
     setReportState("loading");
     setReportError("");
     try {
+      const reportTopics = canonicalTopics([...reportFocusTopics, ...reportExploreTopics]);
+      const reportCase = buildStudentCase(reportScenario, intake?.facts ?? [], reportTopics, intake?.events ?? []);
       const requestBody = JSON.stringify({
         scenario: reportScenario,
+        caseEvents: reportCase.events,
+        applicableRuleAreas: reportCase.topicEvaluations,
         focusTopics: reportFocusTopics,
         exploredTopics: reportExploreTopics,
         conversation,
@@ -2256,7 +2300,14 @@ export default function App() {
         const response = await fetch("/api/follow-up", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ scenario, question, focusTopics: advisorTopics, history: followUpTurns })
+          body: JSON.stringify({
+            scenario,
+            question,
+            focusTopics: advisorTopics,
+            history: followUpTurns,
+            caseEvents: studentCase.events,
+            applicableRuleAreas: studentCase.topicEvaluations
+          })
         });
         if (response.ok) body = await response.json() as FollowUpResponse;
         else if (attempt === 1) throw new Error(`Follow-up failed: ${response.status}`);
@@ -2309,9 +2360,7 @@ export default function App() {
     setFocusTopics([]);
     setFocusCaptured(false);
     setInterviewMode("focused");
-    setActiveTopic(null);
     setExploreTopics([]);
-    setCompletedExploreTopics([]);
     setRecording(false);
     setStoryFinished(false);
     setReport(null);
@@ -2436,10 +2485,6 @@ export default function App() {
             </div>
           )}
 
-          {focusCaptured && !coreQuestion && (
-            <AdvisementAction state={reportState} disabled={contradiction} onCreate={() => void createReport()} />
-          )}
-
           {activeQuestion ? (
             <QuestionCard
               key={activeQuestion.id}
@@ -2449,6 +2494,10 @@ export default function App() {
               onUnknownDate={() => answerDate(activeQuestion, undefined)}
             />
           ) : focusCaptured ? <ExplorationHome fullInterview={interviewMode === "full"} /> : null}
+
+          {focusCaptured && !coreQuestion && (
+            <AdvisementAction state={reportState} disabled={contradiction} onCreate={() => void createReport()} />
+          )}
 
           {focusCaptured && !coreQuestion && (
             isCurrent(scenario) && !activeQuestion ? <I94Correction scenario={scenario} onPatch={patchScenario} /> : null

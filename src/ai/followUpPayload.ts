@@ -1,5 +1,6 @@
 import type { IntakeCandidateFact, IntakeTopic } from "./intakePayload";
 import type { StudentScenario } from "../engine/types";
+import type { CaseEvent, CaseTopicEvaluation } from "../case/studentCase";
 
 export interface AdvisorTurn {
   role: "user" | "assistant";
@@ -12,6 +13,8 @@ export interface FollowUpRequest {
   question: string;
   focusTopics: IntakeTopic[];
   history: AdvisorTurn[];
+  caseEvents?: CaseEvent[];
+  applicableRuleAreas?: CaseTopicEvaluation[];
 }
 
 export interface FollowUpResponse {

@@ -8,8 +8,9 @@ Students can tell their story by voice or text, or answer a progressive intervie
 
 The legal/date engine is deterministic. The same confirmed facts always produce the same dates, warnings, follow-up questions, and source links without asking a model to calculate a legal result.
 
-- GPT-5.6 Sol extracts candidate facts from a student's narrative at medium reasoning effort.
+- GPT-5.6 Luna extracts candidate facts and separate case events at low reasoning effort.
 - The student can review and change those facts through the same guided flow.
+- One temporal case record keeps completed study, current training, travel, and later programs distinct instead of forcing them into one scalar scenario.
 - The deterministic TypeScript engine calculates the result and cites the rule.
 - The server recalculates the result before GPT-5.6 Sol turns the verified map into a complete advisor-style overview at medium reasoning effort.
 - The report model may explain verified output; it may not alter a date, classification, or legal consequence.
@@ -44,9 +45,9 @@ Create an ignored `.env.local` from `.env.example`:
 ```bash
 OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-5.6-sol
-OPENAI_INTAKE_MODEL=gpt-5.6-sol
+OPENAI_INTAKE_MODEL=gpt-5.6-luna
 OPENAI_ADVISOR_MODEL=gpt-5.6-sol
-OPENAI_INTAKE_REASONING_EFFORT=medium
+OPENAI_INTAKE_REASONING_EFFORT=low
 OPENAI_FOLLOW_UP_REASONING_EFFORT=medium
 OPENAI_REPORT_REASONING_EFFORT=medium
 ```

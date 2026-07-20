@@ -2,6 +2,7 @@ import type { FollowUpRequest, FollowUpResponse } from "../../src/ai/followUpPay
 import { hasInvalidAdvisorProse } from "../../src/ai/explanationPayload";
 import type { IntakeCandidateFact, IntakeTopic } from "../../src/ai/intakePayload";
 import { deriveNarrativeTopics } from "../../src/ai/intakeSemantics";
+import { buildStudentCase } from "../../src/case/studentCase";
 import { calculateScenario, scenarioForFixedReentry } from "../../src/engine/calculateScenario";
 import type { StudentScenario } from "../../src/engine/types";
 import { buildImpactMap } from "../../src/impact/impactMap";
@@ -122,11 +123,14 @@ function buildPrompt(payload: FollowUpRequest): string {
   const stayResult = calculateScenario(payload.scenario);
   const travelResult = travelComparisonFor(payload.scenario);
   const map = buildImpactMap(payload.scenario, stayResult, travelResult, payload.focusTopics);
+  const studentCase = buildStudentCase(payload.scenario, [], payload.focusTopics);
   return JSON.stringify({
     task: "Add the shortest complete answer to the student's latest question. The impact map and recent conversation are already visible; do not repeat them. Extract only facts explicitly stated in the latest question.",
     latestQuestion: payload.question,
     recentConversation: payload.history.slice(-8),
     studentSituation: payload.scenario,
+    caseTimeline: payload.caseEvents ?? studentCase.events,
+    applicableRuleAreas: payload.applicableRuleAreas ?? studentCase.topicEvaluations,
     verifiedImpactMap: map,
     verifiedRuleGuide: RULE_GUIDE,
     availableSources: Object.values(SOURCE_INDEX).map(({ id, title, locator }) => ({ id, title, locator })),

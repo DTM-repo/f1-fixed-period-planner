@@ -4,6 +4,8 @@ import { DEFAULT_SCENARIO } from "./content/demoScenarios";
 import type { IntakeCandidateFact } from "./ai/intakePayload";
 import type { StudentScenario } from "./engine/types";
 import { allImpactTopics } from "./flow/advisingFlow";
+import { buildStudentCase } from "./case/studentCase";
+import { calculateScenario } from "./engine/calculateScenario";
 
 function fact(field: IntakeCandidateFact["field"], value: string): IntakeCandidateFact {
   return { field, value, confidence: "high", needsConfirmation: false };
@@ -253,6 +255,63 @@ describe("OPT and travel order", () => {
     };
     const questions = buildQuestions(scenario, travelAndOptAnswers, ["travel", "opt"], "2028-05-22");
     expect(questions.map((question) => question.id)).not.toContain("optBeforeTravel");
+  });
+
+  it("treats the May 2027 undergraduate story as one travel-and-OPT case", () => {
+    const partialFacts: IntakeCandidateFact[] = [
+      fact("startingPosition", "current_ds_inside_us"),
+      fact("inUsOnEffectiveDate", "yes"),
+      fact("maintainingStatusOnEffectiveDate", "yes"),
+      { ...fact("currentProgramEndDate", "2027-05"), needsConfirmation: true },
+      { ...fact("programEndOnEffectiveDate", "2027-05"), needsConfirmation: true },
+      fact("educationLevel", "undergraduate"),
+      fact("programType", "college_or_university"),
+      fact("optIntent", "yes"),
+      fact("optStage", "none")
+    ];
+    const partialScenario = mergeFacts(currentStudent("2028-05-22"), partialFacts, true);
+    partialScenario.currentProgramEndDate = undefined;
+    partialScenario.programEndOnEffectiveDate = undefined;
+    partialScenario.currentProgramEndDateHint = "2027-05";
+    const core = buildCoreQuestions(partialScenario, new Set(["presence", "educationLevel", "programType", "optIntent", "optStatus"]), partialFacts);
+    const programEndQuestion = core.find((question) => question.id === "programEnd");
+    expect(programEndQuestion?.value).toBe("2027-05");
+    expect(programEndQuestion?.help).toContain("You said May 2027");
+
+    const scenario: StudentScenario = {
+      ...partialScenario,
+      currentProgramEndDate: "2027-05-20",
+      programEndOnEffectiveDate: "2027-05-20",
+      currentProgramEndDateHint: undefined,
+      travelPosture: "unknown"
+    };
+    const answered = new Set(["presence", "programEnd", "educationLevel", "programType", "optIntent", "optStatus"]);
+    const firstQuestions = buildQuestions(scenario, answered, ["travel", "opt"], "2027-05-20");
+    expect(firstQuestions.find((question) => !answered.has(question.id))?.id).toBe("travelIntent");
+    expect(firstQuestions.find((question) => question.id === "travelIntent")?.eyebrow).toBe("Your travel and OPT question");
+
+    const afterNoTravel = {
+      ...scenario,
+      travelPosture: "none" as const,
+      optStage: "post_completion_not_filed" as const
+    };
+    const afterNoAnswers = new Set([...answered, "travelIntent"]);
+    const remaining = buildQuestions(afterNoTravel, afterNoAnswers, ["travel", "opt"], "2027-05-20")
+      .filter((question) => !afterNoAnswers.has(question.id));
+    expect(remaining).toEqual([]);
+
+    const result = calculateScenario(afterNoTravel);
+    const timeline = buildDisplayTimeline(
+      afterNoTravel,
+      result.timeline,
+      buildStudentCase(afterNoTravel, partialFacts, ["travel", "opt"]).events
+    );
+    expect(timeline).toEqual(expect.arrayContaining([
+      expect.objectContaining({ dateLabel: "Feb 19, 2027", title: "Post-completion OPT filing window opens" }),
+      expect.objectContaining({ dateLabel: "Mar 18, 2027", title: "Deadline to avoid Form I-539 for OPT" }),
+      expect.objectContaining({ dateLabel: "May 20, 2027", title: "Your old-rule study period ends" }),
+      expect.objectContaining({ dateLabel: "Jul 19, 2027", title: "Your 60-day period ends" })
+    ]));
   });
 });
 

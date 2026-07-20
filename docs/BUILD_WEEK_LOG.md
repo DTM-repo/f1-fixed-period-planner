@@ -869,7 +869,7 @@ Each entry should capture:
 
 - Use one normalized fact record for confirmations, scenario state, questions, impact cards, timeline events, follow-up conversation, and the final advisor report. Keep every supported structured fact even when it is not one of the short visible confirmation labels.
 - Preserve incomplete dates as labeled hints. They cannot drive a legal calculation, but they can prevent duplicate questions, identify which exact day is still needed, and appear on a timeline as an explicitly approximate milestone.
-- Show every student the complete ten-area impact index: length of stay, travel, extension, OPT, transfer, program change, later programs, CPT, F-2 family, and early completion or withdrawal. Every line is short, personalized, clickable, and explorable one question at a time. A missing exact date cannot hide the rest of the rule.
+- Use a ten-area impact taxonomy, then show each student every area that applies or could apply to that student's case. Omit categorically irrelevant areas. Every visible line is short, personalized, clickable, and explorable one question at a time. A missing exact date cannot hide the rest of the applicable rule.
 - Keep the student's stated concerns as full priority cards. Selecting another line adds a priority without removing any earlier focus.
 - Distinguish an earlier completed program from the I-20 or approved EAD in effect on September 15. For approved OPT, ask for the exact EAD expiration day instead of asking again for the completed program's I-20 date.
 - Give later-program, immigrant-petition, and school-filing-support questions their own verified guidance. Do not imply that a pre-rule master's degree requires a same-level SEVP exception, that a pending I-140 automatically decides an F-1 extension, or that the school files Form I-539 for the student.
@@ -888,3 +888,35 @@ Each entry should capture:
 - In the browser, the first results screen showed the student's priority cards, all ten clickable impact lines, and a useful partial timeline while asking only for the missing EAD day. Selecting travel added it as a priority and opened one travel question without erasing the earlier concerns.
 - After exact dates were supplied, the timeline showed the prior program, rule date, EAD end, next-program start, 60-day end, and next-program end. The resulting extension and transfer guidance used those dates consistently.
 - A live final advisor report completed successfully and covered the full established record without replacing or contradicting the deterministic cards.
+
+### One Student, Several Connected Events
+
+**Research and diagnosis**
+
+- The remaining failures were not primarily missing AI intelligence. The data model still treated one student as one flat calculation. A completed program, active OPT, a future program, travel, and a pending petition could all be recognized correctly and still compete for the same scalar fields.
+- The topic router compounded that problem by finishing one category and then resuming another category's private queue. A student who raised travel and OPT could answer a travel question and then appear to be dropped into an unrelated OPT interview with no shared context.
+- A dense synthetic case also showed a runtime problem: GPT-5.6 Sol at medium and low effort could exceed Netlify's 30-second synchronous intake limit. The same bounded extraction completed with GPT-5.6 Luna at low effort in about 9.2 seconds while preserving the full event structure.
+
+**Decisions**
+
+- Keep the agreed six-step student experience fixed. The internal architecture changes; the student still answers the September 15 question, tells the story, sees the main concern first, sees every other applicable impact, chooses any deeper areas, and receives one complete advisement plus follow-up chat.
+- Represent the student as one temporal case containing separate events: completed program, active or incoming program, approved or planned OPT, return from travel, future program, and pending immigrant petition.
+- Evaluate rule-area applicability from that case. Show areas that apply, could apply, or need one fact; omit areas that are categorically irrelevant. A student's concern controls order and prominence, not whether other applicable rules disappear.
+- Select one controlling question across all current priorities. A question can resolve several connected topics, such as travel and OPT. Completing or adding one topic does not erase compatible answers or demote earlier priorities.
+- Keep exact legal dates and outcomes deterministic. AI creates the structured temporal brief and later explains the verified case; it does not calculate the rule.
+- Use GPT-5.6 Luna at low effort for bounded intake extraction and GPT-5.6 Sol at medium effort for the complete advisor report and rule-scoped follow-ups. This follows the Applesauce Rule: use the reasoning strength the assignment actually needs.
+
+**Codex and OpenAI assistance**
+
+- Codex traced the failure across intake extraction, fact normalization, the flat scenario, topic routing, impact applicability, and timeline merging, then introduced the temporal case layer without replacing the tested rule engine.
+- OpenAI structured output now returns both normalized facts and distinct case events. Partial month dates remain visible and editable; confirming an exact day replaces the partial milestone instead of duplicating it.
+- The final Sol report receives the event timeline and applicable-rule evaluation in addition to deterministic findings, so it can assemble the whole case without rediscovering or collapsing the student's history.
+
+**Verification**
+
+- Vitest: 105/105 passed across seven test files; TypeScript and the production Vite build passed; `git diff --check` passed.
+- Exact focused acceptance case: a current undergraduate graduating May 2027 with OPT and travel concerns preserved all four facts, prefilled May and 2027, asked only for the missing day and one integrated travel question, and stopped without an unnecessary DSO or filing-status interview.
+- That case's timeline showed February 19, 2027 for the OPT filing-window opening, March 18 for the one-time Form I-539 exception deadline, May 20 for program end, and July 19 for the 60-day end. Confirming the day replaced the month-only milestone rather than adding a duplicate.
+- Dense synthetic acceptance case: a May 2026 completed master's, approved OPT through June 2027, later same-level master's, school transfer, and pending employment petition stayed separate. Adding the later program produced one ordered timeline with the completed program, rule date, EAD end, next-program start, 60-day end, and next-program end.
+- The complete Sol advisement finished successfully and covered stay, travel, OPT, extension routes, undergraduate school and program rules, later programs, CPT, F-2 family, and early completion from the verified case.
+- A 390 by 844 browser check had no horizontal overflow or overlapping controls, and the browser console contained no warnings or errors.
