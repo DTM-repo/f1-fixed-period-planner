@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addCurrentStudentAssumptions, buildIntakeHighlights, deriveNarrativeTopics } from "./intakeSemantics";
+import { addCurrentStudentAssumptions, addExplicitNarrativeFacts, buildIntakeHighlights, deriveNarrativeTopics } from "./intakeSemantics";
 
 const story = "I am a third-year international student graduating in December 2026. I want to do OPT, and I do not know if I can travel or when I should travel.";
 
@@ -62,5 +62,47 @@ describe("voice intake semantics", () => {
     );
     expect(highlights.filter((highlight) => /\bOPT\b/i.test(highlight))).toHaveLength(1);
     expect(highlights.filter((highlight) => /\b(?:travel|trip)\b/i.test(highlight))).toHaveLength(1);
+  });
+
+  it("keeps every part of a completed-program, approved-OPT, later-program case", () => {
+    const narrative = "I graduated from my university in May 2026 and am currently doing post-completion OPT, which expires in June 2027. I plan a second master's at another university and need to transfer my SEVIS record. Will the university support Form I-539? My employer filed an EB-3 petition.";
+    const explicit = addExplicitNarrativeFacts(narrative, []);
+    const facts = addCurrentStudentAssumptions(narrative, explicit);
+    const topics = deriveNarrativeTopics(narrative, ["opt", "later_program"], facts);
+
+    expect(facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "currentProgramEndDate", value: "2026-05" }),
+      expect.objectContaining({ field: "currentEadEndDate", value: "2027-06" }),
+      expect.objectContaining({ field: "optStage", value: "post_completion_approved" }),
+      expect.objectContaining({ field: "educationLevel", value: "graduate" }),
+      expect.objectContaining({ field: "nextProgramLevelPlan", value: "same_or_lower" }),
+      expect.objectContaining({ field: "pendingEmploymentImmigrantPetition", value: "yes" })
+    ]));
+    expect(topics).toEqual(expect.arrayContaining([
+      "opt",
+      "extension",
+      "school_transfer",
+      "later_program",
+      "immigrant_intent",
+      "school_filing_support"
+    ]));
+    expect(buildIntakeHighlights(narrative, facts, [], topics)).toEqual(expect.arrayContaining([
+      "Current F-1 student",
+      "Graduate student",
+      "Program completed May 2026",
+      "Approved OPT through June 2027",
+      "Plans a second master's degree",
+      "Pending employment-based immigrant petition"
+    ]));
+  });
+
+  it("does not drop undergraduate status or a new-program concern when OPT is also mentioned", () => {
+    const narrative = "I am a UG student on OPT and I want to start a new program.";
+    const facts = addExplicitNarrativeFacts(narrative, []);
+    const topics = deriveNarrativeTopics(narrative, ["opt", "later_program"], facts);
+    expect(facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "educationLevel", value: "undergraduate" })
+    ]));
+    expect(topics).toEqual(expect.arrayContaining(["opt", "later_program"]));
   });
 });

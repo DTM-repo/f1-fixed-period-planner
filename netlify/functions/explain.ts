@@ -2,6 +2,7 @@ import { hasInvalidReportContent, type ExplanationRequest, type ExplanationRespo
 import { calculateScenario, scenarioForFixedReentry } from "../../src/engine/calculateScenario";
 import type { StudentScenario } from "../../src/engine/types";
 import { buildImpactMap } from "../../src/impact/impactMap";
+import { SOURCE_INDEX } from "../../src/sources/sourceIndex";
 import { reasoningEffort } from "./_shared/openai-config";
 
 const DEFAULT_MODEL = "gpt-5.6-sol";
@@ -47,6 +48,11 @@ function buildPrompt(payload: ExplanationRequest): string {
   const travelResult = travelComparisonFor(scenario);
   const focusTopics = [...new Set([...(payload.focusTopics ?? []), ...(payload.exploredTopics ?? [])])];
   const impactMap = buildImpactMap(scenario, result, travelResult, focusTopics);
+  const impactSourceIds = [...impactMap.sourceIds, ...impactMap.focusClaims.flatMap((claim) => claim.sourceIds), ...impactMap.otherClaims.flatMap((claim) => claim.sourceIds)];
+  const reportSources = [...new Set(impactSourceIds)]
+    .map((id) => SOURCE_INDEX[id])
+    .filter(Boolean)
+    .map(({ id, title, locator, url }) => ({ id, title, locator, url }));
   return JSON.stringify(
     {
       task: "Write a complete, coherent advisor overview from the verified impact map. Treat the map as prepared source material: do not rediscover or recalculate it. Check for important interactions or omissions, then bring the entire situation together in natural prose.",
@@ -58,6 +64,7 @@ function buildPrompt(payload: ExplanationRequest): string {
       requiredArc: [
         "Open with the most important conclusion for the student's stated concern and place it in the context of the new rule.",
         "Explain the student's controlling status and timeline in ordinary language, including the dates that matter.",
+        "When a later program start or end date is known, state both dates and say whether the current period of stay reaches the later end date.",
         "Cover every impact category represented in the verified map. Combine related categories naturally instead of listing or repeating cards.",
         "Explain the interaction between categories when it changes strategy, especially travel with D/S, OPT, or Form I-539.",
         "State the two routes for more time when relevant: Form I-539 in the United States or a request for a new admission period through CBP after travel.",
@@ -93,8 +100,7 @@ function buildPrompt(payload: ExplanationRequest): string {
       confirmedFacts: payload.confirmedFacts ?? [],
       followUpConversation: (payload.conversation ?? []).slice(-10),
       verifiedImpactMap: impactMap,
-      sources: [...new Map([...(travelResult?.citations ?? []), ...result.citations].map((source) => [source.id, source])).values()]
-        .map(({ id, title, locator, url }) => ({ id, title, locator, url }))
+      sources: reportSources
     },
     null,
     2

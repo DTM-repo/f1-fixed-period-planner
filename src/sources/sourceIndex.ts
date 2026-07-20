@@ -13,6 +13,8 @@ const FEDERAL_REGISTER_RULE =
 const FEDERAL_REGISTER_PDF =
   "https://www.govinfo.gov/content/pkg/FR-2026-07-17/pdf/2026-14439.pdf";
 const rulePage = (page: number) => `${FEDERAL_REGISTER_PDF}#page=${page}`;
+const ruleText = (start: string, end?: string) =>
+  `${FEDERAL_REGISTER_RULE}#:~:text=${encodeURIComponent(start)}${end ? `,${encodeURIComponent(end)}` : ""}`;
 
 export const SOURCE_INDEX: Record<string, SourceReference> = {
   "FR-2026-FINAL-RULE": {
@@ -28,21 +30,21 @@ export const SOURCE_INDEX: Record<string, SourceReference> = {
     id: "8CFR-214-1-A4",
     title: "8 CFR 214.1(a)(4), fixed period of admission",
     locator: "Final rule regulatory text for fixed admissions after the effective date",
-    url: rulePage(147),
+    url: ruleText("An F-1 student is admitted for a fixed period of time", "plus additional times noted in this paragraph"),
     lastVerified: "2026-07-19"
   },
   "8CFR-214-1-M1": {
     id: "8CFR-214-1-M1",
     title: "8 CFR 214.1(m)(1), transition treatment for D/S admissions",
     locator: "Final rule transition provisions for F and J nonimmigrants admitted for duration of status",
-    url: rulePage(148),
+    url: ruleText("During the 4-year transition period", "whichever comes first"),
     lastVerified: "2026-07-19"
   },
   "8CFR-214-1-M1-OPT": {
     id: "8CFR-214-1-M1-OPT",
     title: "8 CFR 214.1(m)(1)(i)-(ii), transition OPT/STEM OPT filing treatment",
     locator: "Final rule transition provisions for F-1 post-completion OPT and STEM OPT filings",
-    url: rulePage(148),
+    url: ruleText("Notwithstanding this paragraph (m)(1), an F-1 student recommended for post-completion OPT", "is not required to file an Application to Extend/Change Nonimmigrant Status"),
     lastVerified: "2026-07-19"
   },
   "8CFR-214-1-C8": {
@@ -63,15 +65,29 @@ export const SOURCE_INDEX: Record<string, SourceReference> = {
     id: "8CFR-214-2-F5V",
     title: "8 CFR 214.2(f)(5)(v), F-1 period of preparation for departure",
     locator: "Final rule fixed-period F-1 30-day departure/maintain-status period",
-    url: rulePage(150),
+    url: ruleText("An F-1 student who has completed a course of study and any authorized practical training", "including timely filing a change of status application"),
     lastVerified: "2026-07-19"
   },
   "8CFR-214-2-F5II": {
     id: "8CFR-214-2-F5II",
     title: "8 CFR 214.2(f)(5)(ii), F-1 school transfer, program change, and education-level limits",
     locator: "Final rule rules for undergraduate first-year changes, graduate changes/transfers, and same/lower-level programs",
-    url: rulePage(150),
+    url: ruleText("An F-1 student at any level below the graduate degree level may not transfer", "or other cause"),
     lastVerified: "2026-07-19"
+  },
+  "8CFR-214-2-F5II-GRADUATE": {
+    id: "8CFR-214-2-F5II-GRADUATE",
+    title: "8 CFR 214.2(f)(5)(ii)(A), graduate program and transfer limits",
+    locator: "Regulatory text for changes and transfers during an active graduate program",
+    url: ruleText("An F-1 student at the graduate degree level or above may not change educational objectives", "or other cause"),
+    lastVerified: "2026-07-20"
+  },
+  "8CFR-214-2-F5II-SAME-LOWER": {
+    id: "8CFR-214-2-F5II-SAME-LOWER",
+    title: "8 CFR 214.2(f)(5)(ii)(C), same- or lower-level study",
+    locator: "DHS explanation that programs completed before the effective date do not count toward the new limit",
+    url: ruleText("Any programs completed prior to the effective date of the rule will not be counted towards the limits"),
+    lastVerified: "2026-07-20"
   },
   "8CFR-214-2-F5VIII-CPT": {
     id: "8CFR-214-2-F5VIII-CPT",
@@ -91,15 +107,22 @@ export const SOURCE_INDEX: Record<string, SourceReference> = {
     id: "8CFR-214-2-F7",
     title: "8 CFR 214.2(f)(7), F-1 extension of stay",
     locator: "Eligibility, filing requirements, timing, dependents, and extension length",
-    url: rulePage(151),
+    url: ruleText("An F-1 student must file an extension of stay application", "and remitting the appropriate fee"),
     lastVerified: "2026-07-19"
   },
   "8CFR-214-2-F7-TIMELY": {
     id: "8CFR-214-2-F7-TIMELY",
     title: "8 CFR 214.2(f)(7)(iii)(B), timely extension filing",
     locator: "USCIS receipt deadline and work limits during the final 30 days",
-    url: rulePage(151),
+    url: ruleText("An extension of stay application is considered timely filed", "that is allowed after the completion of studies or any authorized practical training"),
     lastVerified: "2026-07-19"
+  },
+  "8CFR-214-2-F8-TRANSFER": {
+    id: "8CFR-214-2-F8-TRANSFER",
+    title: "8 CFR 214.2(f)(8), transfer eligibility and timing",
+    locator: "Regulatory text for a transfer from post-completion or STEM OPT into a later program",
+    url: ruleText("If the F-1 student is authorized to engage in post-completion or STEM OPT", "whichever is earlier"),
+    lastVerified: "2026-07-20"
   },
   "8CFR-214-2-F5-EXCEPTIONS": {
     id: "8CFR-214-2-F5-EXCEPTIONS",
@@ -135,6 +158,20 @@ export const SOURCE_INDEX: Record<string, SourceReference> = {
     locator: "Final rule response explaining that premium processing is not currently available for this extension request",
     url: rulePage(48),
     lastVerified: "2026-07-19"
+  },
+  "FR-F1-TEMPORARY-INTENT": {
+    id: "FR-F1-TEMPORARY-INTENT",
+    title: "DHS discussion of F-1 eligibility during extension review",
+    locator: "Final rule response explaining that DHS reassesses the statutory F-1 requirements during an extension adjudication",
+    url: ruleText("an alien who continues to have a residence in a foreign country", "who seeks to enter the United States temporarily and solely for the purpose of pursuing such a course of study, training, or program"),
+    lastVerified: "2026-07-20"
+  },
+  "FR-I140-OUT-OF-SCOPE": {
+    id: "FR-I140-OUT-OF-SCOPE",
+    title: "DHS treatment of I-140 comments in this rulemaking",
+    locator: "Final rule section identifying I-140 and employment-based immigration comments as outside this rule's scope",
+    url: ruleText("Commenters made out-of-scope remarks about various immigration statuses and programs", "EB-2 NIV and I-140"),
+    lastVerified: "2026-07-20"
   },
   "USCIS-OPT-STEM": {
     id: "USCIS-OPT-STEM",

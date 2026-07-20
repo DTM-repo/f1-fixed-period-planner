@@ -855,3 +855,36 @@ Each entry should capture:
 - Full-interview browser path: no duplicate concern prompt, no checkboxes, one question at a time, all ten compact impacts visible, no claim that the student mentioned travel, and advisement available before completion.
 - Live GPT-5.6 Sol advisement completed successfully from the early-exit state. Deterministic cards and timelines remained available throughout generation.
 - Desktop at 1440 by 1000 and mobile at 390 by 844 had no horizontal overflow, no internal text overflow, no control overlap after the sticky-panel correction, and no browser warnings or errors.
+
+### Narrative Facts Now Reach the Actual Advising Record
+
+**Research and diagnosis**
+
+- A de-identified replay of a real advising case exposed a boundary the earlier calculator tests did not cover. GPT-5.6 Sol correctly recognized completed graduate study, approved OPT, a later same-level program, school-transfer concerns, a pending employment-based immigrant petition, and questions about school support. Those details appeared as confirmation labels, but several never entered the deterministic scenario used by the results page.
+- The intake response had effectively become two records: human-readable highlights and a narrower structured fact object. Partial month-and-year dates were also discarded because they were not exact enough for calculations, even though they were useful for choosing the next question and drawing an honest provisional timeline.
+- Results and the complete impact index were still gated behind an exact controlling date. That left a well-understood case looking almost empty and asked the student to repeat dates already supplied.
+- The final rule's same- or lower-level restriction applies to a program completed after the rule takes effect. A degree completed before September 15, 2026 does not itself block a later program at the same level. The active graduate-program restriction, the transfer-from-OPT timing rule, F-1 temporary-purpose review, and who actually files Form I-539 are separate issues and must remain separate in the advice.
+
+**Decisions**
+
+- Use one normalized fact record for confirmations, scenario state, questions, impact cards, timeline events, follow-up conversation, and the final advisor report. Keep every supported structured fact even when it is not one of the short visible confirmation labels.
+- Preserve incomplete dates as labeled hints. They cannot drive a legal calculation, but they can prevent duplicate questions, identify which exact day is still needed, and appear on a timeline as an explicitly approximate milestone.
+- Show every student the complete ten-area impact index: length of stay, travel, extension, OPT, transfer, program change, later programs, CPT, F-2 family, and early completion or withdrawal. Every line is short, personalized, clickable, and explorable one question at a time. A missing exact date cannot hide the rest of the rule.
+- Keep the student's stated concerns as full priority cards. Selecting another line adds a priority without removing any earlier focus.
+- Distinguish an earlier completed program from the I-20 or approved EAD in effect on September 15. For approved OPT, ask for the exact EAD expiration day instead of asking again for the completed program's I-20 date.
+- Give later-program, immigrant-petition, and school-filing-support questions their own verified guidance. Do not imply that a pre-rule master's degree requires a same-level SEVP exception, that a pending I-140 automatically decides an F-1 extension, or that the school files Form I-539 for the student.
+- Link rule citations to the relevant Federal Register text fragment instead of repeatedly opening the top of the same document.
+
+**Codex and OpenAI assistance**
+
+- Codex traced the split from the Netlify intake function through normalization, scenario merging, question selection, impact generation, and timeline rendering. It repaired the handoff rather than adding case-specific UI exceptions.
+- GPT-5.6 Sol continues to perform bounded story extraction and final narrative synthesis. Deterministic code decides dates, applicable rule categories, compact impact lines, and the claims supplied to the model.
+- The real student message and identifying details were not added to source control. Regression coverage uses synthetic, de-identified facts with the same legal shape.
+
+**Verification**
+
+- Vitest: 99/99 passed across six test files; TypeScript and the production Vite build passed; `git diff --check` passed.
+- A live synthetic intake preserved all eight material facts, including partial dates, the later program, the pending petition, and the school-support question. A simpler undergraduate case preserved undergraduate status, OPT, and a later-program plan together.
+- In the browser, the first results screen showed the student's priority cards, all ten clickable impact lines, and a useful partial timeline while asking only for the missing EAD day. Selecting travel added it as a priority and opened one travel question without erasing the earlier concerns.
+- After exact dates were supplied, the timeline showed the prior program, rule date, EAD end, next-program start, 60-day end, and next-program end. The resulting extension and transfer guidance used those dates consistently.
+- A live final advisor report completed successfully and covered the full established record without replacing or contradicting the deterministic cards.

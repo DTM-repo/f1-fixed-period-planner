@@ -21,7 +21,9 @@ const TOPICS: IntakeTopic[] = [
   "later_program",
   "dependents",
   "early_end",
-  "change_of_status"
+  "change_of_status",
+  "immigrant_intent",
+  "school_filing_support"
 ];
 
 const FACT_FIELDS = [
@@ -32,8 +34,9 @@ const FACT_FIELDS = [
   "reentryDate", "reentryBasis", "returnProgramStartDate", "returnProgramEndDate",
   "pendingExtensionOnDeparture", "transferOrProgramChange", "schoolTransferPlan",
   "academicProgramChangePlan", "educationLevel", "programType", "firstAcademicYearCompleted",
-  "nextProgramLevelPlan", "dsoRecommendedOpt", "hasF2Dependents", "earlyEndSituation",
-  "earlyEndDate", "returningAfterEffectiveDate", "cptPlan"
+  "nextProgramLevelPlan", "nextProgramStartDate", "nextProgramEndDate", "dsoRecommendedOpt",
+  "hasF2Dependents", "earlyEndSituation", "earlyEndDate", "returningAfterEffectiveDate",
+  "cptPlan", "pendingEmploymentImmigrantPetition"
 ] as const;
 
 function json(body: unknown, status = 200): Response {
@@ -74,6 +77,9 @@ const RULE_GUIDE = [
   "Undergraduates cannot transfer schools or change major or education level during the first academic year unless SEVP approves an extenuating-circumstances exception.",
   "Graduate students cannot change educational objective during the program and cannot transfer unless SEVP approves an extenuating-circumstances exception.",
   "After completing a U.S. F-1 program on or after September 15, 2026, a later F-1 program must be at a higher education level.",
+  "A program completed before September 15, 2026 does not count toward the new same- or lower-level limit. A master's completed before that date does not by itself bar a second master's.",
+  "The final rule creates no automatic approval or denial outcome for a pending I-140. USCIS still assesses the temporary-purpose requirements for F-1 status during an extension adjudication.",
+  "Form I-539 is the student's USCIS filing. The school supplies a properly endorsed Form I-20 when appropriate, but the rule does not require the school to prepare or represent the student in the filing.",
   "English-language training has a 24-month aggregate cap. Public high school has a 12-month aggregate cap. F-2 periods cannot exceed the F-1 principal's period.",
   "Early completion gives 30 days; authorized withdrawal gives 15 days; a status violation gives no departure period."
 ];
@@ -150,7 +156,7 @@ function normalize(value: unknown, model: string, question: string): FollowUpRes
     answer: parsed.answer.trim(),
     sourceIds: Array.isArray(parsed.sourceIds) ? parsed.sourceIds.filter((id) => typeof id === "string" && Boolean(SOURCE_INDEX[id])).slice(0, 4) : [],
     facts,
-    topics: deriveNarrativeTopics(question, parsed.topics),
+    topics: deriveNarrativeTopics(question, parsed.topics, facts),
     model
   };
 }

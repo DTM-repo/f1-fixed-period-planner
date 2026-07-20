@@ -29,12 +29,15 @@ export type IntakeFactField =
   | "programType"
   | "firstAcademicYearCompleted"
   | "nextProgramLevelPlan"
+  | "nextProgramStartDate"
+  | "nextProgramEndDate"
   | "dsoRecommendedOpt"
   | "hasF2Dependents"
   | "earlyEndSituation"
   | "earlyEndDate"
   | "returningAfterEffectiveDate"
-  | "cptPlan";
+  | "cptPlan"
+  | "pendingEmploymentImmigrantPetition";
 
 export type IntakeConfidence = "high" | "medium" | "low";
 
@@ -50,7 +53,9 @@ export type IntakeTopic =
   | "later_program"
   | "dependents"
   | "early_end"
-  | "change_of_status";
+  | "change_of_status"
+  | "immigrant_intent"
+  | "school_filing_support";
 
 export interface IntakeCandidateFact {
   field: IntakeFactField;

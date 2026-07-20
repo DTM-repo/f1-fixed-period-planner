@@ -65,8 +65,10 @@ export interface StudentScenario {
   programStartDate?: DateString;
   programEndOnEffectiveDate?: DateString;
   currentProgramEndDate?: DateString;
+  currentProgramEndDateHint?: string;
   eadEndOnEffectiveDate?: DateString;
   currentEadEndDate?: DateString;
+  currentEadEndDateHint?: string;
   optIntent?: YesNoUnknown;
   optStage: OptStage;
   optFilingDate?: DateString;
@@ -84,12 +86,15 @@ export interface StudentScenario {
   programType?: ProgramType;
   firstAcademicYearCompleted?: YesNoUnknown;
   nextProgramLevelPlan?: NextProgramLevelPlan;
+  nextProgramStartDate?: DateString;
+  nextProgramEndDate?: DateString;
   dsoRecommendedOpt?: YesNoUnknown;
   hasF2Dependents?: YesNoUnknown;
   earlyEndSituation?: EarlyEndSituation;
   earlyEndDate?: DateString;
   returningAfterEffectiveDate?: YesNoUnknown;
   cptPlan: CptPlan;
+  pendingEmploymentImmigrantPetition?: YesNoUnknown;
   narrative?: string;
   effectiveDate?: DateString;
 }

@@ -1,5 +1,5 @@
 import type { IntakeExtractionRequest, IntakeExtractionResponse } from "../../src/ai/intakePayload";
-import { addCurrentStudentAssumptions, buildIntakeHighlights, deriveNarrativeTopics } from "../../src/ai/intakeSemantics";
+import { addCurrentStudentAssumptions, addExplicitNarrativeFacts, buildIntakeHighlights, deriveNarrativeTopics } from "../../src/ai/intakeSemantics";
 import { DEFAULT_EFFECTIVE_DATE } from "../../src/engine/calculateScenario";
 import { reasoningEffort } from "./_shared/openai-config";
 
@@ -60,14 +60,18 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
         "For a current student returning on the same I-20, use reentryBasis=same_i20_balance. For a new or updated I-20 with different program dates, use reentryBasis=longer_program_i20 and put those dates in returnProgramStartDate and returnProgramEndDate. Do not overwrite the I-20 dates that apply on September 15.",
         "A school transfer and a change of major or education level are separate facts. Never infer one from the other. Prefer schoolTransferPlan and academicProgramChangePlan over the legacy summary transferOrProgramChange.",
         "If the student explicitly says no OPT, return optIntent=no and optStage=none. If an incoming student only describes a future plan to use OPT, return optIntent=yes and optStage=none. STEM OPT is a later extension of regular post-completion OPT, never an alternative first OPT type. Return a STEM stage only when the student says they are already on post-completion OPT or are preparing, filing, or approved for the STEM extension.",
+        "If the student says they are currently on, doing, or using post-completion OPT, return optIntent=yes and optStage=post_completion_approved. If they give the month and year when OPT or the EAD expires, return that partial date in currentEadEndDate and eadEndOnEffectiveDate with needsConfirmation=true.",
+        "A program the student already completed is not the I-20 program active on September 15. Put its completion date only in currentProgramEndDate. Do not ask the calculator to treat that completed I-20 as active on September 15 when approved OPT covers that day.",
         "Use optFiledBeforeDeparture=yes only when the student says USCIS received or will receive Form I-765 before they leave. Use no only when they explicitly say the trip comes first. Do not infer this order from a return date.",
         "If the student says bachelor, associate, undergraduate, or undergrad, use educationLevel=undergraduate. If the student says master's, PhD, doctorate, doctoral, graduate school, or graduate program, use educationLevel=graduate.",
         "If the student explicitly says they use or plan to use CPT, return cptPlan=planned. If they explicitly say they will not use CPT, return cptPlan=none. Never infer an extension filing date or whether CPT crosses an admission deadline from a general CPT plan.",
         "Use programType=english_language_training only for a language-training program, programType=public_high_school only for a public or charter high school, and programType=private_high_school only for a private high school.",
         "Use startingPosition=change_status_inside_us only when the student says they will request F-1 status without leaving the United States.",
         "If the student says they want a second program at the same level or a lower level, including a second master's, second bachelor's, another associate degree, or a lower degree after completing a higher one, use nextProgramLevelPlan=same_or_lower with needsConfirmation=true unless the level is unmistakable.",
+        "A later program after graduation is not a change to the program the student already completed. Do not set academicProgramChangePlan=yes merely because the student calls the later plan a change of objective or change of level.",
+        "If the student says an employer or family member filed an I-140, EB-1, EB-2, EB-3, or other immigrant visa petition for them, return pendingEmploymentImmigrantPetition=yes. Do not infer that the petition has been approved or that Form I-485 was filed.",
         "Prefer leaving a fact out over overconfident extraction.",
-        "Return two to six highlights. Each highlight must be a compact noun phrase of no more than nine words and include only a fact or concern that affects this rule. Good examples are Current F-1 student, Third-year undergraduate, Graduating December 2026, Plans post-completion OPT, and Has a travel question. Do not retell the narrative.",
+        "Return two to eight highlights. Each highlight must be a compact noun phrase of no more than nine words and include only a fact or concern that affects this rule. Good examples are Current F-1 student, Third-year undergraduate, Graduating December 2026, Plans post-completion OPT, and Has a travel question. Do not retell the narrative.",
         "Return every topic the student raises even if the narrative does not establish enough facts to calculate it. Topics keep stay length, travel, OPT, CPT, extensions, transfers, program changes, later programs, F-2 dependents, early endings, and change of status visible.",
         "Never use internal labels such as starting position, admission basis, travel posture, transition cohort, or tested entry in visible text. Use ordinary student language."
       ],
@@ -109,12 +113,15 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
         programType: ["college_or_university", "english_language_training", "public_high_school", "private_high_school", "other", "unknown"],
         firstAcademicYearCompleted: ["yes", "no", "unknown"],
         nextProgramLevelPlan: ["higher", "same_or_lower", "not_planning", "unknown"],
+        nextProgramStartDate: "YYYY-MM-DD",
+        nextProgramEndDate: "YYYY-MM-DD",
         dsoRecommendedOpt: ["yes", "no", "unknown"],
         hasF2Dependents: ["yes", "no", "unknown"],
         earlyEndSituation: ["none", "completed_early", "authorized_withdrawal", "status_violation", "unknown"],
         earlyEndDate: "YYYY-MM-DD",
         returningAfterEffectiveDate: ["yes", "no", "unknown"],
-        cptPlan: ["none", "planned", "unknown"]
+        cptPlan: ["none", "planned", "unknown"],
+        pendingEmploymentImmigrantPetition: ["yes", "no", "unknown"]
       },
       currentScenario: payload.currentScenario,
       studentNarrative: payload.narrative
@@ -132,20 +139,20 @@ const intakeSchema = {
     highlights: {
       type: "array",
       minItems: 1,
-      maxItems: 6,
+      maxItems: 8,
       items: { type: "string", minLength: 2, maxLength: 80 }
     },
     topics: {
       type: "array",
-      maxItems: 8,
+      maxItems: 10,
       items: {
         type: "string",
-        enum: ["stay_length", "travel", "opt", "stem_opt", "cpt", "extension", "school_transfer", "program_change", "later_program", "dependents", "early_end", "change_of_status"]
+        enum: ["stay_length", "travel", "opt", "stem_opt", "cpt", "extension", "school_transfer", "program_change", "later_program", "dependents", "early_end", "change_of_status", "immigrant_intent", "school_filing_support"]
       }
     },
     facts: {
       type: "array",
-      maxItems: 16,
+      maxItems: 20,
       items: {
         type: "object",
         additionalProperties: false,
@@ -182,12 +189,15 @@ const intakeSchema = {
               "programType",
               "firstAcademicYearCompleted",
               "nextProgramLevelPlan",
+              "nextProgramStartDate",
+              "nextProgramEndDate",
               "dsoRecommendedOpt",
               "hasF2Dependents",
               "earlyEndSituation",
               "earlyEndDate",
               "returningAfterEffectiveDate",
-              "cptPlan"
+              "cptPlan",
+              "pendingEmploymentImmigrantPetition"
             ]
           },
           value: { type: "string" },
@@ -201,11 +211,17 @@ const intakeSchema = {
 
 function normalizeExtraction(value: unknown, model: string, narrative: string): IntakeExtractionResponse {
   const parsed = value as IntakeExtractionResponse;
+  const semanticNarrative = narrative.normalize("NFKC").replace(/[‘’]/g, "'");
   const normalizedFacts = Array.isArray(parsed.facts) ? parsed.facts : [];
-  const facts = addCurrentStudentAssumptions(narrative, normalizedFacts);
-  const topics = deriveNarrativeTopics(narrative, parsed.topics);
+  const explicitFacts = addExplicitNarrativeFacts(semanticNarrative, normalizedFacts);
+  const facts = [...new Map(
+    addCurrentStudentAssumptions(semanticNarrative, explicitFacts)
+      .filter((fact) => fact.value !== "unknown")
+      .map((fact) => [fact.field, fact] as const)
+  ).values()];
+  const topics = deriveNarrativeTopics(semanticNarrative, parsed.topics, facts);
   return {
-    highlights: buildIntakeHighlights(narrative, facts, parsed.highlights, topics),
+    highlights: buildIntakeHighlights(semanticNarrative, facts, parsed.highlights, topics),
     topics,
     facts,
     model
@@ -263,7 +279,7 @@ export default async (request: Request): Promise<Response> => {
           schema: intakeSchema
         }
       },
-      max_output_tokens: 1800,
+      max_output_tokens: 3600,
       store: false
     })
   });
@@ -279,7 +295,7 @@ export default async (request: Request): Promise<Response> => {
   try {
     return json(normalizeExtraction(JSON.parse(text), model, payload.narrative));
   } catch {
-    return json({ error: "OpenAI intake returned invalid structured output" }, 502);
+    return json(normalizeExtraction({ highlights: [], topics: [], facts: [] }, `${model}:structured-recovery`, payload.narrative));
   }
 };
 

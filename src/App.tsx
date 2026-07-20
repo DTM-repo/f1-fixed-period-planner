@@ -125,7 +125,9 @@ const topicLabels: Record<IntakeTopic, string> = {
   later_program: "Another U.S. program",
   dependents: "F-2 family",
   early_end: "Finishing early or withdrawing",
-  change_of_status: "Change to F-1 status"
+  change_of_status: "Change to F-1 status",
+  immigrant_intent: "Pending immigrant petition",
+  school_filing_support: "School filing support"
 };
 
 const factLabels: Record<IntakeFactField, string> = {
@@ -157,12 +159,15 @@ const factLabels: Record<IntakeFactField, string> = {
   programType: "Program type",
   firstAcademicYearCompleted: "First academic year completed",
   nextProgramLevelPlan: "Later program level",
+  nextProgramStartDate: "Later program start date",
+  nextProgramEndDate: "Later program end date",
   dsoRecommendedOpt: "DSO OPT recommendation",
   hasF2Dependents: "F-2 dependents",
   earlyEndSituation: "Early end or withdrawal",
   earlyEndDate: "Actual end date",
   returningAfterEffectiveDate: "Return after September 15, 2026",
-  cptPlan: "CPT plan"
+  cptPlan: "CPT plan",
+  pendingEmploymentImmigrantPetition: "Pending employment-based immigrant petition"
 };
 
 const dateFacts = new Set<IntakeFactField>([
@@ -176,6 +181,8 @@ const dateFacts = new Set<IntakeFactField>([
   "reentryDate",
   "returnProgramStartDate",
   "returnProgramEndDate",
+  "nextProgramStartDate",
+  "nextProgramEndDate",
   "earlyEndDate"
 ]);
 
@@ -202,7 +209,8 @@ const allowedFactValues: Partial<Record<IntakeFactField, readonly string[]>> = {
   hasF2Dependents: ["yes", "no", "unknown"],
   earlyEndSituation: ["none", "completed_early", "authorized_withdrawal", "status_violation", "unknown"],
   returningAfterEffectiveDate: ["yes", "no", "unknown"],
-  cptPlan: ["none", "planned", "unknown"]
+  cptPlan: ["none", "planned", "unknown"],
+  pendingEmploymentImmigrantPetition: ["yes", "no", "unknown"]
 };
 
 const factValueLabels: Partial<Record<IntakeFactField, Record<string, string>>> = {
@@ -234,7 +242,8 @@ const factValueLabels: Partial<Record<IntakeFactField, Record<string, string>>> 
   optFiledBeforeDeparture: { yes: "Yes", no: "No", unknown: "Not yet known" },
   hasF2Dependents: { yes: "Yes", no: "No", unknown: "Not yet known" },
   earlyEndSituation: { none: "No", completed_early: "Completed early", authorized_withdrawal: "Authorized withdrawal", status_violation: "Possible status violation", unknown: "Not yet known" },
-  cptPlan: { none: "No CPT planned", planned: "Plans to use CPT", unknown: "Not yet known" }
+  cptPlan: { none: "No CPT planned", planned: "Plans to use CPT", unknown: "Not yet known" },
+  pendingEmploymentImmigrantPetition: { yes: "Yes", no: "No", unknown: "Not yet known" }
 };
 
 function supportedFact(fact: IntakeCandidateFact): boolean {
@@ -292,6 +301,22 @@ function dateIsDefinitelyBefore(value: string | undefined, comparison: string): 
   return /^\d{4}$/.test(value) && value < comparison.slice(0, 4);
 }
 
+function dateIsDefinitelyOnOrAfter(value: string | undefined, comparison: string): boolean {
+  if (!value) return false;
+  if (isValidDateString(value)) return compareDates(value, comparison) >= 0;
+  const monthYear = value.match(/^(\d{4})-(\d{2})$/);
+  if (monthYear) return `${monthYear[1]}-${monthYear[2]}` > comparison.slice(0, 7);
+  return /^\d{4}$/.test(value) && value > comparison.slice(0, 4);
+}
+
+function dateIsDefinitelyAfter(value: string | undefined, comparison: string): boolean {
+  if (!value) return false;
+  if (isValidDateString(value)) return compareDates(value, comparison) > 0;
+  const monthYear = value.match(/^(\d{4})-(\d{2})$/);
+  if (monthYear) return `${monthYear[1]}-${monthYear[2]}` > comparison.slice(0, 7);
+  return /^\d{4}$/.test(value) && value > comparison.slice(0, 4);
+}
+
 function programEndHint(facts: IntakeCandidateFact[]): IntakeCandidateFact | undefined {
   return facts.find((fact) =>
     ["programEndOnEffectiveDate", "currentProgramEndDate"].includes(fact.field) &&
@@ -300,7 +325,7 @@ function programEndHint(facts: IntakeCandidateFact[]): IntakeCandidateFact | und
 }
 
 function coverageDateLabel(scenario: StudentScenario, facts: IntakeCandidateFact[]): string | undefined {
-  const value = scenario.programEndOnEffectiveDate ?? scenario.currentProgramEndDate ?? programEndHint(facts)?.value;
+  const value = scenario.programEndOnEffectiveDate ?? scenario.currentProgramEndDate ?? scenario.currentProgramEndDateHint ?? programEndHint(facts)?.value;
   return isValidDateString(value) ? formatDate(value) : formatPartialDate(value);
 }
 
@@ -308,7 +333,7 @@ function programEndPrecedesEffectiveDate(
   scenario: StudentScenario,
   facts: IntakeCandidateFact[] = []
 ): boolean {
-  const programEnd = scenario.programEndOnEffectiveDate ?? scenario.currentProgramEndDate ?? programEndHint(facts)?.value;
+  const programEnd = scenario.programEndOnEffectiveDate ?? scenario.currentProgramEndDate ?? scenario.currentProgramEndDateHint ?? programEndHint(facts)?.value;
   return dateIsDefinitelyBefore(programEnd, DEFAULT_EFFECTIVE_DATE);
 }
 
@@ -319,13 +344,22 @@ export function hasEffectiveDateCoverageConflict(
   if (!isCurrent(scenario) || scenario.inUsOnEffectiveDate !== "yes") return false;
   if (!programEndPrecedesEffectiveDate(scenario, facts)) return false;
   const approvedEadEnd = scenario.optStage.endsWith("approved")
-    ? scenario.eadEndOnEffectiveDate ?? scenario.currentEadEndDate
+    ? scenario.eadEndOnEffectiveDate ?? scenario.currentEadEndDate ?? scenario.currentEadEndDateHint
     : undefined;
-  return !approvedEadEnd || !isValidDateString(approvedEadEnd) || compareDates(approvedEadEnd, DEFAULT_EFFECTIVE_DATE) < 0;
+  return !dateIsDefinitelyOnOrAfter(approvedEadEnd, DEFAULT_EFFECTIVE_DATE);
 }
 
 export function mergeFacts(current: StudentScenario, facts: IntakeCandidateFact[], lockPresence = false): StudentScenario {
   let next = { ...current } as StudentScenario;
+  for (const fact of facts) {
+    if (fact.confidence === "low" || !formatPartialDate(fact.value)) continue;
+    if (fact.field === "currentProgramEndDate" || fact.field === "programEndOnEffectiveDate") {
+      next.currentProgramEndDateHint = fact.value;
+    }
+    if (fact.field === "currentEadEndDate" || fact.field === "eadEndOnEffectiveDate") {
+      next.currentEadEndDateHint = fact.value;
+    }
+  }
   for (const fact of usableFacts(facts)) {
     if (lockPresence && ["inUsOnEffectiveDate", "maintainingStatusOnEffectiveDate", "admissionBasis"].includes(fact.field)) continue;
     if (
@@ -335,6 +369,12 @@ export function mergeFacts(current: StudentScenario, facts: IntakeCandidateFact[
     ) continue;
     next = { ...next, [fact.field]: fact.value } as StudentScenario;
     if (fact.field === "optStage" && fact.value !== "none") next.optIntent = "yes";
+    if (fact.field === "currentProgramEndDate" || fact.field === "programEndOnEffectiveDate") {
+      next.currentProgramEndDateHint = undefined;
+    }
+    if (fact.field === "currentEadEndDate" || fact.field === "eadEndOnEffectiveDate") {
+      next.currentEadEndDateHint = undefined;
+    }
   }
   if (lockPresence && current.inUsOnEffectiveDate === "yes") {
     next.inUsOnEffectiveDate = "yes";
@@ -363,6 +403,9 @@ export function mergeFacts(current: StudentScenario, facts: IntakeCandidateFact[
   }
   if (next.currentProgramEndDate && next.startingPosition === "current_ds_inside_us") {
     next.programEndOnEffectiveDate ??= next.currentProgramEndDate;
+  }
+  if (next.optStage.endsWith("approved") && next.currentEadEndDate) {
+    next.eadEndOnEffectiveDate ??= next.currentEadEndDate;
   }
   return { ...next, narrative: current.narrative };
 }
@@ -618,6 +661,7 @@ export function buildCoreQuestions(
   const programEndBeforeRule = isCurrent(scenario) && programEndPrecedesEffectiveDate(scenario, intakeFacts);
   const coverageConflict = hasEffectiveDateCoverageConflict(scenario, intakeFacts);
   const statedCoverageDate = coverageDateLabel(scenario, intakeFacts);
+  const currentApprovedOpt = isCurrent(scenario) && scenario.optStage.endsWith("approved");
   if (coverageConflict && !scenario.optStage.endsWith("approved")) {
     questions.push({
       id: "effectiveDateCoverage",
@@ -637,8 +681,9 @@ export function buildCoreQuestions(
     if (!answered.has("effectiveDateCoverage")) return questions;
   }
 
-  if (programEndBeforeRule && scenario.optStage.endsWith("approved")) {
+  if (currentApprovedOpt) {
     const eadEnd = scenario.eadEndOnEffectiveDate ?? scenario.currentEadEndDate;
+    const eadHint = scenario.currentEadEndDateHint;
     const eadIsTooEarly = Boolean(eadEnd && isValidDateString(eadEnd) && compareDates(eadEnd, DEFAULT_EFFECTIVE_DATE) < 0);
     questions.push({
       id: "effectiveEadEnd",
@@ -646,7 +691,9 @@ export function buildCoreQuestions(
       prompt: `What expiration date ${scenario.optStage === "stem_approved" ? "will be" : "is"} on your approved ${scenario.optStage === "stem_approved" ? "STEM OPT" : "regular OPT"} EAD?`,
       help: eadIsTooEarly
         ? "That EAD also ends before September 15. Enter the approved EAD date that will cover that day, or change an earlier answer."
-        : "The approved EAD must cover September 15 for your F-1 status to be active after the I-20 date you entered.",
+        : eadHint
+          ? `You said ${formatPartialDate(eadHint)}. Enter the day printed on the EAD so your exact dates can be calculated.`
+          : "The approved EAD must cover September 15 for your F-1 status to remain active after your program ends.",
       kind: "date",
       value: eadEnd,
       answerLabel: eadEnd && isValidDateString(eadEnd) ? formatDate(eadEnd) : undefined
@@ -654,20 +701,22 @@ export function buildCoreQuestions(
     if (!answered.has("effectiveEadEnd")) return questions;
   }
 
-  questions.push({
-    id: "programEnd",
-    eyebrow: "I-20 program end",
-    prompt: isCurrent(scenario)
-      ? "What program end date do you expect to have on your I-20 on September 15, 2026?"
-      : "What program end date will be on your I-20?",
-    kind: "date",
-    value: isCurrent(scenario) ? scenario.programEndOnEffectiveDate : scenario.currentProgramEndDate,
-    answerLabel: (isCurrent(scenario) ? scenario.programEndOnEffectiveDate : scenario.currentProgramEndDate)
-      ? formatDate((isCurrent(scenario) ? scenario.programEndOnEffectiveDate : scenario.currentProgramEndDate)!)
-      : "I do not know yet",
-    allowUnknownDate: true
-  });
-  if (!answered.has("programEnd")) return questions;
+  if (!currentApprovedOpt) {
+    questions.push({
+      id: "programEnd",
+      eyebrow: "I-20 program end",
+      prompt: isCurrent(scenario)
+        ? "What program end date do you expect to have on your I-20 on September 15, 2026?"
+        : "What program end date will be on your I-20?",
+      kind: "date",
+      value: isCurrent(scenario) ? scenario.programEndOnEffectiveDate : scenario.currentProgramEndDate,
+      answerLabel: (isCurrent(scenario) ? scenario.programEndOnEffectiveDate : scenario.currentProgramEndDate)
+        ? formatDate((isCurrent(scenario) ? scenario.programEndOnEffectiveDate : scenario.currentProgramEndDate)!)
+        : "I do not know yet",
+      allowUnknownDate: true
+    });
+    if (!answered.has("programEnd")) return questions;
+  }
 
   if (isCurrent(scenario)) {
     questions.push({
@@ -719,7 +768,8 @@ export function buildQuestions(
   if (coreIncomplete) return questions;
 
   const wantsOpt = selectedTopics.includes("opt") || selectedTopics.includes("stem_opt");
-  const wantsTravel = selectedTopics.includes("travel") || (isCurrent(scenario) && wantsOpt);
+  const optTravelOrderStillOpen = ["none", "post_completion_not_filed", "stem_not_filed"].includes(scenario.optStage);
+  const wantsTravel = selectedTopics.includes("travel") || (isCurrent(scenario) && wantsOpt && optTravelOrderStillOpen);
 
   if (isCurrent(scenario) && wantsTravel && !appendTravelQuestions(scenario, answered, questions, selectedTopics.includes("travel"))) {
     return questions;
@@ -832,6 +882,32 @@ export function buildQuestions(
       answerLabel: factValueLabels.nextProgramLevelPlan?.[scenario.nextProgramLevelPlan ?? "unknown"]
     });
     if (!answered.has("nextProgram")) return questions;
+    const priorProgramClearlyTriggersBar = scenario.nextProgramLevelPlan === "same_or_lower" &&
+      dateIsDefinitelyAfter(scenario.currentProgramEndDate ?? scenario.currentProgramEndDateHint, DEFAULT_EFFECTIVE_DATE);
+    if (!["not_planning", "unknown"].includes(scenario.nextProgramLevelPlan ?? "unknown") && !priorProgramClearlyTriggersBar) {
+      questions.push({
+        id: "nextProgramStart",
+        eyebrow: "Your next program",
+        prompt: "When would your next program start?",
+        help: "This shows whether your current F-1 stay reaches the new program.",
+        kind: "date",
+        value: scenario.nextProgramStartDate,
+        answerLabel: scenario.nextProgramStartDate ? formatDate(scenario.nextProgramStartDate) : "I do not know yet",
+        allowUnknownDate: true
+      });
+      if (!answered.has("nextProgramStart")) return questions;
+      questions.push({
+        id: "nextProgramEnd",
+        eyebrow: "Your next I-20",
+        prompt: "What program end date would be on that I-20?",
+        help: "This date shows how much additional F-1 time the program needs.",
+        kind: "date",
+        value: scenario.nextProgramEndDate,
+        answerLabel: scenario.nextProgramEndDate ? formatDate(scenario.nextProgramEndDate) : "I do not know yet",
+        allowUnknownDate: true
+      });
+      if (!answered.has("nextProgramEnd")) return questions;
+    }
   }
 
   if (selectedTopics.includes("cpt")) {
@@ -1007,7 +1083,7 @@ function SourceLink({ sourceId }: { sourceId: string }) {
   if (!citation) return null;
   return (
     <a className="source-link" href={citation.url} target="_blank" rel="noreferrer" title={citation.locator}>
-      Read this rule section
+      Open the highlighted rule passage
       <ExternalLink aria-hidden="true" />
     </a>
   );
@@ -1054,7 +1130,7 @@ function ImpactIndex({
   return (
     <section className="impact-index" aria-labelledby="impact-index-title">
       <header>
-        <p>Every change that could affect you</p>
+        <p>Every issue this rule raises for you</p>
         <h3 id="impact-index-title">Click any issue to explore deeper</h3>
       </header>
       <div className="impact-index-list">
@@ -1176,7 +1252,67 @@ function ExplorationHome({ fullInterview }: { fullInterview: boolean }) {
   );
 }
 
-function Timeline({ title, subtitle, events }: { title: string; subtitle: string; events: TimelineItem[] }) {
+interface DisplayTimelineItem {
+  date?: string;
+  dateLabel: string;
+  sortKey: string;
+  title: string;
+  detail: string;
+  tone: TimelineItem["tone"];
+}
+
+function displayTimelineItems(events: TimelineItem[]): DisplayTimelineItem[] {
+  return events.map((event) => ({
+    ...event,
+    dateLabel: formatDate(event.date),
+    sortKey: event.date
+  }));
+}
+
+export function buildDisplayTimeline(scenario: StudentScenario, events: TimelineItem[]): DisplayTimelineItem[] {
+  const displayed = displayTimelineItems(events);
+  const approvedOpt = scenario.optStage.endsWith("approved");
+  const programEnd = scenario.currentProgramEndDate ?? scenario.currentProgramEndDateHint;
+  const eadEnd = scenario.currentEadEndDate ?? scenario.currentEadEndDateHint;
+
+  if (programEnd && approvedOpt && !displayed.some((event) => event.date === scenario.currentProgramEndDate && /program/i.test(event.title))) {
+    const label = isValidDateString(programEnd) ? formatDate(programEnd) : formatPartialDate(programEnd);
+    if (label) {
+      displayed.push({
+        date: isValidDateString(programEnd) ? programEnd : undefined,
+        dateLabel: label,
+        sortKey: isValidDateString(programEnd) ? programEnd : `${programEnd}-15`,
+        title: "Your previous program ended",
+        detail: "Your approved OPT, rather than that completed I-20, covers September 15.",
+        tone: "neutral"
+      });
+    }
+  }
+
+  if (approvedOpt && !scenario.currentEadEndDate && eadEnd) {
+    const label = formatPartialDate(eadEnd);
+    if (label) {
+      displayed.push({
+        dateLabel: label,
+        sortKey: `${eadEnd}-15`,
+        title: "Your approved OPT ends",
+        detail: "The exact day on your EAD sets the next deadline.",
+        tone: "good"
+      });
+      displayed.push({
+        dateLabel: "60 days later",
+        sortKey: `${eadEnd}-99`,
+        title: "Your old-rule period ends",
+        detail: "The exact date appears as soon as you confirm the day on your EAD.",
+        tone: "neutral"
+      });
+    }
+  }
+
+  return displayed.sort((left, right) => left.sortKey.localeCompare(right.sortKey));
+}
+
+function Timeline({ title, subtitle, events }: { title: string; subtitle: string; events: DisplayTimelineItem[] }) {
   if (!events.length) return null;
   return (
     <section className="visual-timeline">
@@ -1186,8 +1322,8 @@ function Timeline({ title, subtitle, events }: { title: string; subtitle: string
       </header>
       <div className="timeline-track" style={{ "--event-count": events.length } as React.CSSProperties}>
         {events.map((event, index) => (
-          <div className={`timeline-event ${event.tone}`} key={`${event.date}-${event.title}-${index}`}>
-            <time dateTime={event.date}>{formatDate(event.date)}</time>
+          <div className={`timeline-event ${event.tone}`} key={`${event.sortKey}-${event.title}-${index}`}>
+            <time dateTime={event.date}>{event.dateLabel}</time>
             <span className="timeline-dot" aria-hidden="true" />
             <h4>{event.title}</h4>
             <p>{event.detail}</p>
@@ -1467,6 +1603,14 @@ export default function App() {
     return calculateScenario(scenarioForFixedReentry(activeScenario));
   }, [activeScenario]);
   const primaryResult = travelResult ?? result;
+  const stayTimeline = useMemo(
+    () => buildDisplayTimeline(activeScenario, result.timeline),
+    [activeScenario, result.timeline]
+  );
+  const returnTimeline = useMemo(
+    () => travelResult ? displayTimelineItems(travelResult.timeline) : [],
+    [travelResult]
+  );
   const raisedTopics = useMemo(() => intake?.topics ?? [], [intake]);
   const impactTopics = useMemo(() => allImpactTopics(), []);
   const initialFocusOrder = useMemo(() => canonicalTopics(focusTopics), [focusTopics]);
@@ -1500,7 +1644,7 @@ export default function App() {
       activeScenario,
       result,
       travelResult,
-      experience === "interview" && coreQuestion ? [] : visibleFocusTopics
+      visibleFocusTopics
     ),
     [activeScenario, coreQuestion, experience, result, travelResult, visibleFocusTopics]
   );
@@ -1509,8 +1653,6 @@ export default function App() {
         ...impactMap,
         headline: "These dates do not fit yet",
         summary: `An I-20 ending ${coverageDateLabel(activeScenario, intake?.facts ?? []) ?? "before September 15"} does not by itself cover September 15, 2026. Confirm a later I-20 or an approved OPT or STEM OPT EAD.`,
-        focusClaims: [],
-        otherClaims: [],
         unresolved: []
       }
     : impactMap;
@@ -1727,15 +1869,19 @@ export default function App() {
       case "travelProgramEnd": patch.returnProgramEndDate = value; break;
       case "programEnd":
         patch.currentProgramEndDate = value;
+        patch.currentProgramEndDateHint = undefined;
         if (isCurrent(scenario)) patch.programEndOnEffectiveDate = value;
         break;
       case "effectiveEadEnd":
         patch.currentEadEndDate = value;
         patch.eadEndOnEffectiveDate = value;
+        patch.currentEadEndDateHint = undefined;
         break;
       case "optFilingDate": patch.optFilingDate = value; break;
       case "eadEndDate": patch.currentEadEndDate = value; break;
       case "earlyEndDate": patch.earlyEndDate = value; break;
+      case "nextProgramStart": patch.nextProgramStartDate = value; break;
+      case "nextProgramEnd": patch.nextProgramEndDate = value; break;
     }
     patchScenario(patch);
     setAnswered((current) => {
@@ -1745,6 +1891,7 @@ export default function App() {
         return next;
       }
       next.add(question.id);
+      if (question.id === "effectiveEadEnd") next.add("eadEndDate");
       if (question.id === "programEnd") {
         next.delete("effectiveDateCoverage");
         next.delete("effectiveEadEnd");
@@ -1770,8 +1917,8 @@ export default function App() {
       else next.programStartDate = undefined;
     }
     if (id === "travelProgramEnd") next.returnProgramEndDate = undefined;
-    if (id === "programEnd") { next.programEndOnEffectiveDate = undefined; next.currentProgramEndDate = undefined; }
-    if (id === "effectiveEadEnd") { next.eadEndOnEffectiveDate = undefined; next.currentEadEndDate = undefined; }
+    if (id === "programEnd") { next.programEndOnEffectiveDate = undefined; next.currentProgramEndDate = undefined; next.currentProgramEndDateHint = undefined; }
+    if (id === "effectiveEadEnd") { next.eadEndOnEffectiveDate = undefined; next.currentEadEndDate = undefined; next.currentEadEndDateHint = undefined; }
     if (id === "programType") next.programType = "unknown";
     if (id === "educationLevel") next.educationLevel = "unknown";
     if (id === "optIntent") next.optIntent = "unknown";
@@ -1787,6 +1934,8 @@ export default function App() {
     if (id === "programChange") next.academicProgramChangePlan = "unknown";
     if (id === "firstAcademicYear") next.firstAcademicYearCompleted = "unknown";
     if (id === "nextProgram") next.nextProgramLevelPlan = "unknown";
+    if (id === "nextProgramStart") next.nextProgramStartDate = undefined;
+    if (id === "nextProgramEnd") next.nextProgramEndDate = undefined;
     if (id === "cptIntent") next.cptPlan = "none";
     if (id === "f2Dependents") next.hasF2Dependents = "unknown";
     if (id === "earlyEnd") { next.earlyEndSituation = "unknown"; next.earlyEndDate = undefined; }
@@ -1838,6 +1987,8 @@ export default function App() {
       academicProgramChangePlan: ["programChange"],
       firstAcademicYearCompleted: ["firstAcademicYear"],
       nextProgramLevelPlan: ["nextProgram"],
+      nextProgramStartDate: ["nextProgramStart"],
+      nextProgramEndDate: ["nextProgramEnd"],
       cptPlan: ["cptIntent"],
       hasF2Dependents: ["f2Dependents"],
       earlyEndSituation: ["earlyEnd"],
@@ -1846,6 +1997,9 @@ export default function App() {
     const mapped = usableFacts(facts).flatMap((fact) => {
       if (fact.field === "optStage") {
         return fact.value === "none" ? [] : ["optIntent", "optStatus"];
+      }
+      if ((fact.field === "currentEadEndDate" || fact.field === "eadEndOnEffectiveDate") && draftScenario.optStage.endsWith("approved")) {
+        return ["effectiveEadEnd", "eadEndDate"];
       }
       if (answered.has("presence") && ["inUsOnEffectiveDate", "maintainingStatusOnEffectiveDate", "admissionBasis"].includes(fact.field)) {
         return [];
@@ -2304,13 +2458,13 @@ export default function App() {
         <aside className="results-column">
           <ImpactList
             map={displayedImpactMap}
-            scenario={!coreQuestion ? scenario : undefined}
-            topics={!coreQuestion ? impactTopics : undefined}
-            prominentTopics={!coreQuestion ? selectedProminentTopics : undefined}
-            completedTopics={!coreQuestion ? completedTopics : undefined}
-            activeTopic={!coreQuestion ? activeImpactTopic : undefined}
+            scenario={scenario}
+            topics={impactTopics}
+            prominentTopics={selectedProminentTopics}
+            completedTopics={completedTopics}
+            activeTopic={activeImpactTopic}
             fullInterview={interviewMode === "full"}
-            onExplore={!coreQuestion ? exploreImpact : undefined}
+            onExplore={exploreImpact}
           />
           <div className="result-actions" aria-label="Save or share your results">
             <button type="button" onClick={() => window.print()}><Printer aria-hidden="true" /> Print or save PDF</button>
@@ -2338,9 +2492,9 @@ export default function App() {
                 ? "Your September 15 location and F-1 status determine which rules apply."
                 : "The final point is the date shown on the projected or actual I-94."
           }
-          events={result.timeline}
+          events={stayTimeline}
         />
-        {travelResult && <Timeline title="If you leave and return after September 15" subtitle="Your return creates a separate dated I-94. The I-94 issued by CBP controls." events={travelResult.timeline} />}
+        {travelResult && <Timeline title="If you leave and return after September 15" subtitle="Your return creates a separate dated I-94. The I-94 issued by CBP controls." events={returnTimeline} />}
       </section>
 
       {(report || reportState === "loading" || reportState === "failed") && (

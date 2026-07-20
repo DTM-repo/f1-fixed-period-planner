@@ -236,4 +236,50 @@ describe("concise impact map", () => {
     expect(claims.find((claim) => claim.id === "extension-biometrics")?.sourceIds).toEqual(["FR-F1-EXTENSION-PROCESS"]);
     expect(claims.find((claim) => claim.id === "extension-premium")?.sourceIds).toEqual(["FR-I539-PREMIUM"]);
   });
+
+  it("uses every concern in a completed-program, approved-OPT, later-program case", () => {
+    const scenario: StudentScenario = {
+      ...DEFAULT_SCENARIO,
+      startingPosition: "current_ds_inside_us",
+      admissionBasis: "duration_of_status",
+      inUsOnEffectiveDate: "yes",
+      maintainingStatusOnEffectiveDate: "yes",
+      optIntent: "yes",
+      optStage: "post_completion_approved",
+      currentProgramEndDateHint: "2026-05",
+      currentEadEndDateHint: "2027-06",
+      educationLevel: "graduate",
+      programType: "college_or_university",
+      nextProgramLevelPlan: "same_or_lower",
+      pendingEmploymentImmigrantPetition: "yes"
+    };
+    const result = calculateScenario(scenario);
+    const map = buildImpactMap(scenario, result, null, [
+      "opt",
+      "extension",
+      "school_transfer",
+      "program_change",
+      "later_program",
+      "immigrant_intent",
+      "school_filing_support"
+    ]);
+    const claims = [...map.focusClaims, ...map.otherClaims];
+    const ids = claims.map((claim) => claim.id);
+
+    expect(map.headline).toBe("You are under the old rules");
+    expect(map.summary).toContain("June 2027");
+    expect(ids).toEqual(expect.arrayContaining([
+      "opt-approved-partial-date",
+      "later-program-extension-date-needed",
+      "completed-graduate-transfer",
+      "completed-graduate-change",
+      "later-program-pre-rule-completion",
+      "opt-to-later-program-timing",
+      "pending-immigrant-petition",
+      "school-i539-support"
+    ]));
+    expect(ids).not.toContain("graduate-transfer");
+    expect(ids).not.toContain("graduate-program-change");
+    expect(claims.find((claim) => claim.id === "later-program-pre-rule-completion")?.detail).toContain("do not need an SEVP exception");
+  });
 });

@@ -19,6 +19,8 @@ export type ImpactCategory =
   | "later_program"
   | "program_limits"
   | "dependents"
+  | "immigrant_intent"
+  | "school_support"
   | "special";
 
 export interface ImpactClaim {
@@ -54,7 +56,9 @@ export const EXPLORATION_OPTIONS: Array<{
   { topic: "program_change", title: "Change my program", description: "Major, degree level, and graduate-program limits." },
   { topic: "later_program", title: "Study another program", description: "When a later F-1 program must be at a higher level." },
   { topic: "dependents", title: "F-2 family", description: "How your spouse or children's dates follow yours." },
-  { topic: "early_end", title: "Finish early or withdraw", description: "Shorter departure periods and status concerns." }
+  { topic: "early_end", title: "Finish early or withdraw", description: "Shorter departure periods and status concerns." },
+  { topic: "immigrant_intent", title: "Pending immigrant petition", description: "How F-1 temporary intent can affect a later USCIS filing." },
+  { topic: "school_filing_support", title: "School filing support", description: "What the rule requires and what only your school can promise." }
 ];
 
 const TOPIC_CATEGORIES: Record<IntakeTopic, ImpactCategory[]> = {
@@ -69,7 +73,9 @@ const TOPIC_CATEGORIES: Record<IntakeTopic, ImpactCategory[]> = {
   later_program: ["later_program"],
   dependents: ["dependents"],
   early_end: ["special"],
-  change_of_status: ["stay", "departure", "program_limits"]
+  change_of_status: ["stay", "departure", "program_limits"],
+  immigrant_intent: ["immigrant_intent"],
+  school_filing_support: ["school_support"]
 };
 
 const SPECIAL_FINDING_IDS = new Set([
@@ -92,6 +98,32 @@ function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
 }
 
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+function partialDateLabel(value?: string): string | undefined {
+  if (!value) return undefined;
+  const match = value.match(/^(20\d{2})-(\d{2})$/);
+  if (match) {
+    const month = Number(match[2]);
+    if (month >= 1 && month <= 12) return `${MONTH_NAMES[month - 1]} ${match[1]}`;
+  }
+  return /^20\d{2}$/.test(value) ? value : undefined;
+}
+
+function definitelyBefore(value: string | undefined, comparison: string): boolean {
+  if (!value) return false;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return compareDates(value, comparison) < 0;
+  if (/^\d{4}-\d{2}$/.test(value)) return value < comparison.slice(0, 7);
+  return /^\d{4}$/.test(value) && value < comparison.slice(0, 4);
+}
+
+function definitelyAfter(value: string | undefined, comparison: string): boolean {
+  if (!value) return false;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return compareDates(value, comparison) > 0;
+  if (/^\d{4}-\d{2}$/.test(value)) return value > comparison.slice(0, 7);
+  return /^\d{4}$/.test(value) && value > comparison.slice(0, 4);
+}
+
 function hasFinding(result: PlannerResult, id: string): boolean {
   return result.findings.some((item) => item.id === id);
 }
@@ -109,6 +141,8 @@ function categoryOrder(category: ImpactCategory): number {
     "later_program",
     "program_limits",
     "dependents",
+    "immigrant_intent",
+    "school_support",
     "special"
   ].indexOf(category);
 }
@@ -138,6 +172,14 @@ function mainConclusion(
     scenario.admissionBasis === "duration_of_status";
 
   const coverageConflict = stayResult.findings.find((item) => item.id === "document-ends-before-effective-date");
+  const approvedEadHint = scenario.optStage.endsWith("approved") ? partialDateLabel(scenario.currentEadEndDateHint) : undefined;
+  if (transitionPath && approvedEadHint && !scenario.currentEadEndDate) {
+    return {
+      headline: "You are under the old rules",
+      summary: `Your approved OPT keeps the old rules in place through ${approvedEadHint}. Confirm the day on your EAD to calculate the exact end of your 60-day period.`,
+      sourceIds: ["8CFR-214-1-M1-OPT"]
+    };
+  }
   if (coverageConflict) {
     return {
       headline: "These dates do not fit yet",
@@ -214,6 +256,19 @@ function optClaim(
       detail: `Your EAD ends ${formatDate(scenario.currentEadEndDate)}, followed by 60 days under the old rules.`,
       sourceIds: ["8CFR-214-1-M1-OPT"]
     };
+  }
+  if (scenario.optStage.endsWith("approved") && scenario.currentEadEndDateHint) {
+    const label = partialDateLabel(scenario.currentEadEndDateHint);
+    if (label) {
+      return {
+        id: "opt-approved-partial-date",
+        category: "opt",
+        tone: "good",
+        title: `Your approved OPT continues through ${label}`,
+        detail: "Enter the exact EAD expiration day to calculate the end of the following 60-day period.",
+        sourceIds: ["8CFR-214-1-M1-OPT"]
+      };
+    }
   }
 
   const normalWindowOpens = postCompletionOptWindowOpens(scenario);
@@ -332,7 +387,9 @@ export function buildImpactMap(
 ): ImpactMap {
   const primaryResult = travelResult ?? stayResult;
   const conclusion = mainConclusion(scenario, stayResult, travelResult);
-  if (hasFinding(stayResult, "document-ends-before-effective-date")) {
+  const approvedEadHintCoversRule = scenario.optStage.endsWith("approved") &&
+    definitelyAfter(scenario.currentEadEndDateHint, DEFAULT_EFFECTIVE_DATE);
+  if (hasFinding(stayResult, "document-ends-before-effective-date") && !approvedEadHintCoversRule) {
     return {
       ...conclusion,
       focusClaims: [],
@@ -359,6 +416,8 @@ export function buildImpactMap(
   const stayNeedsExtension = needsExtension(stayResult);
   const primaryNeedsExtension = needsExtension(primaryResult);
   const anyRouteNeedsExtension = stayNeedsExtension || primaryNeedsExtension;
+  const laterProgramConcern = focusTopics.includes("later_program") || focusTopics.includes("school_transfer") ||
+    !["unknown", "not_planning"].includes(scenario.nextProgramLevelPlan ?? "unknown");
   const travelCoversCurrentProgram = Boolean(
     travelResult?.activityEnd &&
     scenario.currentProgramEndDate &&
@@ -411,6 +470,20 @@ export function buildImpactMap(
       detail: stayFilingDeadline
         ? `File Form I-539 by ${formatDate(stayFilingDeadline)}, or leave and request a new admission period before your old-rule stay ends.`
         : "File Form I-539 or leave and request a new admission period before your old-rule stay ends.",
+      sourceIds: ["8CFR-214-1-M1", "8CFR-214-2-F7"]
+    });
+  }
+
+  if (transition && scenario.optStage.endsWith("approved") && laterProgramConcern && !scenario.nextProgramEndDate) {
+    const eadLabel = scenario.currentEadEndDate
+      ? formatDate(scenario.currentEadEndDate)
+      : partialDateLabel(scenario.currentEadEndDateHint);
+    push({
+      id: "later-program-extension-date-needed",
+      category: "extension",
+      tone: "warning",
+      title: "Your next program dates decide whether Form I-539 is needed",
+      detail: `${eadLabel ? `Your approved OPT ends ${eadLabel}. ` : ""}If the next program needs more time than your old-rule period provides, file Form I-539 before that period ends or leave and request a new admission with the next I-20.`,
       sourceIds: ["8CFR-214-1-M1", "8CFR-214-2-F7"]
     });
   }
@@ -477,11 +550,15 @@ export function buildImpactMap(
     });
   } else if (transition && stayResult.activityEnd) {
     push({
-      id: "no-extension-for-current-program",
+      id: scenario.optStage.endsWith("approved") ? "no-extension-for-approved-opt" : "no-extension-for-current-program",
       category: "extension",
       tone: "good",
-      title: "You do not need Form I-539 to finish this program",
-      detail: `Your current program fits within the old-rule period ending ${formatDate(stayResult.activityEnd)}, as long as you do not return under the new rules.`,
+      title: scenario.optStage.endsWith("approved")
+        ? "Your approved OPT does not require Form I-539"
+        : "You do not need Form I-539 to finish this program",
+      detail: scenario.optStage.endsWith("approved")
+        ? `The old rules cover your approved OPT through ${formatDate(stayResult.activityEnd)}, followed by 60 days, as long as you do not return under the new rules.`
+        : `Your current program fits within the old-rule period ending ${formatDate(stayResult.activityEnd)}, as long as you do not return under the new rules.`,
       sourceIds: ["8CFR-214-1-M1"]
     });
   } else if (fixed) {
@@ -535,14 +612,33 @@ export function buildImpactMap(
     });
   }
 
-  if (scenario.educationLevel === "graduate") {
+  const completedProgramDate = scenario.currentProgramEndDate ?? scenario.currentProgramEndDateHint;
+  const completedBeforeRule = definitelyBefore(completedProgramDate, DEFAULT_EFFECTIVE_DATE);
+  if (scenario.educationLevel === "graduate" && completedBeforeRule) {
+    push({
+      id: "completed-graduate-transfer",
+      category: "school_transfer",
+      tone: "good",
+      title: "The graduate mid-program transfer limit does not apply to your completed degree",
+      detail: "That restriction applies while a graduate program is still in progress. Moving your SEVIS record after completing the program is analyzed under the rules for a later program.",
+      sourceIds: ["8CFR-214-2-F5II-GRADUATE"]
+    });
+    push({
+      id: "completed-graduate-change",
+      category: "program_change",
+      tone: "good",
+      title: "You are not changing the graduate program you already finished",
+      detail: "Starting a later program is different from changing the major or degree level of an active graduate program.",
+      sourceIds: ["8CFR-214-2-F5II-GRADUATE"]
+    });
+  } else if (scenario.educationLevel === "graduate") {
     push({
       id: "graduate-transfer",
       category: "school_transfer",
       tone: scenario.schoolTransferPlan === "yes" ? "warning" : "info",
       title: "A graduate transfer requires an SEVP exception",
       detail: "Graduate students cannot transfer during the program unless SEVP approves an exception for extenuating circumstances.",
-      sourceIds: ["8CFR-214-2-F5II"]
+      sourceIds: ["8CFR-214-2-F5II-GRADUATE"]
     });
     push({
       id: "graduate-program-change",
@@ -550,7 +646,7 @@ export function buildImpactMap(
       tone: scenario.academicProgramChangePlan === "yes" ? "danger" : "info",
       title: "Graduate students cannot change their major or degree level",
       detail: "The restriction applies throughout the graduate program. The rule does not provide the same exception listed for graduate school transfers.",
-      sourceIds: ["8CFR-214-2-F5II"]
+      sourceIds: ["8CFR-214-2-F5II-GRADUATE"]
     });
   } else if (scenario.educationLevel === "undergraduate") {
     const firstYearComplete = scenario.firstAcademicYearCompleted === "yes";
@@ -577,17 +673,77 @@ export function buildImpactMap(
   }
 
   if (scenario.educationLevel && scenario.educationLevel !== "unknown") {
-    const completedAfterRule = !scenario.currentProgramEndDate || compareDates(scenario.currentProgramEndDate, DEFAULT_EFFECTIVE_DATE) > 0;
-    if (completedAfterRule) {
+    if (completedBeforeRule) {
+      const completionLabel = scenario.currentProgramEndDate
+        ? `on ${formatDate(scenario.currentProgramEndDate)}`
+        : scenario.currentProgramEndDateHint
+          ? `in ${partialDateLabel(scenario.currentProgramEndDateHint)}`
+          : "before September 15, 2026";
+      push({
+        id: "later-program-pre-rule-completion",
+        category: "later_program",
+        tone: "good",
+        title: scenario.nextProgramLevelPlan === "same_or_lower"
+          ? "Your earlier degree does not block this same-level program"
+          : "Programs completed before September 15 do not count toward the new level limit",
+        detail: `You completed that program ${completionLabel}. The new same-or-lower-level bar counts programs completed after September 15, 2026, so you do not need an SEVP exception to overcome that particular bar.`,
+        sourceIds: ["8CFR-214-2-F5II-SAME-LOWER"]
+      });
+    } else if (definitelyAfter(completedProgramDate, DEFAULT_EFFECTIVE_DATE)) {
       push({
         id: "later-program-level",
         category: "later_program",
         tone: scenario.nextProgramLevelPlan === "same_or_lower" ? "danger" : "info",
         title: "Your next F-1 program must be at a higher level",
         detail: "After completing a U.S. F-1 program on or after September 15, 2026, you cannot start another F-1 program at the same or a lower education level.",
-        sourceIds: ["8CFR-214-2-F5II"]
+        sourceIds: ["8CFR-214-2-F5II-SAME-LOWER"]
+      });
+    } else {
+      push({
+        id: "later-program-level-date-needed",
+        category: "later_program",
+        tone: "info",
+        title: "Your completion date decides whether the new level limit applies",
+        detail: "A program completed after September 15, 2026 counts toward the rule that requires a later F-1 program to be at a higher level. An earlier completion does not count.",
+        sourceIds: ["8CFR-214-2-F5II-SAME-LOWER"]
       });
     }
+  }
+
+  if (
+    scenario.optStage.endsWith("approved") &&
+    (focusTopics.includes("later_program") || focusTopics.includes("school_transfer") || !["unknown", "not_planning"].includes(scenario.nextProgramLevelPlan ?? "unknown"))
+  ) {
+    push({
+      id: "opt-to-later-program-timing",
+      category: "later_program",
+      tone: "warning",
+      title: "Your next program has a five-month start limit",
+      detail: "Classes must begin within five months of your SEVIS transfer release or your approved OPT end date, whichever comes first. Choose the release date with both schools.",
+      sourceIds: ["8CFR-214-2-F8-TRANSFER"]
+    });
+  }
+
+  if (scenario.pendingEmploymentImmigrantPetition === "yes" || focusTopics.includes("immigrant_intent")) {
+    push({
+      id: "pending-immigrant-petition",
+      category: "immigrant_intent",
+      tone: "warning",
+      title: "Your pending immigrant petition needs individual review before Form I-539 or travel",
+      detail: "This final rule does not create a special approval or denial rule for a pending I-140. USCIS will still examine whether you meet the temporary-purpose requirements for F-1 status when deciding an extension, and CBP or a consular officer can examine them after travel.",
+      sourceIds: ["FR-F1-TEMPORARY-INTENT", "FR-I140-OUT-OF-SCOPE"]
+    });
+  }
+
+  if (focusTopics.includes("school_filing_support")) {
+    push({
+      id: "school-i539-support",
+      category: "school_support",
+      tone: "info",
+      title: "Ask your new school exactly what Form I-539 help it provides",
+      detail: "The rule makes Form I-539 the student's USCIS filing when more time is needed inside the United States. It does not require a university to prepare or represent you in that application.",
+      sourceIds: ["8CFR-214-2-F7"]
+    });
   }
 
   if (scenario.programType === "english_language_training") {

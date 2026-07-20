@@ -72,6 +72,8 @@ const DATE_FIELDS: Array<[keyof StudentScenario, string, boolean?]> = [
   ["reentryDate", "entry or return date"],
   ["returnProgramStartDate", "returning I-20 program start date"],
   ["returnProgramEndDate", "returning I-20 program end date"],
+  ["nextProgramStartDate", "next program start date"],
+  ["nextProgramEndDate", "next program end date"],
   ["earlyEndDate", "early completion or withdrawal date"],
   ["effectiveDate", "rule effective date", true]
 ];
@@ -189,6 +191,13 @@ function fixedProgramLabel(scenario: StudentScenario): string {
   return "four-year maximum";
 }
 
+function dateDefinitelyBefore(value: string | undefined, comparison: string): boolean {
+  if (!value) return false;
+  if (isValidDateString(value)) return value < comparison;
+  if (/^\d{4}-\d{2}$/.test(value)) return value < comparison.slice(0, 7);
+  return /^\d{4}$/.test(value) && value < comparison.slice(0, 4);
+}
+
 export function scenarioForFixedReentry(scenario: StudentScenario): StudentScenario {
   const hasDifferentI20 = scenario.reentryBasis === "longer_program_i20";
   return {
@@ -217,14 +226,19 @@ function addAcademicFindings(scenario: StudentScenario, findings: Finding[], nex
     )
   );
 
-  if (scenario.educationLevel === "graduate") {
+  const completedBeforeRule = dateDefinitelyBefore(
+    scenario.currentProgramEndDate ?? scenario.currentProgramEndDateHint,
+    scenario.effectiveDate ?? DEFAULT_EFFECTIVE_DATE
+  );
+
+  if (scenario.educationLevel === "graduate" && !completedBeforeRule) {
     findings.push(
       finding(
         "graduate-objective-limit",
         scenario.academicProgramChangePlan === "yes" ? "danger" : "info",
         "You cannot change your graduate educational objective during the program",
         "The new rule does not allow an F-1 student at the graduate level or above to change a major or educational level during the program.",
-        ["8CFR-214-2-F5II"]
+        ["8CFR-214-2-F5II-GRADUATE"]
       )
     );
     findings.push(
@@ -233,7 +247,7 @@ function addAcademicFindings(scenario: StudentScenario, findings: Finding[], nex
         scenario.schoolTransferPlan === "yes" ? "warning" : "info",
         "A graduate transfer requires an SEVP exception",
         "The new rule does not allow a graduate-level school transfer unless SEVP authorizes an exception for extenuating circumstances.",
-        ["8CFR-214-2-F5II"]
+        ["8CFR-214-2-F5II-GRADUATE"]
       )
     );
     if (scenario.schoolTransferPlan === "yes") nextActions.push("Ask your DSO whether your facts could support an SEVP exception before planning the transfer.");
@@ -288,12 +302,14 @@ function addAcademicFindings(scenario: StudentScenario, findings: Finding[], nex
     findings.push(
       finding(
         "same-or-lower-next-program",
-        completedAfterRule ? "danger" : "warning",
-        "A same-level or lower-level next program is blocked after a post-rule completion",
+        completedAfterRule ? "danger" : completedBeforeRule ? "good" : "warning",
+        completedBeforeRule ? "Your earlier completion does not trigger the new same-level bar" : "A same-level or lower-level next program is blocked after a post-rule completion",
         completedAfterRule
           ? `Because your current program ends after September 15, 2026, the rule does not allow you to remain in, be admitted in, or receive F-1 status for a later program at the same or a lower education level.`
-          : "This restriction applies when the earlier U.S. F-1 program is completed after September 15, 2026. Confirm the earlier completion date before relying on this plan.",
-        ["8CFR-214-2-F5II"]
+          : completedBeforeRule
+            ? "The new restriction counts programs completed after September 15, 2026. A program completed before that date does not count toward this limit."
+            : "This restriction applies when the earlier U.S. F-1 program is completed after September 15, 2026. Confirm the earlier completion date before relying on this plan.",
+        ["8CFR-214-2-F5II-SAME-LOWER"]
       )
     );
   }
@@ -929,7 +945,7 @@ export function calculateScenario(input: StudentScenario): PlannerResult {
     latestDepartureDate = addDays(activityEnd, 60);
   }
 
-  const plannedEnd = maxDate(scenario.currentProgramEndDate, scenario.currentEadEndDate, effectiveDocumentEnd);
+  const plannedEnd = maxDate(scenario.currentProgramEndDate, scenario.currentEadEndDate, scenario.nextProgramEndDate, effectiveDocumentEnd);
   const extensionNeeded = Boolean(plannedEnd && isAfter(plannedEnd, activityEnd));
   if (extensionNeeded && plannedEnd) {
     findings.push(
@@ -975,9 +991,20 @@ export function calculateScenario(input: StudentScenario): PlannerResult {
   addTravelAndDependentFindings(scenario, findings, actions);
   const timelineItems = [
     timeline(effectiveDate, "The new rule begins", "You must be in the United States in valid F-1 status on this date to keep the old rules."),
-    timeline(activityEnd, "Your old-rule study period ends", qualifyingApprovedOpt ? "This is your approved EAD end date." : "This is the later I-20 or approved EAD date in effect on September 15, capped at September 15, 2030.", extensionNeeded ? "warning" : "good"),
+    timeline(activityEnd, qualifyingApprovedOpt ? "Your approved OPT ends" : "Your old-rule study period ends", qualifyingApprovedOpt ? "This is the expiration date on your approved EAD." : "This is the later I-20 or approved EAD date in effect on September 15, capped at September 15, 2030.", extensionNeeded ? "warning" : "good"),
     timeline(latestDepartureDate, "Your 60-day period ends", "This is the final day included after study or approved training under the old rules.", extensionNeeded ? "warning" : "neutral")
   ];
+  if (scenario.nextProgramStartDate) {
+    timelineItems.push(timeline(scenario.nextProgramStartDate, "Your next program begins", "This is the planned start date for the later program.", "neutral"));
+  }
+  if (scenario.nextProgramEndDate) {
+    timelineItems.push(timeline(
+      scenario.nextProgramEndDate,
+      "Your next program ends",
+      isAfter(scenario.nextProgramEndDate, activityEnd) ? "Your current old-rule period does not reach this date." : "Your current old-rule period reaches this date.",
+      isAfter(scenario.nextProgramEndDate, activityEnd) ? "warning" : "good"
+    ));
+  }
   addEarlyEndFinding(scenario, findings, timelineItems);
   addOptFindings(scenario, activityEnd, latestDepartureDate, findings, actions);
   addTransitionOptTimeline(scenario, latestDepartureDate, timelineItems);

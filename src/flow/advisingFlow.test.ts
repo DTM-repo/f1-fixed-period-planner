@@ -60,8 +60,8 @@ describe("student-controlled impact map", () => {
     expect(topicImpactLine(map, "extension", currentGraduate)).toBe("You do not need Form I-539 to finish this program");
   });
 
-  it("uses the main conclusion for length of stay", () => {
-    expect(topicImpactLine(map, "stay_length", currentGraduate)).toBe("You are under the old rules");
+  it("turns the main conclusion into a specific length-of-stay line", () => {
+    expect(topicImpactLine(map, "stay_length", currentGraduate)).toBe("Old rules continue through your current I-20 or approved training, plus 60 days");
     expect(claimsForTopic(map, "stay_length").map((claim) => claim.id)).toContain("departure");
   });
 

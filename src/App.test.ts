@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCoreQuestions, buildQuestions, hasEffectiveDateCoverageConflict, mergeFacts } from "./App";
+import { buildCoreQuestions, buildDisplayTimeline, buildQuestions, hasEffectiveDateCoverageConflict, mergeFacts } from "./App";
 import { DEFAULT_SCENARIO } from "./content/demoScenarios";
 import type { IntakeCandidateFact } from "./ai/intakePayload";
 import type { StudentScenario } from "./engine/types";
@@ -95,6 +95,56 @@ describe("September 15 document conflicts", () => {
     expect(hasEffectiveDateCoverageConflict(scenario)).toBe(false);
     expect(questions.map((question) => question.id)).toContain("effectiveEadEnd");
     expect(questions.map((question) => question.id)).toContain("educationLevel");
+  });
+
+  it("preserves partial completion and EAD dates while carrying every structured fact forward", () => {
+    const merged = mergeFacts({
+      ...DEFAULT_SCENARIO,
+      startingPosition: "current_ds_inside_us",
+      admissionBasis: "duration_of_status",
+      inUsOnEffectiveDate: "yes",
+      maintainingStatusOnEffectiveDate: "yes"
+    }, [
+      { ...fact("currentProgramEndDate", "2026-05"), needsConfirmation: true },
+      { ...fact("currentEadEndDate", "2027-06"), needsConfirmation: true },
+      fact("optStage", "post_completion_approved"),
+      fact("educationLevel", "undergraduate"),
+      fact("nextProgramLevelPlan", "same_or_lower")
+    ], true);
+
+    expect(merged.currentProgramEndDateHint).toBe("2026-05");
+    expect(merged.currentEadEndDateHint).toBe("2027-06");
+    expect(merged.optStage).toBe("post_completion_approved");
+    expect(merged.optIntent).toBe("yes");
+    expect(merged.educationLevel).toBe("undergraduate");
+    expect(merged.nextProgramLevelPlan).toBe("same_or_lower");
+    expect(buildCoreQuestions(merged, new Set(["presence"]), []).at(-1)?.id).toBe("effectiveEadEnd");
+  });
+
+  it("shows known month-and-year milestones before the exact EAD day is confirmed", () => {
+    const scenario: StudentScenario = {
+      ...DEFAULT_SCENARIO,
+      startingPosition: "current_ds_inside_us",
+      admissionBasis: "duration_of_status",
+      inUsOnEffectiveDate: "yes",
+      maintainingStatusOnEffectiveDate: "yes",
+      optIntent: "yes",
+      optStage: "post_completion_approved",
+      currentProgramEndDateHint: "2026-05",
+      currentEadEndDateHint: "2027-06"
+    };
+    const events = buildDisplayTimeline(scenario, [{
+      date: "2026-09-15",
+      title: "The new rule begins",
+      detail: "The effective date.",
+      tone: "warning"
+    }]);
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ dateLabel: "May 2026", title: "Your previous program ended" }),
+      expect.objectContaining({ dateLabel: "Sep 15, 2026", title: "The new rule begins" }),
+      expect.objectContaining({ dateLabel: "June 2027", title: "Your approved OPT ends" }),
+      expect.objectContaining({ dateLabel: "60 days later", title: "Your old-rule period ends" })
+    ]));
   });
 });
 
