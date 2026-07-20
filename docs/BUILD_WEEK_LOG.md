@@ -920,3 +920,22 @@ Each entry should capture:
 - Dense synthetic acceptance case: a May 2026 completed master's, approved OPT through June 2027, later same-level master's, school transfer, and pending employment petition stayed separate. Adding the later program produced one ordered timeline with the completed program, rule date, EAD end, next-program start, 60-day end, and next-program end.
 - The complete Sol advisement finished successfully and covered stay, travel, OPT, extension routes, undergraduate school and program rules, later programs, CPT, F-2 family, and early completion from the verified case.
 - A 390 by 844 browser check had no horizontal overflow or overlapping controls, and the browser console contained no warnings or errors.
+
+### Exact Rule Citations That Preserve the Student's Work
+
+**Research and diagnosis**
+
+- Federal Register text-fragment links opened the rule but did not consistently scroll to or highlight the requested language. New-tab citation links were also ignored by the one-tab in-app preview.
+- The published Federal Register HTML gives each rule paragraph a stable `p-####` anchor and visually brackets the targeted paragraph when that anchor is opened.
+
+**Decisions**
+
+- Point every rule citation to its verified Federal Register paragraph anchor rather than searching for a free-text excerpt or opening a broad PDF page.
+- Open citations in the current tab and save the working case in session storage. Back returns the student to the same question, answers, priorities, and completed advisement; Start over clears the saved session.
+- Reserve “Open the highlighted rule passage” for anchored Federal Register citations. General rule links say “Open the official rule,” and USCIS or other supporting citations say “Open the cited source.”
+
+**Codex assistance and verification**
+
+- Codex mapped all 18 rule citations to the live published HTML, confirmed that every target exists, and visually verified transition, OPT, and graduate-program paragraphs.
+- Vitest: 107/107 passed across eight test files; TypeScript and the production Vite build passed; `git diff --check` passed.
+- Browser verification confirmed exact highlighted landing, preserved state after Back, and no console warnings or errors.

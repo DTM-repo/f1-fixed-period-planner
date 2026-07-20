@@ -55,7 +55,7 @@ import {
   topicMeta,
   type CanonicalTopic
 } from "./flow/advisingFlow";
-import { SOURCE_INDEX } from "./sources/sourceIndex";
+import { SOURCE_INDEX, sourceLinkLabel } from "./sources/sourceIndex";
 
 type SpeechRecognitionResultItem = { transcript: string };
 type SpeechRecognitionResult = { isFinal: boolean; 0: SpeechRecognitionResultItem };
@@ -1106,8 +1106,8 @@ function SourceLink({ sourceId }: { sourceId: string }) {
   const citation = SOURCE_INDEX[sourceId];
   if (!citation) return null;
   return (
-    <a className="source-link" href={citation.url} target="_blank" rel="noreferrer" title={citation.locator}>
-      Open the highlighted rule passage
+    <a className="source-link" href={citation.url} title={citation.locator}>
+      {sourceLinkLabel(citation)}
       <ExternalLink aria-hidden="true" />
     </a>
   );
@@ -1451,8 +1451,8 @@ function WhatHappened({ onBack }: { onBack: () => void }) {
         <h2>School and program choices also change</h2>
         <p>The rule adds limits on first-year undergraduate transfers and program changes, graduate transfers and changes of educational objective, and later programs at the same or a lower education level. DHS can delay these particular provisions through September 14, 2028 and must announce a delay publicly.</p>
         <div className="article-links">
-          <a href={SOURCE_INDEX["FR-2026-FINAL-RULE"].url} target="_blank" rel="noreferrer"><FileText aria-hidden="true" /><span><strong>Read the official final rule</strong><small>Federal Register, July 17, 2026</small></span><ExternalLink aria-hidden="true" /></a>
-          <a href={SOURCE_INDEX["NAFSA-DS-FINAL-RULE-HUB"].url} target="_blank" rel="noreferrer"><Info aria-hidden="true" /><span><strong>Read NAFSA's public overview</strong><small>Regulatory analysis and updates</small></span><ExternalLink aria-hidden="true" /></a>
+          <a href={SOURCE_INDEX["FR-2026-FINAL-RULE"].url}><FileText aria-hidden="true" /><span><strong>Read the official final rule</strong><small>Federal Register, July 17, 2026</small></span><ExternalLink aria-hidden="true" /></a>
+          <a href={SOURCE_INDEX["NAFSA-DS-FINAL-RULE-HUB"].url}><Info aria-hidden="true" /><span><strong>Read NAFSA's public overview</strong><small>Regulatory analysis and updates</small></span><ExternalLink aria-hidden="true" /></a>
         </div>
         <p className="status-note">Rule status last checked July 19, 2026. A court order, congressional action, or DHS notice could change implementation.</p>
       </article>
@@ -1475,27 +1475,74 @@ async function writeClipboard(text: string) {
   field.remove();
 }
 
+const PLANNER_SESSION_KEY = "f1-stay-map-session-v1";
+
+interface PlannerSession {
+  version: 1;
+  experience: Experience;
+  scenario: StudentScenario;
+  answered: string[];
+  intake: IntakeExtractionResponse | null;
+  understoodNarrative: string;
+  focusTopics: IntakeTopic[];
+  focusCaptured: boolean;
+  interviewMode: InterviewMode;
+  exploreTopics: IntakeTopic[];
+  storyFinished: boolean;
+  report: ExplanationResponse | null;
+  followUpTurns: AdvisorTurn[];
+}
+
+function readPlannerSession(): PlannerSession | null {
+  try {
+    const stored = window.sessionStorage.getItem(PLANNER_SESSION_KEY);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as Partial<PlannerSession>;
+    if (parsed.version !== 1 || !parsed.scenario || !parsed.experience) return null;
+    return parsed as PlannerSession;
+  } catch {
+    return null;
+  }
+}
+
+function writePlannerSession(session: PlannerSession): void {
+  try {
+    window.sessionStorage.setItem(PLANNER_SESSION_KEY, JSON.stringify(session));
+  } catch {
+    // Session recovery is optional; the planner must still work when storage is blocked.
+  }
+}
+
+function clearPlannerSession(): void {
+  try {
+    window.sessionStorage.removeItem(PLANNER_SESSION_KEY);
+  } catch {
+    // Nothing needs clearing when storage is unavailable.
+  }
+}
+
 export default function App() {
+  const restoredSession = useMemo(readPlannerSession, []);
   const [page, setPage] = useState<Page>(() => window.location.hash === "#what-happened" ? "overview" : "planner");
-  const [experience, setExperience] = useState<Experience>("welcome");
-  const [scenario, setScenario] = useState<StudentScenario>(DEFAULT_SCENARIO);
-  const [answered, setAnswered] = useState<Set<string>>(new Set());
-  const [intake, setIntake] = useState<IntakeExtractionResponse | null>(null);
-  const [intakeState, setIntakeState] = useState<IntakeState>("idle");
+  const [experience, setExperience] = useState<Experience>(restoredSession?.experience ?? "welcome");
+  const [scenario, setScenario] = useState<StudentScenario>(() => restoredSession?.scenario ? { ...DEFAULT_SCENARIO, ...restoredSession.scenario } : DEFAULT_SCENARIO);
+  const [answered, setAnswered] = useState<Set<string>>(() => new Set(restoredSession?.answered ?? []));
+  const [intake, setIntake] = useState<IntakeExtractionResponse | null>(restoredSession?.intake ?? null);
+  const [intakeState, setIntakeState] = useState<IntakeState>(restoredSession?.intake ? "ready" : "idle");
   const [intakeNotice, setIntakeNotice] = useState("");
-  const [understoodNarrative, setUnderstoodNarrative] = useState("");
-  const [focusTopics, setFocusTopics] = useState<IntakeTopic[]>([]);
-  const [focusCaptured, setFocusCaptured] = useState(false);
-  const [interviewMode, setInterviewMode] = useState<InterviewMode>("focused");
-  const [exploreTopics, setExploreTopics] = useState<IntakeTopic[]>([]);
+  const [understoodNarrative, setUnderstoodNarrative] = useState(restoredSession?.understoodNarrative ?? "");
+  const [focusTopics, setFocusTopics] = useState<IntakeTopic[]>(restoredSession?.focusTopics ?? []);
+  const [focusCaptured, setFocusCaptured] = useState(restoredSession?.focusCaptured ?? false);
+  const [interviewMode, setInterviewMode] = useState<InterviewMode>(restoredSession?.interviewMode ?? "focused");
+  const [exploreTopics, setExploreTopics] = useState<IntakeTopic[]>(restoredSession?.exploreTopics ?? []);
   const [recording, setRecording] = useState(false);
-  const [storyFinished, setStoryFinished] = useState(false);
+  const [storyFinished, setStoryFinished] = useState(restoredSession?.storyFinished ?? false);
   const [interimTranscript, setInterimTranscript] = useState("");
-  const [report, setReport] = useState<ExplanationResponse | null>(null);
-  const [reportState, setReportState] = useState<ReportState>("idle");
+  const [report, setReport] = useState<ExplanationResponse | null>(restoredSession?.report ?? null);
+  const [reportState, setReportState] = useState<ReportState>(restoredSession?.report ? "ready" : "idle");
   const [reportError, setReportError] = useState("");
   const [followUpQuestion, setFollowUpQuestion] = useState("");
-  const [followUpTurns, setFollowUpTurns] = useState<AdvisorTurn[]>([]);
+  const [followUpTurns, setFollowUpTurns] = useState<AdvisorTurn[]>(restoredSession?.followUpTurns ?? []);
   const [followUpState, setFollowUpState] = useState<ReportState>("idle");
   const [shareNotice, setShareNotice] = useState("");
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
@@ -1510,6 +1557,7 @@ export default function App() {
   const lastUnderstoodNarrativeRef = useRef("");
   const storyResultsRef = useRef<HTMLElement | null>(null);
   const preserveReportForScenarioUpdateRef = useRef(false);
+  const restoringReportRef = useRef(Boolean(restoredSession?.report));
 
   useEffect(() => {
     const onHash = () => setPage(window.location.hash === "#what-happened" ? "overview" : "planner");
@@ -1527,10 +1575,33 @@ export default function App() {
   }, [scenario]);
 
   useEffect(() => {
+    const session: PlannerSession = {
+      version: 1,
+      experience,
+      scenario,
+      answered: Array.from(answered),
+      intake,
+      understoodNarrative,
+      focusTopics,
+      focusCaptured,
+      interviewMode,
+      exploreTopics,
+      storyFinished,
+      report,
+      followUpTurns
+    };
+    writePlannerSession(session);
+  }, [answered, experience, exploreTopics, focusCaptured, focusTopics, followUpTurns, intake, interviewMode, report, scenario, storyFinished, understoodNarrative]);
+
+  useEffect(() => {
     recordingRef.current = recording;
   }, [recording]);
 
   useEffect(() => {
+    if (restoringReportRef.current) {
+      restoringReportRef.current = false;
+      return;
+    }
     if (preserveReportForScenarioUpdateRef.current) {
       preserveReportForScenarioUpdateRef.current = false;
       return;
@@ -2351,6 +2422,7 @@ export default function App() {
     recognitionRef.current?.stop();
     recognitionRef.current = null;
     recordingRef.current = false;
+    clearPlannerSession();
     setScenario(DEFAULT_SCENARIO);
     setAnswered(new Set());
     setIntake(null);
