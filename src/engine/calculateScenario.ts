@@ -18,6 +18,17 @@ export const F1_TRANSITION_DEPARTURE_PERIOD_DAYS = 60;
 export const F1_FIXED_DEPARTURE_PERIOD_DAYS = 30;
 export const OPT_TRANSITION_I765_DEADLINE = "2027-03-18";
 
+export function postCompletionOptWindowOpens(scenario: StudentScenario): string | undefined {
+  const programEnd = scenario.programEndOnEffectiveDate ?? scenario.currentProgramEndDate;
+  return programEnd ? addDays(programEnd, -90) : undefined;
+}
+
+function hasTransitionOptPlan(scenario: StudentScenario): boolean {
+  return scenario.optIntent === "yes" || (
+    scenario.optStage !== "none" && scenario.optStage !== "pre_completion"
+  );
+}
+
 const TRANSITION_RULE: AppliedRule = {
   id: "transition-ds-cap",
   label: "Protection for current F-1 students",
@@ -503,6 +514,22 @@ function addOptFindings(
     return;
   }
 
+  const normalWindowOpens = isStem
+    ? scenario.currentEadEndDate ? addDays(scenario.currentEadEndDate, -90) : undefined
+    : postCompletionOptWindowOpens(scenario);
+  if (normalWindowOpens && isAfter(normalWindowOpens, scenario.optFilingDate)) {
+    findings.push(
+      finding(
+        "opt-before-normal-window",
+        "danger",
+        "This filing date is before the normal OPT window opens",
+        `${formatDate(scenario.optFilingDate)} is before the ordinary filing window opens on ${formatDate(normalWindowOpens)}. Choose a date within the normal filing window and within every transition deadline that applies.`,
+        ["USCIS-OPT-STEM", "8CFR-214-1-M1-OPT"]
+      )
+    );
+    return;
+  }
+
   if (isAfter(scenario.optFilingDate, OPT_TRANSITION_I765_DEADLINE)) {
     findings.push(finding("opt-after-march-deadline", "danger", "This filing date misses the special transition deadline", `${formatDate(scenario.optFilingDate)} is after March 18, 2027. You cannot use the transition OPT path that avoids a separate Form I-539 solely because D/S ended.`, ["8CFR-214-1-M1-OPT"]));
     return;
@@ -532,6 +559,75 @@ function addOptFindings(
   if (scenario.travelPosture !== "none" && isNotFiled) {
     findings.push(finding("opt-travel-before-filing", "danger", "File timing and travel can change which OPT process you use", "If you leave before filing and then return under the fixed-period system, plan for both the I-765 and Form I-539 requirements. Before you travel, ask your DSO to compare that path with getting the OPT recommendation and filing while you are still in the United States.", ["8CFR-214-1-M1-OPT"]));
     nextActions.push("Before traveling, compare filing the I-765 in the United States with the documents required after a fixed-period return.");
+  }
+}
+
+function addTransitionOptTimeline(
+  scenario: StudentScenario,
+  latestDepartureDate: string,
+  timelineItems: TimelineItem[]
+) {
+  const isStem = scenario.optStage.startsWith("stem");
+  if (!hasTransitionOptPlan(scenario) || scenario.optStage.endsWith("approved")) return;
+
+  const normalWindowOpens = isStem
+    ? scenario.currentEadEndDate ? addDays(scenario.currentEadEndDate, -90) : undefined
+    : postCompletionOptWindowOpens(scenario);
+  if (normalWindowOpens) {
+    timelineItems.push(
+      timeline(
+        normalWindowOpens,
+        isStem ? "STEM OPT filing window opens" : "Post-completion OPT filing window opens",
+        `${isStem ? "This is 90 days before your current OPT EAD ends." : "This is 90 days before your I-20 program ends."} Your DSO must recommend OPT before you submit Form I-765.`,
+        "neutral"
+      )
+    );
+  }
+
+  const pathDeadline = minDate(
+    OPT_TRANSITION_I765_DEADLINE,
+    latestDepartureDate,
+    isStem ? scenario.currentEadEndDate : undefined
+  )!;
+  const windowOpensTooLate = Boolean(normalWindowOpens && isAfter(normalWindowOpens, pathDeadline));
+  const existingDeadlineEvent = timelineItems.find((item) => item.date === pathDeadline);
+  const deadlineDetail = windowOpensTooLate
+    ? `The temporary Form I-539 exception closes before your normal filing window opens${normalWindowOpens ? ` on ${formatDate(normalWindowOpens)}` : ""}, so it is not available for this OPT filing.`
+    : pathDeadline === OPT_TRANSITION_I765_DEADLINE
+      ? "After your DSO recommends OPT, submit Form I-765 by this date and while the old rules still cover you to avoid Form I-539 solely because the rule changed."
+      : `Your old-rule stay or current EAD ends before March 18, 2027. Submit Form I-765 by this earlier date, after your DSO recommendation, to avoid Form I-539 solely because the rule changed.`;
+
+  if (existingDeadlineEvent) {
+    existingDeadlineEvent.detail = `${existingDeadlineEvent.detail} ${deadlineDetail}`;
+    existingDeadlineEvent.tone = "warning";
+  } else {
+    timelineItems.push(
+      timeline(
+        pathDeadline,
+        windowOpensTooLate ? "Form I-539 exception closes" : "Deadline to avoid Form I-539 for OPT",
+        deadlineDetail,
+        "warning"
+      )
+    );
+  }
+
+  if (scenario.optFilingDate) {
+    const beforeNormalWindow = Boolean(normalWindowOpens && isAfter(normalWindowOpens, scenario.optFilingDate));
+    const afterTransitionDeadline = isAfter(scenario.optFilingDate, pathDeadline);
+    const filingFits =
+      !beforeNormalWindow && !afterTransitionDeadline;
+    timelineItems.push(
+      timeline(
+        scenario.optFilingDate,
+        scenario.optStage.endsWith("pending") ? "Form I-765 submitted" : "Planned Form I-765 filing",
+        filingFits
+          ? "This date is within your normal filing window and no later than the deadline to avoid Form I-539 solely because the rule changed."
+          : beforeNormalWindow
+            ? `This date is before your normal filing window opens on ${formatDate(normalWindowOpens)}.`
+            : `This date is after the ${formatDate(pathDeadline)} deadline for this OPT path.`,
+        filingFits ? "good" : "danger"
+      )
+    );
   }
 }
 
@@ -884,7 +980,8 @@ export function calculateScenario(input: StudentScenario): PlannerResult {
   ];
   addEarlyEndFinding(scenario, findings, timelineItems);
   addOptFindings(scenario, activityEnd, latestDepartureDate, findings, actions);
-  if (scenario.optStage !== "none" && scenario.optStage !== "pre_completion") rules.push(OPT_TRANSITION_RULE);
+  addTransitionOptTimeline(scenario, latestDepartureDate, timelineItems);
+  if (hasTransitionOptPlan(scenario)) rules.push(OPT_TRANSITION_RULE);
 
   const questions = [...normalized.followUpQuestions];
   const status = statusFor(findings, questions, extensionNeeded ? "caution" : "ok");

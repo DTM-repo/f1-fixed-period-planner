@@ -2,7 +2,7 @@
 
 F-1 Stay Map is an OpenAI Build Week app that turns DHS's July 17, 2026 duration-of-status final rule into a personal, source-linked planning experience for F-1 students.
 
-Students can tell their story by voice or text, or answer a progressive interview. The app shows what it understands, updates a personal impact map as facts arrive, draws the relevant dates on visual timelines, and produces a complete advisor-style report.
+Students can tell their story by voice or text, or answer a progressive interview. The app shows what it understands, updates a personal impact map as facts arrive, draws controlling dates such as OPT filing windows and extension deadlines on visual timelines, and produces a complete advisor-style report.
 
 ## Safety Architecture
 

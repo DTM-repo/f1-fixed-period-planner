@@ -282,6 +282,53 @@ describe("OPT and STEM OPT transition", () => {
     expect(ids(result)).toContain("opt-filing-in-window");
   });
 
+  it("puts a spring graduate's key OPT dates on the visual timeline", () => {
+    const result = calculateScenario({
+      ...optBase,
+      programEndOnEffectiveDate: "2027-05-20",
+      currentProgramEndDate: "2027-05-20",
+      optStage: "post_completion_not_filed",
+      optFilingDate: undefined
+    });
+    expect(result.timeline).toEqual(expect.arrayContaining([
+      expect.objectContaining({ date: "2027-02-19", title: "Post-completion OPT filing window opens" }),
+      expect.objectContaining({ date: "2027-03-18", title: "Deadline to avoid Form I-539 for OPT" }),
+      expect.objectContaining({ date: "2027-05-20", title: "Your old-rule study period ends" }),
+      expect.objectContaining({ date: "2027-07-19", title: "Your 60-day period ends" })
+    ]));
+  });
+
+  it("shows when the one-time deadline closes before a later OPT window opens", () => {
+    const result = calculateScenario({
+      ...optBase,
+      programEndOnEffectiveDate: "2028-05-20",
+      currentProgramEndDate: "2028-05-20",
+      optStage: "post_completion_not_filed",
+      optFilingDate: undefined
+    });
+    expect(result.timeline).toEqual(expect.arrayContaining([
+      expect.objectContaining({ date: "2027-03-18", title: "Form I-539 exception closes", tone: "warning" }),
+      expect.objectContaining({ date: "2028-02-20", title: "Post-completion OPT filing window opens" })
+    ]));
+  });
+
+  it("rejects a planned filing before the normal OPT window opens", () => {
+    const result = calculateScenario({
+      ...optBase,
+      programEndOnEffectiveDate: "2027-05-20",
+      currentProgramEndDate: "2027-05-20",
+      optStage: "post_completion_not_filed",
+      optFilingDate: "2027-02-01"
+    });
+    expect(result.status).toBe("risk");
+    expect(ids(result)).toContain("opt-before-normal-window");
+    expect(result.timeline).toContainEqual(expect.objectContaining({
+      date: "2027-02-01",
+      title: "Planned Form I-765 filing",
+      tone: "danger"
+    }));
+  });
+
   it("rejects the temporary rule after March 18, 2027", () => {
     const result = calculateScenario({ ...optBase, optStage: "post_completion_not_filed", optFilingDate: "2027-03-19" });
     expect(result.status).toBe("risk");

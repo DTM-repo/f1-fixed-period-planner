@@ -1,7 +1,8 @@
 import type { IntakeTopic } from "../ai/intakePayload";
 import {
   DEFAULT_EFFECTIVE_DATE,
-  OPT_TRANSITION_I765_DEADLINE
+  OPT_TRANSITION_I765_DEADLINE,
+  postCompletionOptWindowOpens
 } from "../engine/calculateScenario";
 import { addDays, compareDates, formatDate } from "../engine/dateMath";
 import type { Finding, PlannerResult, StudentScenario } from "../engine/types";
@@ -206,8 +207,7 @@ function optClaim(
     };
   }
 
-  const programEnd = scenario.programEndOnEffectiveDate ?? scenario.currentProgramEndDate;
-  const normalWindowOpens = programEnd ? addDays(programEnd, -90) : undefined;
+  const normalWindowOpens = postCompletionOptWindowOpens(scenario);
   const currentStayEnds = result.latestDepartureDate;
   const windowCanUseException = Boolean(
     normalWindowOpens &&

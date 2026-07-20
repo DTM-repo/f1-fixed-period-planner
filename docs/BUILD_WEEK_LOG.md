@@ -774,3 +774,26 @@ Each entry should capture:
 - Browser journeys passed for a current student with travel and OPT concerns, a current student who did not know what to ask, and a future graduate student with unknown dates.
 - Two live GPT-5.6 Sol reports completed with full multi-paragraph advisement, explicit uncertainty when dates were missing, no invented transfer answer, and no internal “duration-of-status status” wording.
 - Mobile checks at 390 by 844 found no horizontal overflow on the welcome or concern-intake screens; browser console warnings and errors were empty.
+
+### OPT Deadlines on the Visual Timeline
+
+**Research and diagnosis**
+
+- David tested a current student graduating in spring 2027 who plans post-completion OPT. The impact card correctly identified the temporary path that can avoid Form I-539, but the visual timeline omitted the dates that made the advice useful.
+- The impact map calculated the normal 90-day OPT filing-window opening and the March 18, 2027 transition cutoff. The deterministic timeline builder received only the rule date, I-20/EAD end, and 60-day end, so the two surfaces used the same scenario without sharing the same date set.
+- Code review found a related safety gap: a planned I-765 date before the normal filing window could pass the transition-deadline checks because the engine checked only whether it was too late.
+
+**Decisions and Codex assistance**
+
+- Make every controlling date behind an OPT recommendation visible on the timeline. For a known post-completion OPT plan, add the ordinary 90-day filing-window opening, the student-specific deadline to avoid Form I-539 solely because the rule changed, and any planned or completed Form I-765 filing date.
+- Use the earlier of March 18, 2027 and the student's old-rule/EAD deadline. If the normal filing window opens later, show the March 18 date first as “Form I-539 exception closes” so the timeline explains why the exception is unavailable.
+- Share one deterministic helper between the impact card and timeline for the post-completion OPT filing-window date.
+- Reject a planned filing before the normal filing window and mark that date as a risk on the timeline.
+- Use literal labels, including “Deadline to avoid Form I-539 for OPT,” instead of internal transition-path shorthand.
+
+**Verification**
+
+- Vitest: 90/90 passed; TypeScript and the production Vite build passed.
+- Exact browser case: current undergraduate, I-20 end May 20, 2027, post-completion OPT not yet filed. The timeline rendered September 15, 2026; February 19, 2027 filing-window opening; March 18, 2027 Form I-539 exception deadline; May 20 program end; and July 19 end of the 60-day period.
+- A May 2028 program-end regression shows the March 18, 2027 exception closing before the February 20, 2028 normal filing window.
+- Desktop and 390-pixel screenshots passed. The mobile timeline remained vertical and the page had no horizontal overflow.
