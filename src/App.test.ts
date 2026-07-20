@@ -101,3 +101,54 @@ describe("CPT interview relevance", () => {
     expect(questions.map((question) => question.id)).not.toContain("cptTiming");
   });
 });
+
+describe("OPT and travel order", () => {
+  const travelAndOptAnswers = new Set([
+    "presence",
+    "programEnd",
+    "educationLevel",
+    "programType",
+    "travelIntent",
+    "returnAfterRule",
+    "returnDate",
+    "travelI20",
+    "travelProgramStart",
+    "optIntent",
+    "optStatus",
+    "dsoRecommendation",
+    "optFilingDate"
+  ]);
+
+  it("asks an eligible student whether they will submit Form I-765 before travel", () => {
+    const scenario: StudentScenario = {
+      ...currentStudent("2026-12-20"),
+      programStartDate: "2023-08-28",
+      optIntent: "yes",
+      optStage: "post_completion_not_filed",
+      dsoRecommendedOpt: "no",
+      travelPosture: "planned",
+      returningAfterEffectiveDate: "yes",
+      reentryDate: "2026-10-30",
+      reentryBasis: "same_i20_balance"
+    };
+    const questions = buildQuestions(scenario, travelAndOptAnswers, ["travel", "opt"], "2026-12-20");
+    expect(questions.find((question) => question.id === "optBeforeTravel")?.prompt).toBe(
+      "Will you submit your Form I-765 before you leave the United States?"
+    );
+  });
+
+  it("does not ask the filing-before-travel question when the OPT window opens after the one-time deadline", () => {
+    const scenario: StudentScenario = {
+      ...currentStudent("2028-05-22"),
+      programStartDate: "2024-08-26",
+      optIntent: "yes",
+      optStage: "post_completion_not_filed",
+      travelPosture: "planned",
+      returningAfterEffectiveDate: "yes",
+      reentryDate: "2026-10-30",
+      reentryBasis: "same_i20_balance"
+    };
+    const questions = buildQuestions(scenario, travelAndOptAnswers, ["travel", "opt"], "2028-05-22");
+    expect(questions.map((question) => question.id)).not.toContain("optBeforeTravel");
+  });
+});

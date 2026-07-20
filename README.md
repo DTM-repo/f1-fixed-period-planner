@@ -11,7 +11,7 @@ The legal/date engine is deterministic. The same confirmed facts always produce 
 - GPT-5.6 Sol extracts candidate facts from a student's narrative at medium reasoning effort.
 - The student can review and change those facts through the same guided flow.
 - The deterministic TypeScript engine calculates the result and cites the rule.
-- The server recalculates the result before GPT-5.6 Sol writes the final advisor report at max reasoning effort.
+- The server recalculates the result before GPT-5.6 Sol adds a concise advisor note at medium reasoning effort.
 - The report model may explain verified output; it may not alter a date, classification, or legal consequence.
 - Rule-scoped follow-ups use GPT-5.6 Sol at medium reasoning effort and can add confirmed facts back to the deterministic impact map.
 
@@ -35,7 +35,7 @@ OPENAI_INTAKE_MODEL=gpt-5.6-sol
 OPENAI_ADVISOR_MODEL=gpt-5.6-sol
 OPENAI_INTAKE_REASONING_EFFORT=medium
 OPENAI_FOLLOW_UP_REASONING_EFFORT=medium
-OPENAI_REPORT_REASONING_EFFORT=max
+OPENAI_REPORT_REASONING_EFFORT=medium
 ```
 
 Run the verification suite with:

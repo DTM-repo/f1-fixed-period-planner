@@ -669,9 +669,9 @@ export function buildQuestions(
         id: "optBeforeTravel",
         eyebrow: "OPT and travel order",
         prompt: scenario.travelPosture === "completed"
-          ? "Did USCIS receive your Form I-765 before you left the United States?"
-          : "Will USCIS receive your Form I-765 before you leave the United States?",
-        help: "For the one-time OPT option, filing before departure can avoid a separate Form I-539 even if you return after September 15.",
+          ? "Did you submit your Form I-765 before you left the United States?"
+          : "Will you submit your Form I-765 before you leave the United States?",
+        help: "For the one-time OPT option, submit Form I-765 before your trip and no later than March 18, 2027.",
         kind: "choice",
         choices: yesNoUnknown,
         value: scenario.optFiledBeforeDeparture,

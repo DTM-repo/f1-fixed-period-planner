@@ -227,7 +227,7 @@ function optClaim(
         category: "opt",
         tone: "good",
         title: "Filing before travel preserves the one-time OPT option",
-        detail: "USCIS must receive Form I-765 before you leave, by March 18, 2027, and while the old rules still cover you. The fixed-period return does not by itself add Form I-539 for that OPT period.",
+        detail: "Submit Form I-765 before you leave, by March 18, 2027, and while the old rules still cover you. The fixed-period return does not by itself add Form I-539 for that OPT period.",
         sourceIds: ["8CFR-214-1-M1-OPT"]
       };
     }
@@ -256,7 +256,7 @@ function optClaim(
       category: "opt",
       tone: "warning",
       title: "File Form I-765 before you leave",
-      detail: `Your normal filing window opens ${formatDate(normalWindowOpens!)}. ${scenario.dsoRecommendedOpt === "yes" ? "" : "Your DSO must recommend OPT first. "}USCIS must receive Form I-765 before departure and by March 18, 2027 to avoid Form I-539 for that OPT period.`,
+      detail: `Your normal filing window opens ${formatDate(normalWindowOpens!)}. ${scenario.dsoRecommendedOpt === "yes" ? "" : "Your DSO must recommend OPT first. "}Submit Form I-765 before your trip and by March 18, 2027 to avoid Form I-539 for that OPT period.`,
       sourceIds: ["8CFR-214-1-M1-OPT"]
     };
   }

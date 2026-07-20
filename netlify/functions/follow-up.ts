@@ -117,7 +117,7 @@ function buildPrompt(payload: FollowUpRequest): string {
   const travelResult = travelComparisonFor(payload.scenario);
   const map = buildImpactMap(payload.scenario, stayResult, travelResult, payload.focusTopics);
   return JSON.stringify({
-    task: "Answer the student's latest question about this final rule and extract only facts explicitly stated in that latest question.",
+    task: "Add the shortest complete answer to the student's latest question. The impact map and recent conversation are already visible; do not repeat them. Extract only facts explicitly stated in the latest question.",
     latestQuestion: payload.question,
     recentConversation: payload.history.slice(-8),
     studentSituation: payload.scenario,
@@ -130,8 +130,9 @@ function buildPrompt(payload: FollowUpRequest): string {
       "If a missing fact controls the answer, give the useful conditional answer first, then ask one short plain-language question.",
       "State definite rules directly. Separate legal eligibility from practical travel risk and identify whether USCIS or CBP decides.",
       "Use you and your. Do not mention the app, form flow, calculation, inputs, model, or questions skipped.",
+      "Begin with the direct answer. Add background only when it is necessary to understand that answer.",
       "Say one-time OPT option, not transition treatment, transition path, or transition exception.",
-      "Write one to three short paragraphs of plain text. No markdown, bullets, headings, or generic disclaimer.",
+      "Write one or two short paragraphs of plain text, no more than 180 words. No markdown, bullets, headings, or generic disclaimer.",
       "Return source IDs that directly support the answer.",
       "Return a fact only when the latest question explicitly states it. Mark an inference needsConfirmation=true; do not convert a wish or hypothetical into a fact."
     ]
@@ -141,7 +142,7 @@ function buildPrompt(payload: FollowUpRequest): string {
 function normalize(value: unknown, model: string, question: string): FollowUpResponse {
   const parsed = value as Partial<FollowUpResponse>;
   if (typeof parsed.answer !== "string" || parsed.answer.trim().length < 20) throw new Error("Missing answer");
-  if (hasInvalidAdvisorProse(parsed.answer, 250)) throw new Error("Answer did not meet the plain-language quality standard");
+  if (hasInvalidAdvisorProse(parsed.answer, 180)) throw new Error("Answer did not meet the plain-language quality standard");
   const facts = Array.isArray(parsed.facts)
     ? parsed.facts.filter((item): item is IntakeCandidateFact => Boolean(item && FACT_FIELDS.includes(item.field as typeof FACT_FIELDS[number])))
     : [];

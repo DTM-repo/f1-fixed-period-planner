@@ -707,7 +707,7 @@ Each entry should capture:
 
 **Verification**
 
-- Vitest: 78/78 passing after the concern-first rebuild.
+- Vitest: 80/80 passing after the concern-first rebuild and Applesauce Rule regressions.
 - TypeScript and production Vite build: passing.
 - Live GPT-5.6 Sol report: background start, polling, quality validation, and display passed.
 - Live follow-up: answered the travel-before-OPT question, stayed visible, and refreshed the complete report without returning to the form.
@@ -721,3 +721,20 @@ Each entry should capture:
 - Split extension consequences by route. A known travel return can no longer inherit an extension warning that belongs only to the student's stay-in-the-United-States timeline.
 - Added a deterministic check before saying that a return may avoid Form I-539: the projected admission must actually reach the current program end date. Otherwise the app describes travel only as a separate way to request more time, with CBP making the admission decision.
 - Added regression coverage for both the helpful travel case and the case where the projected returned admission still ends too early.
+
+### The Applesauce Rule: AI Adds Value, It Does Not Rebuild the Answer
+
+**Research and diagnosis**
+
+- David's Applesauce Rule: use the level of model work the actual question needs. If the useful answer is "apples," do not produce the molecular composition and manufacturing process.
+- The deterministic impact map already contains the verified dates, consequences, source links, and category coverage. Asking Sol to cover every category again made the final note slower and invited repetition.
+- The incorrect OPT-before-travel recommendation came from a deterministic predicate, not model improvisation. The branch checked current D/S, travel, and OPT, but originally failed to require that the student's normal 90-day filing window open by March 18, 2027. Tests covered an eligible December 2026 graduate but not a May 2028 graduate with travel.
+
+**Decisions and Codex assistance**
+
+- The advisor note now augments the visible map with only the student's priority, important category interactions, and up to three next actions. It no longer inventories every rule card.
+- Rule follow-ups begin with the direct answer, add only necessary background, and stay under 180 words.
+- Sol remains the runtime model, but medium reasoning is the explicit default for all three writing/extraction tasks. The deterministic engine performs the difficult legal and date work; more hidden reasoning did not improve this bounded writing task and created avoidable latency and token-limit failures.
+- Rephrased the OPT travel question as "Will you submit your Form I-765 before you leave the United States?" Online submission is the controlling action students understand.
+- The OPT predicate now checks the actual filing-window opening date, and exact regression cases cover both eligible and ineligible travel timing.
+- Live verification produced a two-paragraph, 76-word advisor note and a direct 50-word travel answer in under nine seconds. Both used the verified dates without repeating the impact-card inventory.
