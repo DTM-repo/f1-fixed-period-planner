@@ -44,10 +44,18 @@ import type {
 } from "./engine/types";
 import {
   buildImpactMap,
-  EXPLORATION_OPTIONS,
   type ImpactClaim,
   type ImpactMap
 } from "./impact/impactMap";
+import {
+  buildExplorationQueue,
+  canonicalTopics,
+  claimsForTopic,
+  explorationStep,
+  topicForQuestion,
+  topicMeta,
+  type CanonicalTopic
+} from "./flow/advisingFlow";
 import { SOURCE_INDEX } from "./sources/sourceIndex";
 
 type SpeechRecognitionResultItem = { transcript: string };
@@ -529,13 +537,13 @@ export function buildCoreQuestions(scenario: StudentScenario, answered: Set<stri
     });
     if (!answered.has("programType")) return questions;
 
-    questions.push({ id: "programStart", eyebrow: "Your I-20", prompt: "What program start date will be on your I-20?", kind: "date", value: scenario.programStartDate, answerLabel: scenario.programStartDate ? formatDate(scenario.programStartDate) : "I do not know yet", allowUnknownDate: true });
+    questions.push({ id: "programStart", eyebrow: "I-20 program start", prompt: "What program start date will be on your I-20?", kind: "date", value: scenario.programStartDate, answerLabel: scenario.programStartDate ? formatDate(scenario.programStartDate) : "I do not know yet", allowUnknownDate: true });
     if (!answered.has("programStart")) return questions;
   }
 
   questions.push({
     id: "programEnd",
-    eyebrow: "Your I-20",
+    eyebrow: "I-20 program end",
     prompt: isCurrent(scenario)
       ? "What program end date do you expect to have on your I-20 on September 15, 2026?"
       : "What program end date will be on your I-20?",
@@ -836,53 +844,130 @@ function QuestionCard({ question, onAnswer, onDate, onUnknownDate }: { question:
   );
 }
 
-function TopicPicker({
-  eyebrow,
-  title,
-  description,
-  selected,
-  onToggle,
-  onContinue,
-  continueLabel,
-  emptyLabel
+function ConcernQuestion({
+  value,
+  state,
+  notice,
+  onValue,
+  onSubmit,
+  onUnsure
 }: {
-  eyebrow: string;
-  title: string;
-  description: string;
-  selected: IntakeTopic[];
-  onToggle: (topic: IntakeTopic) => void;
-  onContinue: () => void;
-  continueLabel: string;
-  emptyLabel: string;
+  value: string;
+  state: IntakeState;
+  notice: string;
+  onValue: (value: string) => void;
+  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  onUnsure: () => void;
 }) {
   return (
-    <section className="question-card topic-picker" aria-labelledby={`topic-picker-${eyebrow.replaceAll(" ", "-")}`}>
-      <p className="question-kicker">{eyebrow}</p>
-      <h2 id={`topic-picker-${eyebrow.replaceAll(" ", "-")}`}>{title}</h2>
-      <p className="question-help">{description}</p>
-      <div className="topic-options" role="group" aria-label={title}>
-        {EXPLORATION_OPTIONS.map((option) => {
-          const checked = selected.includes(option.topic) || (option.topic === "opt" && selected.includes("stem_opt"));
-          return (
-            <button
-              type="button"
-              key={option.topic}
-              className={checked ? "selected" : ""}
-              role="checkbox"
-              aria-checked={checked}
-              onClick={() => onToggle(option.topic)}
-            >
-              <span className="topic-check" aria-hidden="true">{checked && <Check />}</span>
-              <span><strong>{option.title}</strong><small>{option.description}</small></span>
-            </button>
-          );
-        })}
-      </div>
-      <button type="button" className="primary-command topic-continue" onClick={onContinue}>
-        {selected.length ? continueLabel : emptyLabel}
-        <ArrowRight aria-hidden="true" />
-      </button>
+    <section className="question-card concern-question" aria-labelledby="guided-concern-title">
+      <p className="question-kicker">What brings you here?</p>
+      <h2 id="guided-concern-title">What are you hoping to understand or decide?</h2>
+      <p className="question-help">Use your own words. One sentence is enough.</p>
+      <form onSubmit={onSubmit}>
+        <textarea
+          value={value}
+          onChange={(event) => onValue(event.currentTarget.value)}
+          placeholder="For example: I want to use OPT, but I may need to travel before it is approved."
+          aria-label="What you want help with"
+          autoFocus
+        />
+        <button type="submit" className="primary-command" disabled={state === "loading" || value.trim().length < 3}>
+          {state === "loading" ? <RefreshCw className="spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
+          {state === "loading" ? "Reading your question" : "Continue"}
+        </button>
+      </form>
+      <button type="button" className="text-action" onClick={onUnsure} disabled={state === "loading"}>I am not sure yet</button>
+      {state === "failed" && <p className="field-error">{notice || "I could not read that yet. Your words are still here; try again."}</p>}
     </section>
+  );
+}
+
+function AreaOfferCard({
+  topic,
+  claims,
+  onExplore,
+  onSkip,
+  onFinish
+}: {
+  topic: CanonicalTopic;
+  claims: ImpactClaim[];
+  onExplore: () => void;
+  onSkip: () => void;
+  onFinish: () => void;
+}) {
+  const meta = topicMeta(topic);
+  const lead = claims[0];
+  return (
+    <section className="question-card area-offer" aria-labelledby={`offer-${topic}`}>
+      <p className="question-kicker">Another area that affects you</p>
+      <h2 id={`offer-${topic}`}>Would you like to look more closely at {meta.title.toLowerCase()}?</h2>
+      <p className="question-help">{lead ? `${lead.title}. ${lead.detail}` : meta.description}</p>
+      <div className="choice-group">
+        <button type="button" onClick={onExplore}><span>Yes, explore this</span><ArrowRight aria-hidden="true" /></button>
+        <button type="button" onClick={onSkip}><span>Not now</span><ArrowRight aria-hidden="true" /></button>
+      </div>
+      <button type="button" className="text-action" onClick={onFinish}>I am ready for my complete advisement</button>
+    </section>
+  );
+}
+
+function TopicInsightCard({
+  topic,
+  map,
+  claims,
+  children,
+  onContinue,
+  onFinish
+}: {
+  topic: CanonicalTopic;
+  map: ImpactMap;
+  claims: ImpactClaim[];
+  children?: React.ReactNode;
+  onContinue: () => void;
+  onFinish: () => void;
+}) {
+  const meta = topicMeta(topic);
+  const usesMainConclusion = topic === "stay_length" || topic === "travel";
+  return (
+    <section className="question-card topic-insight" aria-labelledby={`insight-${topic}`}>
+      <p className="question-kicker">{meta.title}</p>
+      <h2 id={`insight-${topic}`}>{usesMainConclusion ? map.headline : claims[0]?.title ?? meta.title}</h2>
+      {usesMainConclusion && <p className="topic-insight-summary">{map.summary}</p>}
+      <div className="topic-insight-points">
+        {claims.map((claim) => (
+          <article key={claim.id}>
+            <FindingIcon tone={claim.tone} />
+            <div><h3>{claim.title}</h3><p>{claim.detail}</p>{claim.sourceIds[0] && <SourceLink sourceId={claim.sourceIds[0]} />}</div>
+          </article>
+        ))}
+        {!claims.length && topic !== "stay_length" && <p>{meta.description}</p>}
+      </div>
+      {children}
+      <button type="button" className="primary-command" onClick={onContinue}>Continue <ArrowRight aria-hidden="true" /></button>
+      <button type="button" className="text-action" onClick={onFinish}>I am ready for my complete advisement</button>
+    </section>
+  );
+}
+
+function I94Correction({ scenario, onPatch }: { scenario: StudentScenario; onPatch: (patch: Partial<StudentScenario>) => void }) {
+  return (
+    <details className="uncommon-details inline-uncommon">
+      <summary>My I-94 does not say D/S <ChevronDown aria-hidden="true" /></summary>
+      <div className="uncommon-grid">
+        <div className="uncommon-field">
+          <label>
+            <span>Most current F-1 records say D/S. If yours shows a date, enter it here.</span>
+            <select value={scenario.admissionBasis} onChange={(event) => onPatch({ admissionBasis: event.currentTarget.value as AdmissionBasis, i94AdmitUntilDate: event.currentTarget.value === "fixed_period" ? scenario.i94AdmitUntilDate : undefined })}>
+              <option value="duration_of_status">It says D/S</option>
+              <option value="fixed_period">It has a date</option>
+              <option value="unknown">I need to check</option>
+            </select>
+          </label>
+          {scenario.admissionBasis === "fixed_period" && <DateAnswer value={scenario.i94AdmitUntilDate} onComplete={(value) => onPatch({ i94AdmitUntilDate: value })} />}
+        </div>
+      </div>
+    </details>
   );
 }
 
@@ -1087,12 +1172,14 @@ export default function App() {
   const [focusTopics, setFocusTopics] = useState<IntakeTopic[]>([]);
   const [focusCaptured, setFocusCaptured] = useState(false);
   const [exploreTopics, setExploreTopics] = useState<IntakeTopic[]>([]);
-  const [explorationConfirmed, setExplorationConfirmed] = useState(false);
+  const [completedExploreTopics, setCompletedExploreTopics] = useState<IntakeTopic[]>([]);
+  const [explorationFinished, setExplorationFinished] = useState(false);
   const [recording, setRecording] = useState(false);
   const [storyFinished, setStoryFinished] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState("");
   const [report, setReport] = useState<ExplanationResponse | null>(null);
   const [reportState, setReportState] = useState<ReportState>("idle");
+  const [reportError, setReportError] = useState("");
   const [followUpQuestion, setFollowUpQuestion] = useState("");
   const [followUpTurns, setFollowUpTurns] = useState<AdvisorTurn[]>([]);
   const [followUpState, setFollowUpState] = useState<ReportState>("idle");
@@ -1137,6 +1224,7 @@ export default function App() {
     reportAbortRef.current?.abort();
     setReport(null);
     setReportState("idle");
+    setReportError("");
   }, [scenario]);
 
   async function understandNarrative(rawNarrative: string) {
@@ -1255,25 +1343,44 @@ export default function App() {
   const raisedTopics = useMemo(() => intake?.topics ?? [], [intake]);
   const visibleFocusTopics = experience === "story"
     ? raisedTopics
-    : [...new Set([...focusTopics, ...exploreTopics])];
-  const selectedQuestionTopics = explorationConfirmed ? exploreTopics : [];
+    : focusTopics;
   const coreQuestions = useMemo(() => buildCoreQuestions(scenario, answered), [scenario, answered]);
   const coreQuestionIds = useMemo(() => new Set(coreQuestions.map((question) => question.id)), [coreQuestions]);
   const coreQuestion = coreQuestions.find((question) => !answered.has(question.id));
-  const questions = useMemo(
-    () => buildQuestions(scenario, answered, selectedQuestionTopics, result.activityEnd),
-    [scenario, answered, selectedQuestionTopics, result.activityEnd]
-  );
-  const topicQuestion = explorationConfirmed
-    ? questions.find((question) => !coreQuestionIds.has(question.id) && !answered.has(question.id))
-    : undefined;
-  const activeQuestion = coreQuestion ?? topicQuestion;
-  const completedQuestions = questions.filter((question) => answered.has(question.id));
   const contradiction = result.findings.some((item) => item.id === "future-entry-before-effective-date-contradiction");
   const impactMap = useMemo(
     () => buildImpactMap(activeScenario, result, travelResult, visibleFocusTopics),
     [activeScenario, result, travelResult, visibleFocusTopics]
   );
+  const explorationQueue = useMemo(
+    () => buildExplorationQueue(impactMap, focusTopics),
+    [impactMap, focusTopics]
+  );
+  const flowStep = coreQuestion
+    ? null
+    : explorationStep({
+        queue: explorationQueue,
+        focusTopics,
+        acceptedTopics: exploreTopics,
+        completedTopics: completedExploreTopics,
+        finished: explorationFinished,
+        hasQuestion: (topic) => buildQuestions(scenario, answered, [topic], result.activityEnd)
+          .some((question) => !coreQuestionIds.has(question.id) && !answered.has(question.id))
+      });
+  const topicQuestion = flowStep?.kind === "question"
+    ? buildQuestions(scenario, answered, [flowStep.topic], result.activityEnd)
+      .find((question) => !coreQuestionIds.has(question.id) && !answered.has(question.id))
+    : undefined;
+  const activeQuestion = coreQuestion ?? topicQuestion;
+  const historyTopics = useMemo(
+    () => canonicalTopics([...focusTopics, ...exploreTopics, ...completedExploreTopics]),
+    [focusTopics, exploreTopics, completedExploreTopics]
+  );
+  const questions = useMemo(
+    () => buildQuestions(scenario, answered, historyTopics, result.activityEnd),
+    [scenario, answered, historyTopics, result.activityEnd]
+  );
+  const completedQuestions = questions.filter((question) => answered.has(question.id));
   const currentNarrative = scenario.narrative?.trim() ?? "";
   const storyReady = Boolean(intake && intakeState === "ready" && understoodNarrative === currentNarrative);
   const storyHighlights = intake?.highlights?.length
@@ -1296,21 +1403,58 @@ export default function App() {
     window.location.hash = show ? "what-happened" : "";
   }
 
-  function toggleTopic(current: IntakeTopic[], topic: IntakeTopic): IntakeTopic[] {
-    const equivalent = topic === "opt" ? ["opt", "stem_opt"] : [topic];
-    if (current.some((item) => equivalent.includes(item))) {
-      return current.filter((item) => !equivalent.includes(item));
+  async function captureGuidedConcern(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const narrative = scenario.narrative?.trim() ?? "";
+    if (narrative.length < 3) return;
+    setIntakeState("loading");
+    setIntakeNotice("");
+    try {
+      const response = await fetch("/api/intake", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ narrative, currentScenario: { ...scenario, narrative } })
+      });
+      if (!response.ok) throw new Error(`Intake failed: ${response.status}`);
+      const body = await response.json() as IntakeExtractionResponse;
+      setIntake(body);
+      setUnderstoodNarrative(narrative);
+      lastUnderstoodNarrativeRef.current = narrative;
+      setScenario(mergeFacts(scenario, body.facts, true));
+      markFactsAnswered(body.facts);
+      setFocusTopics(body.topics.length ? body.topics : ["stay_length"]);
+      setExploreTopics([]);
+      setCompletedExploreTopics([]);
+      setExplorationFinished(false);
+      setFocusCaptured(true);
+      setIntakeState("ready");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch {
+      setIntakeState("failed");
+      setIntakeNotice("I could not read that yet. Your words are still here; try again.");
     }
-    return [...current, topic];
   }
 
-  function completeFocus() {
+  function continueWithoutConcern() {
+    setFocusTopics(["stay_length"]);
+    setExploreTopics([]);
+    setCompletedExploreTopics([]);
+    setExplorationFinished(false);
     setFocusCaptured(true);
-    setExploreTopics(focusTopics);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function completeExploration() {
-    setExplorationConfirmed(true);
+  function acceptExplorationTopic(topic: CanonicalTopic) {
+    setExploreTopics((current) => canonicalTopics([...current, topic]));
+  }
+
+  function completeExplorationTopic(topic: CanonicalTopic) {
+    setCompletedExploreTopics((current) => canonicalTopics([...current, topic]));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function finishExploration() {
+    setExplorationFinished(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -1468,6 +1612,15 @@ export default function App() {
       next.delete(id);
       return next;
     });
+    const topic = topicForQuestion(id);
+    if (topic) {
+      const affectedTopics = id === "firstAcademicYear"
+        ? ["school_transfer", "program_change"] as CanonicalTopic[]
+        : [topic];
+      setCompletedExploreTopics((current) => canonicalTopics(current).filter((item) => !affectedTopics.includes(item)));
+      setExploreTopics((current) => canonicalTopics([...current, ...affectedTopics]));
+      setExplorationFinished(false);
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -1523,10 +1676,11 @@ export default function App() {
     }
     setScenario(draftScenario);
     markFactsAnswered(intake.facts);
-    setFocusTopics(intake.topics);
-    setExploreTopics(intake.topics);
+    setFocusTopics(intake.topics.length ? intake.topics : ["stay_length"]);
+    setExploreTopics([]);
+    setCompletedExploreTopics([]);
+    setExplorationFinished(false);
     setFocusCaptured(true);
-    setExplorationConfirmed(false);
     recognitionRef.current?.stop();
     recordingRef.current = false;
     setRecording(false);
@@ -1677,12 +1831,17 @@ export default function App() {
     const controller = new AbortController();
     reportAbortRef.current = controller;
     setReportState("loading");
+    setReportError("");
     try {
       const requestBody = JSON.stringify({
         scenario: reportScenario,
         focusTopics: reportFocusTopics,
         exploredTopics: reportExploreTopics,
-        conversation
+        conversation,
+        confirmedFacts: completedQuestions.map((question) => ({
+          question: question.prompt,
+          answer: question.answerLabel ?? "Confirmed"
+        }))
       });
 
       for (let generation = 0; generation < 2; generation += 1) {
@@ -1693,8 +1852,10 @@ export default function App() {
           signal: controller.signal
         });
         if (!response.ok && response.status !== 202) {
+          const errorBody = await response.json().catch(() => ({})) as { error?: string; detail?: string };
+          const message = errorBody.detail || errorBody.error || `Report failed: ${response.status}`;
           if (generation === 0) continue;
-          throw new Error(`Report failed: ${response.status}`);
+          throw new Error(message);
         }
         let body = await response.json() as ExplanationResponse | { responseId: string; status: string };
         let shouldRegenerate = false;
@@ -1711,9 +1872,11 @@ export default function App() {
             signal: controller.signal
           });
           if (!poll.ok && poll.status !== 202) {
+            const errorBody = await poll.json().catch(() => ({})) as { error?: string; detail?: string };
+            const message = errorBody.detail || errorBody.error || `Report failed: ${poll.status}`;
             shouldRegenerate = generation === 0;
             if (shouldRegenerate) break;
-            throw new Error(`Report failed: ${poll.status}`);
+            throw new Error(message);
           }
           body = await poll.json() as ExplanationResponse | { responseId: string; status: string };
         }
@@ -1722,11 +1885,13 @@ export default function App() {
         if ("responseId" in body) throw new Error("Report timed out");
         setReport(body);
         setReportState("ready");
+        setReportError("");
         return;
       }
       throw new Error("Report did not pass quality checks");
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
+      setReportError(error instanceof Error ? error.message : "The advisement request did not complete.");
       setReportState("failed");
     }
   }
@@ -1791,11 +1956,13 @@ export default function App() {
     setFocusTopics([]);
     setFocusCaptured(false);
     setExploreTopics([]);
-    setExplorationConfirmed(false);
+    setCompletedExploreTopics([]);
+    setExplorationFinished(false);
     setRecording(false);
     setStoryFinished(false);
     setReport(null);
     setReportState("idle");
+    setReportError("");
     setFollowUpQuestion("");
     setFollowUpTurns([]);
     setFollowUpState("idle");
@@ -1916,15 +2083,13 @@ export default function App() {
           )}
 
           {!focusCaptured ? (
-            <TopicPicker
-              eyebrow="What brings you here?"
-              title="What do you want help with first?"
-              description="Choose every subject on your mind. You will still see the other rule changes that apply to you."
-              selected={focusTopics}
-              onToggle={(topic) => setFocusTopics((current) => toggleTopic(current, topic))}
-              onContinue={completeFocus}
-              continueLabel="Continue with these concerns"
-              emptyLabel="Show me the complete overview"
+            <ConcernQuestion
+              value={scenario.narrative ?? ""}
+              state={intakeState}
+              notice={intakeNotice}
+              onValue={(value) => patchScenario({ narrative: value })}
+              onSubmit={captureGuidedConcern}
+              onUnsure={continueWithoutConcern}
             />
           ) : activeQuestion ? (
             <QuestionCard
@@ -1934,47 +2099,36 @@ export default function App() {
               onDate={(value) => answerDate(activeQuestion, value)}
               onUnknownDate={() => answerDate(activeQuestion, undefined)}
             />
-          ) : !explorationConfirmed ? (
-            <TopicPicker
-              eyebrow="Choose what to explore"
-              title="Which areas should we examine more closely?"
-              description="The overview already includes every change that applies. Choose only the areas where you want a more exact answer."
-              selected={exploreTopics}
-              onToggle={(topic) => setExploreTopics((current) => toggleTopic(current, topic))}
-              onContinue={completeExploration}
-              continueLabel="Ask me the useful follow-ups"
-              emptyLabel="Continue to my advisement"
+          ) : flowStep?.kind === "offer" ? (
+            <AreaOfferCard
+              topic={flowStep.topic}
+              claims={claimsForTopic(impactMap, flowStep.topic)}
+              onExplore={() => acceptExplorationTopic(flowStep.topic)}
+              onSkip={() => completeExplorationTopic(flowStep.topic)}
+              onFinish={finishExploration}
             />
-          ) : (
+          ) : flowStep?.kind === "insight" ? (
+            <TopicInsightCard
+              topic={flowStep.topic}
+              map={impactMap}
+              claims={claimsForTopic(impactMap, flowStep.topic)}
+              onContinue={() => completeExplorationTopic(flowStep.topic)}
+              onFinish={finishExploration}
+            >
+              {flowStep.topic === "stay_length" && isCurrent(scenario) && <I94Correction scenario={scenario} onPatch={patchScenario} />}
+            </TopicInsightCard>
+          ) : flowStep?.kind === "complete" ? (
             <section className="question-card complete-card">
-              <p className="question-kicker">Your complete picture</p>
-              <h2>Bring everything together</h2>
+              <p className="question-kicker">Your complete advisement</p>
+              <h2>See how all of these rules work together in your situation</h2>
+              <p className="question-help">Your overview will address your main concern first, cover every applicable change, and connect the choices that affect one another.</p>
               <button type="button" className="primary-command" onClick={() => void createReport()} disabled={reportState === "loading" || contradiction}>
                 {reportState === "loading" ? <RefreshCw className="spin" aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
-                {reportState === "loading" ? "Writing your report" : "Create my advisement"}
+                {reportState === "loading" ? "Writing your advisement" : "Create my complete advisement"}
               </button>
               {contradiction && <p className="field-error">Resolve the highlighted date conflict before creating the report.</p>}
             </section>
-          )}
-
-          {isCurrent(scenario) && (
-            <details className="uncommon-details">
-              <summary>My I-94 does not say D/S <ChevronDown aria-hidden="true" /></summary>
-              <div className="uncommon-grid">
-                <div className="uncommon-field">
-                  <label>
-                    <span>Most current F-1 records say D/S. If yours shows a date, enter it here.</span>
-                    <select value={scenario.admissionBasis} onChange={(event) => patchScenario({ admissionBasis: event.currentTarget.value as AdmissionBasis, i94AdmitUntilDate: event.currentTarget.value === "fixed_period" ? scenario.i94AdmitUntilDate : undefined })}>
-                      <option value="duration_of_status">No, it says D/S</option>
-                      <option value="fixed_period">Yes, it has a date</option>
-                      <option value="unknown">I need to check</option>
-                    </select>
-                  </label>
-                  {scenario.admissionBasis === "fixed_period" && <DateAnswer value={scenario.i94AdmitUntilDate} onComplete={(value) => patchScenario({ i94AdmitUntilDate: value })} />}
-                </div>
-              </div>
-            </details>
-          )}
+          ) : null}
         </section>
 
         <aside className="results-column">
@@ -2013,7 +2167,7 @@ export default function App() {
       {(report || reportState === "loading" || reportState === "failed") && (
         <section className="report-band" aria-live="polite">
           {reportState === "loading" && <div className="report-loading"><RefreshCw className="spin" aria-hidden="true" /><p>Writing your advisement.</p></div>}
-          {reportState === "failed" && <div className="report-error"><AlertTriangle aria-hidden="true" /><div><h2>The advisement did not finish.</h2><p>Your dated guidance remains available. Try again.</p><button type="button" onClick={() => void createReport()}><RefreshCw aria-hidden="true" /> Try again</button></div></div>}
+          {reportState === "failed" && <div className="report-error"><AlertTriangle aria-hidden="true" /><div><h2>The advisement did not finish.</h2><p>Your work is still here. Try the advisor again without re-entering anything.</p>{reportError && <details><summary>Why this attempt failed</summary><p>{reportError}</p></details>}<button type="button" onClick={() => void createReport()}><RefreshCw aria-hidden="true" /> Try the advisor again</button></div></div>}
           {report && (
             <>
               <article className="advisor-report"><p className="section-eyebrow">Your advisement</p><h2>{report.title}</h2>{report.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}<footer><span>Rule status checked July 19, 2026</span></footer></article>

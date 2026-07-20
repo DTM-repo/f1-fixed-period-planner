@@ -12,7 +12,7 @@ export const DEFAULT_SCENARIO: StudentScenario = {
   travelPosture: "unknown",
   reentryBasis: "unknown",
   pendingExtensionOnDeparture: "unknown",
-  transferOrProgramChange: "no",
+  transferOrProgramChange: "unknown",
   schoolTransferPlan: "unknown",
   academicProgramChangePlan: "unknown",
   educationLevel: "unknown",

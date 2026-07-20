@@ -482,19 +482,38 @@ svg { flex: 0 0 auto; }
 .choice-group button svg { width: 18px; height: 18px; color: var(--cyan); }
 .answer-prompt { margin: 20px 0 0; color: #7e857f; font-size: 0.78rem; }
 
-.topic-picker { box-shadow: 0 16px 42px rgba(25, 38, 29, 0.06); }
-.topic-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 26px; }
-.topic-options > button { min-height: 82px; display: grid; grid-template-columns: 22px 1fr; align-items: start; gap: 10px; padding: 13px; border: 1px solid #cbd1cb; border-radius: 6px; color: var(--ink); background: #fff; text-align: left; }
-.topic-options > button:hover { border-color: var(--cyan); background: #f5fbfb; }
-.topic-options > button.selected { border-color: var(--cyan); background: var(--cyan-soft); }
-.topic-check { width: 20px; height: 20px; display: grid; place-items: center; border: 1px solid #aeb7b0; border-radius: 4px; background: #fff; }
-.topic-options > button.selected .topic-check { color: #fff; border-color: var(--cyan); background: var(--cyan); }
-.topic-check svg { width: 14px; height: 14px; }
-.topic-options > button > span:last-child { min-width: 0; display: grid; gap: 4px; }
-.topic-options strong { font-size: 0.88rem; line-height: 1.3; }
-.topic-options small { color: var(--muted); font-size: 0.72rem; line-height: 1.4; }
-.topic-continue { width: 100%; min-height: 50px; display: flex; align-items: center; justify-content: center; gap: 9px; margin-top: 18px; }
-.topic-continue svg { width: 18px; height: 18px; }
+.concern-question form { display: grid; gap: 12px; margin-top: 26px; }
+.concern-question textarea {
+  width: 100%;
+  min-height: 132px;
+  resize: vertical;
+  padding: 15px 16px;
+  border: 1px solid #cbd1cb;
+  border-radius: 6px;
+  color: var(--ink);
+  background: #fff;
+  line-height: 1.55;
+}
+.concern-question textarea::placeholder { color: #8c948e; }
+.concern-question .primary-command,
+.topic-insight > .primary-command { width: 100%; }
+.area-offer .choice-group { margin-top: 24px; }
+.area-offer > .text-action,
+.topic-insight > .text-action { display: block; margin: 16px auto 0; }
+.topic-insight-summary { margin: 14px 0 0; color: #3d453f; font-size: 1rem; line-height: 1.6; }
+.topic-insight-points { display: grid; margin: 26px 0 22px; border-top: 1px solid var(--line); }
+.topic-insight-points > article {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 12px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--line);
+}
+.topic-insight-points > article > svg { width: 20px; height: 20px; margin-top: 2px; color: var(--cyan); }
+.topic-insight-points h3 { margin: 0; font-size: 0.98rem; line-height: 1.4; }
+.topic-insight-points p { margin: 6px 0 0; color: var(--muted); font-size: 0.87rem; line-height: 1.55; }
+.topic-insight-points .source-link { margin-top: 9px; }
+.inline-uncommon { margin: 0 0 24px; }
 
 .date-answer { margin-top: 28px; }
 .date-fields { display: grid; grid-template-columns: minmax(150px, 1.55fr) minmax(74px, 0.7fr) minmax(96px, 0.85fr); gap: 9px; }
@@ -623,6 +642,9 @@ details[open] > summary svg { transform: rotate(180deg); }
 .report-error > svg { color: var(--coral); }
 .report-error h2 { margin: 0; }
 .report-error p { color: var(--muted); }
+.report-error details { margin: 14px 0; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.report-error summary { cursor: pointer; color: var(--ink); font-size: 0.82rem; font-weight: 720; }
+.report-error details p { margin-bottom: 0; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.74rem; }
 .report-error button { color: #fff; background: var(--coral); border-color: var(--coral); }
 
 .advisor-follow-up { width: min(820px, 100%); margin: 64px auto 0; padding-top: 46px; border-top: 2px solid var(--ink); }
@@ -703,8 +725,7 @@ details[open] > summary svg { transform: rotate(180deg); }
   .planner-layout { padding: 28px 16px 58px; }
   .question-card { padding: 25px 20px; }
   .question-card h2 { font-size: 1.75rem; }
-  .topic-options { grid-template-columns: 1fr; }
-  .topic-options > button { min-height: 70px; }
+  .concern-question textarea { min-height: 118px; }
   .date-fields { grid-template-columns: 1fr 0.7fr; }
   .date-fields label:first-child { grid-column: 1 / -1; }
   .impact-heading h2 { font-size: 2rem; }

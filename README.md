@@ -11,11 +11,24 @@ The legal/date engine is deterministic. The same confirmed facts always produce 
 - GPT-5.6 Sol extracts candidate facts from a student's narrative at medium reasoning effort.
 - The student can review and change those facts through the same guided flow.
 - The deterministic TypeScript engine calculates the result and cites the rule.
-- The server recalculates the result before GPT-5.6 Sol adds a concise advisor note at medium reasoning effort.
+- The server recalculates the result before GPT-5.6 Sol turns the verified map into a complete advisor-style overview at medium reasoning effort.
 - The report model may explain verified output; it may not alter a date, classification, or legal consequence.
 - Rule-scoped follow-ups use GPT-5.6 Sol at medium reasoning effort and can add confirmed facts back to the deterministic impact map.
 
 The app gives every supported partial result it can, identifies contradictions before continuing, and asks for the exact missing fact that would change the answer. It does not invent dates or convert ambiguous numeric dates such as `6/2/2029`.
+
+## Advising Flow
+
+The student experience is deliberately one question at a time:
+
+1. Confirm whether the student will be in the United States in valid F-1 status on September 15, 2026.
+2. Ask what brought the student here, in the student's own words. Voice and text intake use the same fact-and-concern extraction.
+3. Address the student's concern first, while the deterministic impact map shows every other rule change that applies to the student's categories.
+4. Offer one additional area at a time for deeper exploration. The app leads with a concrete consequence; it never asks the student to choose from a wall of legal topics.
+5. Ask only the controlling questions for an accepted area, one at a time, and preserve still-compatible answers when an earlier answer changes.
+6. Create a complete AI advisor overview from the verified map, then accept open-ended follow-up questions that can add facts and refresh the map.
+
+Every explored area ends with substantive guidance. A topic with no missing field cannot silently skip the student to the report.
 
 ## Local Setup
 

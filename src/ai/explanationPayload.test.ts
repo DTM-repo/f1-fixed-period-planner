@@ -31,10 +31,10 @@ describe("advisor report quality gate", () => {
     expect(hasInvalidAdvisorProse(Array.from({ length: 251 }, () => "word").join(" "), 250)).toBe(true);
   });
 
-  it("rejects a paragraph that ends mid-sentence", () => {
+  it("does not reject a complete thought solely for missing final punctuation", () => {
     expect(hasInvalidReportContent({
       title: "Your travel plan",
       paragraphs: ["No delay had been announced as of July 19"]
-    })).toBe(true);
+    })).toBe(false);
   });
 });

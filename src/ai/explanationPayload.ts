@@ -7,6 +7,7 @@ export interface ExplanationRequest {
   focusTopics?: IntakeTopic[];
   exploredTopics?: IntakeTopic[];
   conversation?: AdvisorTurn[];
+  confirmedFacts?: Array<{ question: string; answer: string }>;
 }
 
 export interface ExplanationResponse {
@@ -30,8 +31,7 @@ export function hasInvalidReportContent(report: Pick<ExplanationResponse, "title
   const text = [report.title, ...report.paragraphs].join("\n");
   const normalizedParagraphs = report.paragraphs.map((paragraph) => paragraph.trim().toLowerCase());
   return (
-    hasInvalidAdvisorProse(text, 300) ||
-    report.paragraphs.some((paragraph) => !/[.!?)[\]"']$/.test(paragraph.trim())) ||
+    hasInvalidAdvisorProse(text, 800) ||
     new Set(normalizedParagraphs).size !== normalizedParagraphs.length
   );
 }

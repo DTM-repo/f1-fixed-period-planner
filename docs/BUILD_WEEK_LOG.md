@@ -738,3 +738,39 @@ Each entry should capture:
 - Rephrased the OPT travel question as "Will you submit your Form I-765 before you leave the United States?" Online submission is the controlling action students understand.
 - The OPT predicate now checks the actual filing-window opening date, and exact regression cases cover both eligible and ineligible travel timing.
 - Live verification produced a two-paragraph, 76-word advisor note and a direct 50-word travel answer in under nine seconds. Both used the verified dates without repeating the impact-card inventory.
+
+### Six-Step, One-Question Advising Remodel
+
+**Research and diagnosis**
+
+- The previous build had strong rule logic but did not implement the agreed experience. It reused a ten-checkbox topic picker in two places, so the student had to predict which legal categories mattered before receiving advice.
+- Pressing “Ask me useful follow-ups” could jump directly to the report when a selected category had no unanswered field. The interface therefore showed “Create my advisement” without ever giving the promised deeper guidance.
+- The 80-test suite verified engines and components but had no explicit state-machine test for the six-step journey. Passing tests gave false confidence about the product flow.
+- Report failures were reduced to “The advisement did not finish,” hiding whether the live model, polling route, or prose-quality check had failed.
+- Browser review also exposed a fact-boundary problem: an internal default of “no transfer plan” could be written as though the student had actually said it.
+
+**Decisions**
+
+- Encode exploration as an explicit state machine: `offer`, `question`, `insight`, or `complete`. Every active category must occupy exactly one of those states.
+- Ask one open concern question after the September 15 gate. When the student is unsure, begin with length of stay and lead them through the applicable map instead of demanding subject-matter knowledge.
+- Automatically explore student-raised concerns first. Then offer every other applicable category individually with a short statement of why it matters.
+- After the controlling facts for a category are known, always show a substantive result before continuing. A category with no missing question receives an insight, not a silent transition.
+- Keep the live impact map visible throughout. The concern sets order and emphasis; it does not suppress other applicable rules.
+- Give Sol the server-verified map as prepared evidence and ask for a complete four-to-eight-paragraph advisor overview: concern first, every applicable category, important interactions, unresolved facts, and practical next steps. The model synthesizes rather than recalculates.
+- Separate confirmed answers from internal scenario defaults in the AI payload. Unknown or untouched defaults may not become student facts.
+- Preserve the actual report error in the interface and retain all deterministic guidance while a report is retried.
+
+**Codex assistance**
+
+- Traced the old UI state transitions from the checkbox picker through question generation and report generation, then replaced them with a small tested flow controller.
+- Built concern-first text intake, automatic focus ordering, one-question category exploration, substantive category insights, and system-led offers without removing the deterministic engine, timelines, voice intake, sharing, or follow-up advisor.
+- Restored the full advisor assignment after an over-literal interpretation of the Applesauce Rule had compressed it into two paragraphs. Sol now assembles the complete answer from facts already established instead of rediscovering them.
+- Used browser scenarios to find issues unit tests missed: the silent category skip, duplicate I-20 labels, and the unconfirmed transfer default.
+
+**Verification**
+
+- Vitest: 87/87 passed across six test files, including new acceptance tests for concern priority, one-category offers, one-question steps, mandatory insights, and completion.
+- TypeScript and the production Vite build passed.
+- Browser journeys passed for a current student with travel and OPT concerns, a current student who did not know what to ask, and a future graduate student with unknown dates.
+- Two live GPT-5.6 Sol reports completed with full multi-paragraph advisement, explicit uncertainty when dates were missing, no invented transfer answer, and no internal “duration-of-status status” wording.
+- Mobile checks at 390 by 844 found no horizontal overflow on the welcome or concern-intake screens; browser console warnings and errors were empty.
