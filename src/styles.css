@@ -482,37 +482,7 @@ svg { flex: 0 0 auto; }
 .choice-group button svg { width: 18px; height: 18px; color: var(--cyan); }
 .answer-prompt { margin: 20px 0 0; color: #7e857f; font-size: 0.78rem; }
 
-.concern-question form { display: grid; gap: 12px; margin-top: 26px; }
-.concern-question textarea {
-  width: 100%;
-  min-height: 132px;
-  resize: vertical;
-  padding: 15px 16px;
-  border: 1px solid #cbd1cb;
-  border-radius: 6px;
-  color: var(--ink);
-  background: #fff;
-  line-height: 1.55;
-}
-.concern-question textarea::placeholder { color: #8c948e; }
-.concern-question .primary-command,
-.topic-insight > .primary-command { width: 100%; }
-.area-offer .choice-group { margin-top: 24px; }
-.area-offer > .text-action,
-.topic-insight > .text-action { display: block; margin: 16px auto 0; }
-.topic-insight-summary { margin: 14px 0 0; color: #3d453f; font-size: 1rem; line-height: 1.6; }
-.topic-insight-points { display: grid; margin: 26px 0 22px; border-top: 1px solid var(--line); }
-.topic-insight-points > article {
-  display: grid;
-  grid-template-columns: 24px 1fr;
-  gap: 12px;
-  padding: 18px 0;
-  border-bottom: 1px solid var(--line);
-}
-.topic-insight-points > article > svg { width: 20px; height: 20px; margin-top: 2px; color: var(--cyan); }
-.topic-insight-points h3 { margin: 0; font-size: 0.98rem; line-height: 1.4; }
-.topic-insight-points p { margin: 6px 0 0; color: var(--muted); font-size: 0.87rem; line-height: 1.55; }
-.topic-insight-points .source-link { margin-top: 9px; }
+.exploration-home { box-shadow: none; }
 .inline-uncommon { margin: 0 0 24px; }
 
 .date-answer { margin-top: 28px; }
@@ -535,7 +505,6 @@ svg { flex: 0 0 auto; }
 .field-error { margin: 10px 0 0; color: var(--coral); font-size: 0.82rem; line-height: 1.45; }
 .text-action { margin-top: 15px; padding: 5px 0; border: 0; border-bottom: 1px solid #a9afaa; color: var(--muted); background: transparent; }
 .text-action:hover { color: var(--ink); border-color: var(--ink); }
-.complete-card .primary-command { margin-top: 28px; }
 
 .uncommon-details { margin-top: 18px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 .uncommon-details summary,
@@ -593,6 +562,72 @@ details[open] > summary svg { transform: rotate(180deg); }
 .impact-item.danger > svg { color: var(--coral); }
 .impact-item h3 { margin: 0; font-size: 1rem; line-height: 1.35; }
 .impact-item p { margin: 7px 0 0; color: #555d56; font-size: 0.9rem; line-height: 1.55; }
+.impact-index { margin-top: 30px; padding-top: 26px; border-top: 2px solid var(--ink); }
+.impact-index > header { margin-bottom: 10px; }
+.impact-index > header p { margin: 0 0 5px; color: var(--cyan); font-size: 0.7rem; font-weight: 850; text-transform: uppercase; }
+.impact-index > header h3 { margin: 0; font-size: 1rem; line-height: 1.35; }
+.impact-index-list { display: grid; border-top: 1px solid var(--line); }
+.impact-index-list > button {
+  min-height: 62px;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  background: transparent;
+  text-align: left;
+}
+.impact-index-list > button:hover,
+.impact-index-list > button.active { padding-inline: 10px; background: var(--cyan-soft); }
+.impact-index-icon { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid #bdc8c0; border-radius: 50%; color: var(--cyan); }
+.impact-index-icon svg { width: 14px; height: 14px; }
+.impact-index-list > button.prominent .impact-index-icon { border-color: var(--green); color: #fff; background: var(--green); }
+.impact-index-copy { min-width: 0; display: grid; gap: 2px; }
+.impact-index-copy strong { font-size: 0.82rem; line-height: 1.3; }
+.impact-index-copy small { color: #535c55; font-size: 0.78rem; line-height: 1.35; overflow-wrap: anywhere; }
+.impact-index-state { color: #6f7771; font-size: 0.66rem; font-weight: 760; text-transform: uppercase; }
+.impact-index-list > button.active .impact-index-state { color: var(--cyan); }
+.advisement-action {
+  position: sticky;
+  top: 88px;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 18px;
+  padding: 15px;
+  border: 1px solid #27312a;
+  border-radius: 8px;
+  color: #f7faf7;
+  background: #111512;
+  box-shadow: 0 16px 38px rgba(17, 21, 18, 0.24);
+}
+.advisement-action > div { display: flex; align-items: center; gap: 10px; }
+.advisement-action > div > svg { width: 19px; height: 19px; flex: 0 0 auto; color: #7fd7bc; }
+.advisement-action > div > span { min-width: 0; display: grid; gap: 2px; }
+.advisement-action strong { font-size: 0.78rem; }
+.advisement-action small { color: #aeb8b0; font-size: 0.7rem; line-height: 1.35; }
+.advisement-action > button {
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid #8adfc4;
+  border-radius: 5px;
+  color: #0d211a;
+  background: #8adfc4;
+  font-weight: 820;
+}
+.advisement-action > button:hover { background: #a4ead5; }
+.advisement-action > button:disabled { cursor: not-allowed; opacity: 0.58; }
+.advisement-action > button svg { width: 17px; height: 17px; }
+.advisement-action .field-error { grid-column: 1 / -1; margin: 0; color: #ffc8bd; }
 .source-link { display: inline-flex; align-items: center; gap: 5px; margin-top: 12px; color: #28606a; font-size: 0.76rem; font-weight: 720; text-decoration: none; }
 .source-link:hover { text-decoration: underline; }
 .source-link svg { width: 13px; height: 13px; }
@@ -725,10 +760,12 @@ details[open] > summary svg { transform: rotate(180deg); }
   .planner-layout { padding: 28px 16px 58px; }
   .question-card { padding: 25px 20px; }
   .question-card h2 { font-size: 1.75rem; }
-  .concern-question textarea { min-height: 118px; }
   .date-fields { grid-template-columns: 1fr 0.7fr; }
   .date-fields label:first-child { grid-column: 1 / -1; }
   .impact-heading h2 { font-size: 2rem; }
+  .impact-index-list > button { grid-template-columns: 26px minmax(0, 1fr); }
+  .impact-index-state { grid-column: 2; }
+  .advisement-action { top: 70px; grid-template-columns: 1fr; }
   .advisor-follow-up > h2 { font-size: 1.85rem; }
   .timeline-band { padding: 56px 18px 68px; }
   .timeline-track { display: grid; grid-template-columns: 1fr; gap: 0; padding-left: 26px; }
@@ -747,6 +784,7 @@ details[open] > summary svg { transform: rotate(180deg); }
   body { background: #fff; }
   .app-header,
   .interview-column,
+  .advisement-action,
   .result-actions,
   .share-notice,
   .source-band summary,

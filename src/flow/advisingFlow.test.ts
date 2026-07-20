@@ -1,88 +1,73 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_SCENARIO } from "../content/demoScenarios";
+import type { StudentScenario } from "../engine/types";
 import type { ImpactMap } from "../impact/impactMap";
-import { buildExplorationQueue, explorationStep } from "./advisingFlow";
+import {
+  allImpactTopics,
+  canonicalTopics,
+  claimsForTopic,
+  topicImpactLine
+} from "./advisingFlow";
 
 const map: ImpactMap = {
   headline: "You are under the old rules",
   summary: "Your current stay remains under D/S.",
   sourceIds: [],
-  focusClaims: [{ id: "opt", category: "opt", tone: "info", title: "OPT matters", detail: "Plan the filing window.", sourceIds: [] }],
+  focusClaims: [{ id: "opt", category: "opt", tone: "info", title: "Some current students can skip Form I-539 for OPT", detail: "Plan the filing window.", sourceIds: [] }],
   otherClaims: [
-    { id: "travel", category: "travel", tone: "info", title: "Travel matters", detail: "A return changes the rules.", sourceIds: [] },
-    { id: "departure", category: "departure", tone: "good", title: "You keep 60 days", detail: "The old period remains.", sourceIds: [] },
-    { id: "extension", category: "extension", tone: "info", title: "More time", detail: "Two routes are available.", sourceIds: [] }
+    { id: "travel", category: "travel", tone: "info", title: "A return after September 15 starts the new rules", detail: "A return changes the rules.", sourceIds: [] },
+    { id: "departure", category: "departure", tone: "good", title: "You keep 60 days after study or approved training", detail: "The old period remains.", sourceIds: [] },
+    { id: "extension", category: "extension", tone: "info", title: "You do not need Form I-539 to finish this program", detail: "No filing is needed for this program.", sourceIds: [] }
   ],
   unresolved: []
 };
 
-describe("one-at-a-time advising flow", () => {
-  it("puts the student's concern first and then adds applicable areas", () => {
-    expect(buildExplorationQueue(map, ["opt"])).toEqual(["opt", "stay_length", "travel", "extension"]);
+const currentGraduate: StudentScenario = {
+  ...DEFAULT_SCENARIO,
+  startingPosition: "current_ds_inside_us",
+  admissionBasis: "duration_of_status",
+  inUsOnEffectiveDate: "yes",
+  maintainingStatusOnEffectiveDate: "yes",
+  educationLevel: "graduate"
+};
+
+describe("student-controlled impact map", () => {
+  it("defines every impact area in one stable order", () => {
+    expect(allImpactTopics()).toEqual([
+      "stay_length",
+      "travel",
+      "extension",
+      "opt",
+      "school_transfer",
+      "program_change",
+      "later_program",
+      "cpt",
+      "dependents",
+      "early_end"
+    ]);
   });
 
-  it("offers an unselected area instead of silently skipping it", () => {
-    expect(explorationStep({
-      queue: ["travel"],
-      focusTopics: [],
-      acceptedTopics: [],
-      completedTopics: [],
-      hasQuestion: () => false,
-      finished: false
-    })).toEqual({ kind: "offer", topic: "travel" });
+  it("keeps priorities in the order the student selected them", () => {
+    expect(canonicalTopics(["opt", "travel", "stem_opt", "extension", "travel"])).toEqual([
+      "opt",
+      "travel",
+      "extension"
+    ]);
   });
 
-  it("asks one controlling question for an accepted area", () => {
-    expect(explorationStep({
-      queue: ["travel", "extension"],
-      focusTopics: ["travel"],
-      acceptedTopics: [],
-      completedTopics: [],
-      hasQuestion: (topic) => topic === "travel",
-      finished: false
-    })).toEqual({ kind: "question", topic: "travel" });
+  it("uses the verified claim title for a compact impact line", () => {
+    expect(topicImpactLine(map, "travel", currentGraduate)).toBe("A return after September 15 starts the new rules");
+    expect(topicImpactLine(map, "extension", currentGraduate)).toBe("You do not need Form I-539 to finish this program");
   });
 
-  it("shows substantive guidance when an area needs no more facts", () => {
-    expect(explorationStep({
-      queue: ["extension"],
-      focusTopics: [],
-      acceptedTopics: ["extension"],
-      completedTopics: [],
-      hasQuestion: () => false,
-      finished: false
-    })).toEqual({ kind: "insight", topic: "extension" });
+  it("uses the main conclusion for length of stay", () => {
+    expect(topicImpactLine(map, "stay_length", currentGraduate)).toBe("You are under the old rules");
+    expect(claimsForTopic(map, "stay_length").map((claim) => claim.id)).toContain("departure");
   });
 
-  it("moves to the next area only after the current one is complete", () => {
-    expect(explorationStep({
-      queue: ["travel", "extension"],
-      focusTopics: ["travel"],
-      acceptedTopics: [],
-      completedTopics: ["travel"],
-      hasQuestion: () => false,
-      finished: false
-    })).toEqual({ kind: "offer", topic: "extension" });
-  });
-
-  it("finishes after every applicable area has been addressed", () => {
-    expect(explorationStep({
-      queue: ["travel", "extension"],
-      focusTopics: ["travel"],
-      acceptedTopics: ["extension"],
-      completedTopics: ["travel", "extension"],
-      hasQuestion: () => false,
-      finished: false
-    })).toEqual({ kind: "complete" });
-  });
-
-  it("lets the student request the complete advisement at any step", () => {
-    expect(explorationStep({
-      queue: ["travel"],
-      focusTopics: [],
-      acceptedTopics: [],
-      completedTopics: [],
-      hasQuestion: () => true,
-      finished: true
-    })).toEqual({ kind: "complete" });
+  it("gives literal category-specific fallbacks when no detailed claim exists", () => {
+    expect(topicImpactLine(map, "school_transfer", currentGraduate)).toBe("A graduate school transfer requires an SEVP exception");
+    expect(topicImpactLine(map, "program_change", currentGraduate)).toBe("Graduate students cannot change their major or degree level");
+    expect(topicImpactLine(map, "dependents", currentGraduate)).toBe("F-2 family members cannot stay beyond your F-1 period");
   });
 });

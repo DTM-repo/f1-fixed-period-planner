@@ -57,19 +57,19 @@ export const EXPLORATION_OPTIONS: Array<{
   { topic: "early_end", title: "Finish early or withdraw", description: "Shorter departure periods and status concerns." }
 ];
 
-const TOPIC_CATEGORY: Record<IntakeTopic, ImpactCategory> = {
-  stay_length: "stay",
-  travel: "travel",
-  opt: "opt",
-  stem_opt: "opt",
-  cpt: "cpt",
-  extension: "extension",
-  school_transfer: "school_transfer",
-  program_change: "program_change",
-  later_program: "later_program",
-  dependents: "dependents",
-  early_end: "special",
-  change_of_status: "stay"
+const TOPIC_CATEGORIES: Record<IntakeTopic, ImpactCategory[]> = {
+  stay_length: ["stay", "departure", "program_limits"],
+  travel: ["travel"],
+  opt: ["opt"],
+  stem_opt: ["opt"],
+  cpt: ["cpt"],
+  extension: ["extension"],
+  school_transfer: ["school_transfer"],
+  program_change: ["program_change"],
+  later_program: ["later_program"],
+  dependents: ["dependents"],
+  early_end: ["special"],
+  change_of_status: ["stay", "departure", "program_limits"]
 };
 
 const SPECIAL_FINDING_IDS = new Set([
@@ -634,7 +634,7 @@ export function buildImpactMap(
     });
   }
 
-  const focusCategories = new Set(focusTopics.map((topic) => TOPIC_CATEGORY[topic]));
+  const focusCategories = new Set(focusTopics.flatMap((topic) => TOPIC_CATEGORIES[topic]));
   const sorted = [...claims].sort((left, right) => {
     const focusDifference = Number(focusCategories.has(right.category)) - Number(focusCategories.has(left.category));
     return focusDifference || categoryOrder(left.category) - categoryOrder(right.category);

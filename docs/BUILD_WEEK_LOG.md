@@ -821,3 +821,37 @@ Each entry should capture:
 - Live Sol intake preserved “May 2026” as a partial date without inventing a day.
 - Exact browser replay showed the conflict on the story screen, then opened the single correction question. Changing the I-20 end to May 20, 2027 cleared the warning and restored the February 19 OPT-window date and March 18 Form I-539 exception deadline on the timeline.
 - Desktop and 390-pixel checks passed with no horizontal overflow or browser-console errors.
+
+### Student-Controlled Impact Map and Full Interview
+
+**Research and diagnosis**
+
+- David's six-step advising model is categorization, not a funnel: establish the September 15 branch, learn what brought the student in, address that concern, show every other potential impact briefly, let the student choose which areas to deepen, and then synthesize the whole record.
+- The prior state machine still controlled the journey. It offered one category after another, asked whether the student wanted to explore a topic the student had never mentioned, and hid the final advisement behind generic “Continue” and completion states.
+- Full cards for every category recreated the original information overload. The useful distinction is prominence: student-raised and student-selected topics receive full guidance; every other potential impact remains visible as one short, personalized line.
+- A browser review caught a responsive defect that page-level overflow measurements missed. A bottom-sticky advisement panel overlapped the final answer choice on a 390-pixel screen.
+
+**Decisions**
+
+- Keep the student's initial concerns permanently prominent. Selecting another issue appends it to the priority set; it never replaces or demotes an earlier concern.
+- Replace system-led topic offers with a deterministic ten-area impact index: length of stay, travel, extension, OPT, transfer, program change, later programs, CPT, F-2 family, and early end or withdrawal.
+- Give each index row a short outcome produced from the verified impact map. When a detailed claim is not yet available, use a reviewed category-specific fallback rather than model-generated interface copy.
+- Clicking an impact opens only the controlling questions for that topic, one at a time. When the answers are sufficient, its full guidance joins the existing priority cards.
+- Rename the no-story route “Take the full interview” and skip the duplicate open-ended concern question. That route asks every relevant controlling question one at a time and progressively marks each category covered.
+- Keep “I'm ready for my advisement” available after the core facts are established, including in the middle of the full interview. Move it above the active question so it remains prominent without covering answer controls.
+- Preserve later answers and topic priorities when an earlier answer changes. The calculation and wording update, but a previously selected concern remains selected unless the student changes that concern directly.
+
+**Codex and OpenAI assistance**
+
+- Codex traced the old offer/question/insight/complete state machine, removed the system-led queue, and rebuilt the UI around persistent priorities plus direct topic selection while leaving the deterministic legal engine intact.
+- Codex converted the verified rule matrix into compact personalized impact lines, added regression tests for ordering and literal graduate/undergraduate language, and caught the false “You mentioned travel” statement during browser testing.
+- GPT-5.6 Sol continues to extract a student's story and compose the final advisor narrative from deterministic facts. It does not choose the impact list, calculate dates, or invent the category outcomes.
+- A live early-exit report was generated while the I-20 date remained unknown and the travel question was still unanswered. Sol kept the uncertainty explicit, covered the established rule categories, and ended with prioritized actions.
+
+**Verification**
+
+- Vitest: 94/94 passed across six test files; TypeScript and the production Vite build passed; `git diff --check` passed.
+- Focused-story browser path: OPT and Form I-539 stayed prominent; selecting school transfer added it without removing either initial priority; after the transfer answer, the unfinished OPT path resumed.
+- Full-interview browser path: no duplicate concern prompt, no checkboxes, one question at a time, all ten compact impacts visible, no claim that the student mentioned travel, and advisement available before completion.
+- Live GPT-5.6 Sol advisement completed successfully from the early-exit state. Deterministic cards and timelines remained available throughout generation.
+- Desktop at 1440 by 1000 and mobile at 390 by 844 had no horizontal overflow, no internal text overflow, no control overlap after the sticky-panel correction, and no browser warnings or errors.

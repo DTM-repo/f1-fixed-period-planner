@@ -48,10 +48,9 @@ import {
   type ImpactMap
 } from "./impact/impactMap";
 import {
-  buildExplorationQueue,
+  allImpactTopics,
   canonicalTopics,
-  claimsForTopic,
-  explorationStep,
+  topicImpactLine,
   topicForQuestion,
   topicMeta,
   type CanonicalTopic
@@ -84,6 +83,7 @@ declare global {
 }
 
 type Experience = "welcome" | "story" | "interview";
+type InterviewMode = "focused" | "full";
 type Page = "planner" | "overview";
 type IntakeState = "idle" | "loading" | "ready" | "failed";
 type ReportState = "idle" | "loading" | "ready" | "failed";
@@ -407,9 +407,9 @@ function shouldAskOptApplicationQuestions(scenario: StudentScenario): boolean {
 function appendTravelQuestions(scenario: StudentScenario, answered: Set<string>, questions: Question[], raisedByStudent: boolean): boolean {
   questions.push({
     id: "travelIntent",
-    eyebrow: raisedByStudent ? "Your travel question" : "Travel",
-    prompt: raisedByStudent ? "You mentioned travel. Are you planning to leave the United States?" : "Are you planning to travel outside the United States?",
-    help: raisedByStudent ? "A return after September 15, 2026 moves you from the old rules to a dated I-94." : undefined,
+    eyebrow: raisedByStudent ? "Your travel plans" : "Travel",
+    prompt: "Are you planning to travel outside the United States?",
+    help: "A return after September 15, 2026 moves you from the old rules to a dated I-94.",
     kind: "choice",
     choices: [{ value: "planned", label: "Yes" }, { value: "none", label: "No" }, { value: "unknown", label: "I do not know yet" }],
     value: scenario.travelPosture,
@@ -957,112 +957,6 @@ function QuestionCard({ question, onAnswer, onDate, onUnknownDate }: { question:
   );
 }
 
-function ConcernQuestion({
-  value,
-  state,
-  notice,
-  onValue,
-  onSubmit,
-  onUnsure
-}: {
-  value: string;
-  state: IntakeState;
-  notice: string;
-  onValue: (value: string) => void;
-  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
-  onUnsure: () => void;
-}) {
-  return (
-    <section className="question-card concern-question" aria-labelledby="guided-concern-title">
-      <p className="question-kicker">What brings you here?</p>
-      <h2 id="guided-concern-title">What are you hoping to understand or decide?</h2>
-      <p className="question-help">Use your own words. One sentence is enough.</p>
-      <form onSubmit={onSubmit}>
-        <textarea
-          value={value}
-          onChange={(event) => onValue(event.currentTarget.value)}
-          placeholder="For example: I want to use OPT, but I may need to travel before it is approved."
-          aria-label="What you want help with"
-          autoFocus
-        />
-        <button type="submit" className="primary-command" disabled={state === "loading" || value.trim().length < 3}>
-          {state === "loading" ? <RefreshCw className="spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
-          {state === "loading" ? "Reading your question" : "Continue"}
-        </button>
-      </form>
-      <button type="button" className="text-action" onClick={onUnsure} disabled={state === "loading"}>I am not sure yet</button>
-      {state === "failed" && <p className="field-error">{notice || "I could not read that yet. Your words are still here; try again."}</p>}
-    </section>
-  );
-}
-
-function AreaOfferCard({
-  topic,
-  claims,
-  onExplore,
-  onSkip,
-  onFinish
-}: {
-  topic: CanonicalTopic;
-  claims: ImpactClaim[];
-  onExplore: () => void;
-  onSkip: () => void;
-  onFinish: () => void;
-}) {
-  const meta = topicMeta(topic);
-  const lead = claims[0];
-  return (
-    <section className="question-card area-offer" aria-labelledby={`offer-${topic}`}>
-      <p className="question-kicker">Another area that affects you</p>
-      <h2 id={`offer-${topic}`}>Would you like to look more closely at {meta.title.toLowerCase()}?</h2>
-      <p className="question-help">{lead ? `${lead.title}. ${lead.detail}` : meta.description}</p>
-      <div className="choice-group">
-        <button type="button" onClick={onExplore}><span>Yes, explore this</span><ArrowRight aria-hidden="true" /></button>
-        <button type="button" onClick={onSkip}><span>Not now</span><ArrowRight aria-hidden="true" /></button>
-      </div>
-      <button type="button" className="text-action" onClick={onFinish}>I am ready for my complete advisement</button>
-    </section>
-  );
-}
-
-function TopicInsightCard({
-  topic,
-  map,
-  claims,
-  children,
-  onContinue,
-  onFinish
-}: {
-  topic: CanonicalTopic;
-  map: ImpactMap;
-  claims: ImpactClaim[];
-  children?: React.ReactNode;
-  onContinue: () => void;
-  onFinish: () => void;
-}) {
-  const meta = topicMeta(topic);
-  const usesMainConclusion = topic === "stay_length" || topic === "travel";
-  return (
-    <section className="question-card topic-insight" aria-labelledby={`insight-${topic}`}>
-      <p className="question-kicker">{meta.title}</p>
-      <h2 id={`insight-${topic}`}>{usesMainConclusion ? map.headline : claims[0]?.title ?? meta.title}</h2>
-      {usesMainConclusion && <p className="topic-insight-summary">{map.summary}</p>}
-      <div className="topic-insight-points">
-        {claims.map((claim) => (
-          <article key={claim.id}>
-            <FindingIcon tone={claim.tone} />
-            <div><h3>{claim.title}</h3><p>{claim.detail}</p>{claim.sourceIds[0] && <SourceLink sourceId={claim.sourceIds[0]} />}</div>
-          </article>
-        ))}
-        {!claims.length && topic !== "stay_length" && <p>{meta.description}</p>}
-      </div>
-      {children}
-      <button type="button" className="primary-command" onClick={onContinue}>Continue <ArrowRight aria-hidden="true" /></button>
-      <button type="button" className="text-action" onClick={onFinish}>I am ready for my complete advisement</button>
-    </section>
-  );
-}
-
 function I94Correction({ scenario, onPatch }: { scenario: StudentScenario; onPatch: (patch: Partial<StudentScenario>) => void }) {
   return (
     <details className="uncommon-details inline-uncommon">
@@ -1092,8 +986,8 @@ function ConcernTracker({ topics }: { topics: IntakeTopic[] }) {
   if (!visibleTopics.length) return null;
 
   return (
-    <section className="concern-tracker" aria-label="Questions from your story">
-      <strong>Your questions</strong>
+    <section className="concern-tracker" aria-label="Your priority topics">
+      <strong>Your priorities</strong>
       <ul>
         {visibleTopics.map((topic) => <li key={topic}>{topicLabels[topic]}</li>)}
       </ul>
@@ -1136,7 +1030,85 @@ function ImpactClaimList({ claims }: { claims: ImpactClaim[] }) {
   );
 }
 
-function ImpactList({ map }: { map: ImpactMap }) {
+function ImpactIndex({
+  map,
+  scenario,
+  topics,
+  prominentTopics,
+  completedTopics,
+  activeTopic,
+  fullInterview,
+  onExplore
+}: {
+  map: ImpactMap;
+  scenario: StudentScenario;
+  topics: CanonicalTopic[];
+  prominentTopics: CanonicalTopic[];
+  completedTopics: CanonicalTopic[];
+  activeTopic: CanonicalTopic | null;
+  fullInterview: boolean;
+  onExplore: (topic: CanonicalTopic) => void;
+}) {
+  const prominent = new Set(prominentTopics);
+  const completed = new Set(completedTopics);
+  return (
+    <section className="impact-index" aria-labelledby="impact-index-title">
+      <header>
+        <p>Every change that could affect you</p>
+        <h3 id="impact-index-title">Click any issue to explore deeper</h3>
+      </header>
+      <div className="impact-index-list">
+        {topics.map((topic) => {
+          const meta = topicMeta(topic);
+          const isProminent = prominent.has(topic);
+          const isActive = activeTopic === topic;
+          const state = isActive
+            ? "Exploring"
+            : completed.has(topic)
+              ? fullInterview ? "Covered" : "Explored"
+              : fullInterview && isProminent
+                ? "In interview"
+                : isProminent
+                  ? "Priority"
+                  : "Explore";
+          return (
+            <button
+              type="button"
+              key={topic}
+              className={`${isProminent ? "prominent" : ""} ${isActive ? "active" : ""}`.trim()}
+              onClick={() => onExplore(topic)}
+              aria-pressed={isActive}
+            >
+              <span className="impact-index-icon" aria-hidden="true">{isProminent ? <Check /> : <ArrowRight />}</span>
+              <span className="impact-index-copy"><strong>{meta.title}</strong><small>{topicImpactLine(map, topic, scenario)}</small></span>
+              <span className="impact-index-state">{state}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function ImpactList({
+  map,
+  scenario,
+  topics,
+  prominentTopics,
+  completedTopics,
+  activeTopic,
+  fullInterview = false,
+  onExplore
+}: {
+  map: ImpactMap;
+  scenario?: StudentScenario;
+  topics?: CanonicalTopic[];
+  prominentTopics?: CanonicalTopic[];
+  completedTopics?: CanonicalTopic[];
+  activeTopic?: CanonicalTopic | null;
+  fullInterview?: boolean;
+  onExplore?: (topic: CanonicalTopic) => void;
+}) {
   return (
     <section className="impact-area" aria-live="polite">
       <div className="impact-heading">
@@ -1148,17 +1120,58 @@ function ImpactList({ map }: { map: ImpactMap }) {
       <p className="impact-summary">{map.summary} {map.sourceIds[0] && <SourceLink sourceId={map.sourceIds[0]} />}</p>
       {map.focusClaims.length > 0 && (
         <section className="impact-group">
-          <h3>Your main concerns</h3>
+          <h3>Your priorities</h3>
           <ImpactClaimList claims={map.focusClaims} />
         </section>
       )}
-      {map.otherClaims.length > 0 && (
-        <section className="impact-group">
-          <h3>{map.focusClaims.length ? "Other changes for you" : "Changes for you"}</h3>
-          <ImpactClaimList claims={map.otherClaims} />
-        </section>
+      {scenario && topics && prominentTopics && completedTopics && onExplore && (
+        <ImpactIndex
+          map={map}
+          scenario={scenario}
+          topics={topics}
+          prominentTopics={prominentTopics}
+          completedTopics={completedTopics}
+          activeTopic={activeTopic ?? null}
+          fullInterview={fullInterview}
+          onExplore={onExplore}
+        />
       )}
       {map.ruleStatus && <p className="impact-status">{map.ruleStatus}</p>}
+    </section>
+  );
+}
+
+function AdvisementAction({
+  state,
+  disabled,
+  onCreate
+}: {
+  state: ReportState;
+  disabled: boolean;
+  onCreate: () => void;
+}) {
+  return (
+    <section className="advisement-action" aria-label="Create your advisement">
+      <div><Sparkles aria-hidden="true" /><span><strong>Ready when you are</strong><small>Your advisement brings your situation and priorities together.</small></span></div>
+      <button type="button" onClick={onCreate} disabled={state === "loading" || disabled}>
+        {state === "loading" ? <RefreshCw className="spin" aria-hidden="true" /> : <FileText aria-hidden="true" />}
+        {state === "loading" ? "Writing your advisement" : "I'm ready for my advisement"}
+      </button>
+      {disabled && <p className="field-error">Resolve the highlighted date conflict first.</p>}
+    </section>
+  );
+}
+
+function ExplorationHome({ fullInterview }: { fullInterview: boolean }) {
+  return (
+    <section className="question-card exploration-home">
+      <p className="question-kicker">{fullInterview ? "Full interview" : "You choose what comes next"}</p>
+      <h2>{fullInterview ? "Your full interview is complete" : "Explore another issue, or create your advisement"}</h2>
+      <p className="question-help">
+        {fullInterview
+          ? "Every area shown in your impact map is included. You can still open any issue before creating your advisement."
+          : "Use the impact list to open only the areas you want. Your original priorities stay at the top."}
+      </p>
     </section>
   );
 }
@@ -1284,9 +1297,10 @@ export default function App() {
   const [understoodNarrative, setUnderstoodNarrative] = useState("");
   const [focusTopics, setFocusTopics] = useState<IntakeTopic[]>([]);
   const [focusCaptured, setFocusCaptured] = useState(false);
+  const [interviewMode, setInterviewMode] = useState<InterviewMode>("focused");
+  const [activeTopic, setActiveTopic] = useState<CanonicalTopic | null>(null);
   const [exploreTopics, setExploreTopics] = useState<IntakeTopic[]>([]);
   const [completedExploreTopics, setCompletedExploreTopics] = useState<IntakeTopic[]>([]);
-  const [explorationFinished, setExplorationFinished] = useState(false);
   const [recording, setRecording] = useState(false);
   const [storyFinished, setStoryFinished] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState("");
@@ -1454,22 +1468,41 @@ export default function App() {
   }, [activeScenario]);
   const primaryResult = travelResult ?? result;
   const raisedTopics = useMemo(() => intake?.topics ?? [], [intake]);
-  const visibleFocusTopics = experience === "story"
-    ? raisedTopics
-    : focusTopics;
+  const impactTopics = useMemo(() => allImpactTopics(), []);
+  const initialFocusOrder = useMemo(() => canonicalTopics(focusTopics), [focusTopics]);
   const coreQuestions = useMemo(
     () => buildCoreQuestions(scenario, answered, intake?.facts ?? []),
     [scenario, answered, intake]
   );
   const coreQuestionIds = useMemo(() => new Set(coreQuestions.map((question) => question.id)), [coreQuestions]);
   const coreQuestion = coreQuestions.find((question) => !answered.has(question.id));
+  const completedTopics = useMemo(() => {
+    if (interviewMode !== "full") return canonicalTopics(completedExploreTopics);
+    if (coreQuestion) return [];
+    return impactTopics.filter((topic) => !buildQuestions(scenario, answered, [topic], result.activityEnd)
+      .some((question) => !coreQuestionIds.has(question.id) && !answered.has(question.id)));
+  }, [answered, completedExploreTopics, coreQuestion, coreQuestionIds, impactTopics, interviewMode, result.activityEnd, scenario]);
+  const selectedProminentTopics = useMemo(
+    () => interviewMode === "full"
+      ? canonicalTopics([...completedTopics, ...(activeTopic ? [activeTopic] : [])])
+      : canonicalTopics([...focusTopics, ...exploreTopics]),
+    [activeTopic, completedTopics, exploreTopics, focusTopics, interviewMode]
+  );
+  const visibleFocusTopics = experience === "story"
+    ? raisedTopics
+    : selectedProminentTopics;
   const coverageConflict = hasEffectiveDateCoverageConflict(activeScenario, intake?.facts ?? []);
   const contradiction = coverageConflict || result.findings.some((item) =>
     ["future-entry-before-effective-date-contradiction", "document-ends-before-effective-date"].includes(item.id)
   );
   const impactMap = useMemo(
-    () => buildImpactMap(activeScenario, result, travelResult, visibleFocusTopics),
-    [activeScenario, result, travelResult, visibleFocusTopics]
+    () => buildImpactMap(
+      activeScenario,
+      result,
+      travelResult,
+      experience === "interview" && coreQuestion ? [] : visibleFocusTopics
+    ),
+    [activeScenario, coreQuestion, experience, result, travelResult, visibleFocusTopics]
   );
   const displayedImpactMap: ImpactMap = coverageConflict
     ? {
@@ -1481,29 +1514,21 @@ export default function App() {
         unresolved: []
       }
     : impactMap;
-  const explorationQueue = useMemo(
-    () => buildExplorationQueue(impactMap, focusTopics),
-    [impactMap, focusTopics]
-  );
-  const flowStep = coreQuestion
-    ? null
-    : explorationStep({
-        queue: explorationQueue,
-        focusTopics,
-        acceptedTopics: exploreTopics,
-        completedTopics: completedExploreTopics,
-        finished: explorationFinished,
-        hasQuestion: (topic) => buildQuestions(scenario, answered, [topic], result.activityEnd)
-          .some((question) => !coreQuestionIds.has(question.id) && !answered.has(question.id))
-      });
-  const topicQuestion = flowStep?.kind === "question"
-    ? buildQuestions(scenario, answered, [flowStep.topic], result.activityEnd)
+  const topicQuestion = activeTopic && !coreQuestion
+    ? buildQuestions(scenario, answered, [activeTopic], result.activityEnd)
       .find((question) => !coreQuestionIds.has(question.id) && !answered.has(question.id))
     : undefined;
-  const activeQuestion = coreQuestion ?? topicQuestion;
+  const fullInterviewQuestion = interviewMode === "full" && !coreQuestion && !activeTopic
+    ? buildQuestions(scenario, answered, impactTopics, result.activityEnd)
+      .find((question) => !coreQuestionIds.has(question.id) && !answered.has(question.id))
+    : undefined;
+  const activeQuestion = coreQuestion ?? topicQuestion ?? fullInterviewQuestion;
+  const activeImpactTopic = activeTopic ?? (fullInterviewQuestion ? topicForQuestion(fullInterviewQuestion.id) ?? null : null);
   const historyTopics = useMemo(
-    () => canonicalTopics([...focusTopics, ...exploreTopics, ...completedExploreTopics]),
-    [focusTopics, exploreTopics, completedExploreTopics]
+    () => interviewMode === "full"
+      ? impactTopics
+      : canonicalTopics([...focusTopics, ...exploreTopics, ...completedExploreTopics]),
+    [focusTopics, exploreTopics, completedExploreTopics, impactTopics, interviewMode]
   );
   const questions = useMemo(
     () => buildQuestions(scenario, answered, historyTopics, result.activityEnd),
@@ -1523,67 +1548,49 @@ export default function App() {
     : intakeState === "loading"
       ? "Finishing your results"
       : storyReady
-        ? "Continue"
+        ? "Continue to your results"
         : intakeState === "failed"
           ? "Try understanding again"
           : "Understand my story";
+
+  useEffect(() => {
+    if (experience !== "interview" || coreQuestion) return;
+    const completed = new Set(canonicalTopics(completedExploreTopics));
+    if (activeTopic) {
+      if (topicQuestion) return;
+      completed.add(activeTopic);
+      setCompletedExploreTopics([...completed]);
+      const nextFocus = interviewMode === "focused"
+        ? initialFocusOrder.find((topic) => !completed.has(topic)) ?? null
+        : null;
+      setActiveTopic(nextFocus);
+      return;
+    }
+    if (interviewMode === "focused") {
+      const nextFocus = initialFocusOrder.find((topic) => !completed.has(topic));
+      if (nextFocus) setActiveTopic(nextFocus);
+    }
+  }, [activeTopic, completedExploreTopics, coreQuestion, experience, initialFocusOrder, interviewMode, topicQuestion]);
 
   function navigateOverview(show: boolean) {
     window.location.hash = show ? "what-happened" : "";
   }
 
-  async function captureGuidedConcern(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const narrative = scenario.narrative?.trim() ?? "";
-    if (narrative.length < 3) return;
-    setIntakeState("loading");
-    setIntakeNotice("");
-    try {
-      const response = await fetch("/api/intake", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ narrative, currentScenario: { ...scenario, narrative } })
-      });
-      if (!response.ok) throw new Error(`Intake failed: ${response.status}`);
-      const body = await response.json() as IntakeExtractionResponse;
-      setIntake(body);
-      setUnderstoodNarrative(narrative);
-      lastUnderstoodNarrativeRef.current = narrative;
-      setScenario(mergeFacts(scenario, body.facts, true));
-      markFactsAnswered(body.facts);
-      setFocusTopics(body.topics.length ? body.topics : ["stay_length"]);
-      setExploreTopics([]);
-      setCompletedExploreTopics([]);
-      setExplorationFinished(false);
-      setFocusCaptured(true);
-      setIntakeState("ready");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch {
-      setIntakeState("failed");
-      setIntakeNotice("I could not read that yet. Your words are still here; try again.");
-    }
-  }
-
-  function continueWithoutConcern() {
-    setFocusTopics(["stay_length"]);
+  function startFullInterview() {
+    setInterviewMode("full");
+    setFocusCaptured(true);
+    setFocusTopics([]);
     setExploreTopics([]);
     setCompletedExploreTopics([]);
-    setExplorationFinished(false);
-    setFocusCaptured(true);
+    setActiveTopic(null);
+    setExperience("interview");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function acceptExplorationTopic(topic: CanonicalTopic) {
+  function exploreImpact(topic: CanonicalTopic) {
     setExploreTopics((current) => canonicalTopics([...current, topic]));
-  }
-
-  function completeExplorationTopic(topic: CanonicalTopic) {
-    setCompletedExploreTopics((current) => canonicalTopics([...current, topic]));
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function finishExploration() {
-    setExplorationFinished(true);
+    setCompletedExploreTopics((current) => canonicalTopics(current).filter((item) => item !== topic));
+    setActiveTopic(topic);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -1801,7 +1808,7 @@ export default function App() {
         : [topic];
       setCompletedExploreTopics((current) => canonicalTopics(current).filter((item) => !affectedTopics.includes(item)));
       setExploreTopics((current) => canonicalTopics([...current, ...affectedTopics]));
-      setExplorationFinished(false);
+      setActiveTopic(affectedTopics[0]);
     }
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -1858,10 +1865,12 @@ export default function App() {
     }
     setScenario(draftScenario);
     markFactsAnswered(intake.facts);
-    setFocusTopics(intake.topics.length ? intake.topics : ["stay_length"]);
+    const storyTopics: IntakeTopic[] = intake.topics.length ? intake.topics : ["stay_length"];
+    setFocusTopics(storyTopics);
+    setInterviewMode("focused");
+    setActiveTopic(canonicalTopics(storyTopics)[0] ?? "stay_length");
     setExploreTopics([]);
     setCompletedExploreTopics([]);
-    setExplorationFinished(false);
     setFocusCaptured(true);
     recognitionRef.current?.stop();
     recordingRef.current = false;
@@ -2006,8 +2015,8 @@ export default function App() {
   async function createReport(
     reportScenario: StudentScenario = scenario,
     conversation: AdvisorTurn[] = followUpTurns,
-    reportFocusTopics: IntakeTopic[] = focusTopics,
-    reportExploreTopics: IntakeTopic[] = exploreTopics
+    reportFocusTopics: IntakeTopic[] = interviewMode === "full" ? impactTopics : focusTopics,
+    reportExploreTopics: IntakeTopic[] = interviewMode === "full" ? impactTopics : exploreTopics
   ) {
     reportAbortRef.current?.abort();
     const controller = new AbortController();
@@ -2087,12 +2096,13 @@ export default function App() {
     setFollowUpTurns(requestHistory);
     setFollowUpState("loading");
     try {
+      const advisorTopics: IntakeTopic[] = interviewMode === "full" ? impactTopics : visibleFocusTopics;
       let body: FollowUpResponse | null = null;
       for (let attempt = 0; attempt < 2 && !body; attempt += 1) {
         const response = await fetch("/api/follow-up", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ scenario, question, focusTopics: visibleFocusTopics, history: followUpTurns })
+          body: JSON.stringify({ scenario, question, focusTopics: advisorTopics, history: followUpTurns })
         });
         if (response.ok) body = await response.json() as FollowUpResponse;
         else if (attempt === 1) throw new Error(`Follow-up failed: ${response.status}`);
@@ -2102,17 +2112,24 @@ export default function App() {
       const nextScenario = mergeFacts(scenario, explicitFacts, true);
       const assistantTurn: AdvisorTurn = { role: "assistant", text: body.answer, sourceIds: body.sourceIds };
       const nextTurns = [...requestHistory, assistantTurn];
-      const nextFocusTopics = [...new Set([...focusTopics, ...body.topics])];
+      const nextFocusTopics: IntakeTopic[] = interviewMode === "full"
+        ? impactTopics
+        : [...new Set([...focusTopics, ...body.topics])];
       setFollowUpTurns(nextTurns);
       setFollowUpQuestion("");
       setFollowUpState("ready");
-      setFocusTopics(nextFocusTopics);
+      if (interviewMode === "focused") setFocusTopics(nextFocusTopics);
       if (explicitFacts.length) {
         preserveReportForScenarioUpdateRef.current = true;
         setScenario(nextScenario);
         markFactsAnswered(explicitFacts);
       }
-      window.setTimeout(() => void createReport(nextScenario, nextTurns, nextFocusTopics, exploreTopics), 0);
+      window.setTimeout(() => void createReport(
+        nextScenario,
+        nextTurns,
+        nextFocusTopics,
+        interviewMode === "full" ? impactTopics : exploreTopics
+      ), 0);
     } catch {
       setFollowUpState("failed");
     }
@@ -2137,9 +2154,10 @@ export default function App() {
     setIntakeNotice("");
     setFocusTopics([]);
     setFocusCaptured(false);
+    setInterviewMode("focused");
+    setActiveTopic(null);
     setExploreTopics([]);
     setCompletedExploreTopics([]);
-    setExplorationFinished(false);
     setRecording(false);
     setStoryFinished(false);
     setReport(null);
@@ -2175,7 +2193,7 @@ export default function App() {
             <div className="welcome-actions intake-options">
               <button type="button" className="voice-start" onClick={() => { setExperience("story"); window.setTimeout(toggleSpeech, 0); }}><span className="listening-light" aria-hidden="true" /><Mic aria-hidden="true" /> Start talking</button>
               <button type="button" className="secondary-start" onClick={() => setExperience("story")}><Keyboard aria-hidden="true" /> Type your story</button>
-              <button type="button" className="quiet-start" onClick={() => setExperience("interview")}>Answer a few questions <ArrowRight aria-hidden="true" /></button>
+              <button type="button" className="quiet-start" onClick={startFullInterview}>Take the full interview <ArrowRight aria-hidden="true" /></button>
             </div>
           )}
         </section>
@@ -2251,7 +2269,7 @@ export default function App() {
 
       <main className="planner-layout">
         <section className="interview-column">
-          <ConcernTracker topics={visibleFocusTopics} />
+          {interviewMode === "focused" && <ConcernTracker topics={selectedProminentTopics} />}
           {completedQuestions.length > 0 && (
             <div className="answer-history" aria-label="Your answers">
               {completedQuestions.map((question) => (
@@ -2264,16 +2282,11 @@ export default function App() {
             </div>
           )}
 
-          {!focusCaptured ? (
-            <ConcernQuestion
-              value={scenario.narrative ?? ""}
-              state={intakeState}
-              notice={intakeNotice}
-              onValue={(value) => patchScenario({ narrative: value })}
-              onSubmit={captureGuidedConcern}
-              onUnsure={continueWithoutConcern}
-            />
-          ) : activeQuestion ? (
+          {focusCaptured && !coreQuestion && (
+            <AdvisementAction state={reportState} disabled={contradiction} onCreate={() => void createReport()} />
+          )}
+
+          {activeQuestion ? (
             <QuestionCard
               key={activeQuestion.id}
               question={activeQuestion}
@@ -2281,40 +2294,24 @@ export default function App() {
               onDate={(value) => answerDate(activeQuestion, value)}
               onUnknownDate={() => answerDate(activeQuestion, undefined)}
             />
-          ) : flowStep?.kind === "offer" ? (
-            <AreaOfferCard
-              topic={flowStep.topic}
-              claims={claimsForTopic(impactMap, flowStep.topic)}
-              onExplore={() => acceptExplorationTopic(flowStep.topic)}
-              onSkip={() => completeExplorationTopic(flowStep.topic)}
-              onFinish={finishExploration}
-            />
-          ) : flowStep?.kind === "insight" ? (
-            <TopicInsightCard
-              topic={flowStep.topic}
-              map={impactMap}
-              claims={claimsForTopic(impactMap, flowStep.topic)}
-              onContinue={() => completeExplorationTopic(flowStep.topic)}
-              onFinish={finishExploration}
-            >
-              {flowStep.topic === "stay_length" && isCurrent(scenario) && <I94Correction scenario={scenario} onPatch={patchScenario} />}
-            </TopicInsightCard>
-          ) : flowStep?.kind === "complete" ? (
-            <section className="question-card complete-card">
-              <p className="question-kicker">Your complete advisement</p>
-              <h2>See how all of these rules work together in your situation</h2>
-              <p className="question-help">Your overview will address your main concern first, cover every applicable change, and connect the choices that affect one another.</p>
-              <button type="button" className="primary-command" onClick={() => void createReport()} disabled={reportState === "loading" || contradiction}>
-                {reportState === "loading" ? <RefreshCw className="spin" aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
-                {reportState === "loading" ? "Writing your advisement" : "Create my complete advisement"}
-              </button>
-              {contradiction && <p className="field-error">Resolve the highlighted date conflict before creating the report.</p>}
-            </section>
-          ) : null}
+          ) : focusCaptured ? <ExplorationHome fullInterview={interviewMode === "full"} /> : null}
+
+          {focusCaptured && !coreQuestion && (
+            isCurrent(scenario) && !activeQuestion ? <I94Correction scenario={scenario} onPatch={patchScenario} /> : null
+          )}
         </section>
 
         <aside className="results-column">
-          <ImpactList map={displayedImpactMap} />
+          <ImpactList
+            map={displayedImpactMap}
+            scenario={!coreQuestion ? scenario : undefined}
+            topics={!coreQuestion ? impactTopics : undefined}
+            prominentTopics={!coreQuestion ? selectedProminentTopics : undefined}
+            completedTopics={!coreQuestion ? completedTopics : undefined}
+            activeTopic={!coreQuestion ? activeImpactTopic : undefined}
+            fullInterview={interviewMode === "full"}
+            onExplore={!coreQuestion ? exploreImpact : undefined}
+          />
           <div className="result-actions" aria-label="Save or share your results">
             <button type="button" onClick={() => window.print()}><Printer aria-hidden="true" /> Print or save PDF</button>
             <button type="button" onClick={() => void copyTestCase()}><ClipboardCopy aria-hidden="true" /> Copy test case</button>

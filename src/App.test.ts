@@ -3,6 +3,7 @@ import { buildCoreQuestions, buildQuestions, hasEffectiveDateCoverageConflict, m
 import { DEFAULT_SCENARIO } from "./content/demoScenarios";
 import type { IntakeCandidateFact } from "./ai/intakePayload";
 import type { StudentScenario } from "./engine/types";
+import { allImpactTopics } from "./flow/advisingFlow";
 
 function fact(field: IntakeCandidateFact["field"], value: string): IntakeCandidateFact {
   return { field, value, confidence: "high", needsConfirmation: false };
@@ -202,5 +203,19 @@ describe("OPT and travel order", () => {
     };
     const questions = buildQuestions(scenario, travelAndOptAnswers, ["travel", "opt"], "2028-05-22");
     expect(questions.map((question) => question.id)).not.toContain("optBeforeTravel");
+  });
+});
+
+describe("full interview wording", () => {
+  it("asks about travel without claiming the student mentioned it", () => {
+    const questions = buildQuestions(
+      currentStudent("2028-05-22"),
+      new Set(["presence", "programEnd", "educationLevel", "programType"]),
+      allImpactTopics(),
+      "2028-05-22"
+    );
+    const travelQuestion = questions.find((question) => question.id === "travelIntent");
+    expect(travelQuestion?.prompt).toBe("Are you planning to travel outside the United States?");
+    expect(travelQuestion?.prompt).not.toContain("mentioned");
   });
 });
