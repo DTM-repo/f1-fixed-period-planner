@@ -1475,7 +1475,10 @@ export default function App() {
     ? {
         ...impactMap,
         headline: "These dates do not fit yet",
-        summary: `An I-20 ending ${coverageDateLabel(activeScenario, intake?.facts ?? []) ?? "before September 15"} does not by itself cover September 15, 2026. Confirm a later I-20 or an approved OPT or STEM OPT EAD.`
+        summary: `An I-20 ending ${coverageDateLabel(activeScenario, intake?.facts ?? []) ?? "before September 15"} does not by itself cover September 15, 2026. Confirm a later I-20 or an approved OPT or STEM OPT EAD.`,
+        focusClaims: [],
+        otherClaims: [],
+        unresolved: []
       }
     : impactMap;
   const explorationQueue = useMemo(

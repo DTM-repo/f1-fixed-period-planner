@@ -332,6 +332,14 @@ export function buildImpactMap(
 ): ImpactMap {
   const primaryResult = travelResult ?? stayResult;
   const conclusion = mainConclusion(scenario, stayResult, travelResult);
+  if (hasFinding(stayResult, "document-ends-before-effective-date")) {
+    return {
+      ...conclusion,
+      focusClaims: [],
+      otherClaims: [],
+      unresolved: stayResult.followUpQuestions
+    };
+  }
   const claims: ImpactClaim[] = [];
   const push = (claim: ImpactClaim | null) => {
     if (claim && !claims.some((item) => item.id === claim.id)) claims.push(claim);

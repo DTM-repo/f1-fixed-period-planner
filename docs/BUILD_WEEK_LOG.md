@@ -813,6 +813,7 @@ Each entry should capture:
 - If approved OPT or STEM OPT is selected, require an exact EAD expiration date that covers September 15 before continuing. A date before September 15 remains on the same question with a direct explanation.
 - Do not discard low-confidence date clues when checking for contradictions. They remain excluded from calculations and are used only to request confirmation.
 - Replace the provisional “You are under the old rules” conclusion with “These dates do not fit yet” until the conflict is resolved.
+- Hide downstream old-rule cards while the contradiction is unresolved; all personalized cards return as soon as the controlling date is corrected.
 
 **Verification**
 
