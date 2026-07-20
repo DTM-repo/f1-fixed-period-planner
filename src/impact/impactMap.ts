@@ -137,6 +137,15 @@ function mainConclusion(
     scenario.maintainingStatusOnEffectiveDate === "yes" &&
     scenario.admissionBasis === "duration_of_status";
 
+  const coverageConflict = stayResult.findings.find((item) => item.id === "document-ends-before-effective-date");
+  if (coverageConflict) {
+    return {
+      headline: "These dates do not fit yet",
+      summary: "Your I-20 ends before September 15, 2026. Confirm the later I-20 or approved OPT or STEM OPT EAD that will keep your F-1 status active that day.",
+      sourceIds: coverageConflict.sourceIds
+    };
+  }
+
   if (travelResult) {
     const projected = travelResult.i94AdmitUntilDate
       ? ` Your projected I-94 would end ${formatDate(travelResult.i94AdmitUntilDate)}; the I-94 issued by CBP controls.`

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildQuestions, mergeFacts } from "./App";
+import { buildCoreQuestions, buildQuestions, hasEffectiveDateCoverageConflict, mergeFacts } from "./App";
 import { DEFAULT_SCENARIO } from "./content/demoScenarios";
 import type { IntakeCandidateFact } from "./ai/intakePayload";
 import type { StudentScenario } from "./engine/types";
@@ -42,6 +42,58 @@ describe("confirmed September 15 answer", () => {
     expect(merged.inUsOnEffectiveDate).toBe("no");
     expect(merged.startingPosition).toBe("change_status_inside_us");
     expect(merged.admissionBasis).toBe("fixed_period");
+  });
+});
+
+describe("September 15 document conflicts", () => {
+  const presenceOnly = new Set(["presence"]);
+
+  it("stops on a full I-20 date that ends before the student says valid F-1 status continues", () => {
+    const scenario = currentStudent("2026-05-20");
+    const questions = buildCoreQuestions(scenario, new Set([...presenceOnly, "programEnd"]));
+    expect(hasEffectiveDateCoverageConflict(scenario)).toBe(true);
+    expect(questions.find((question) => question.id === "effectiveDateCoverage")?.prompt).toBe(
+      "What will keep your F-1 status active on September 15, 2026?"
+    );
+    expect(questions.map((question) => question.id)).not.toContain("educationLevel");
+  });
+
+  it("uses a month-and-year clue to request clarification without treating it as a calculation date", () => {
+    const scenario: StudentScenario = {
+      ...DEFAULT_SCENARIO,
+      startingPosition: "current_ds_inside_us",
+      admissionBasis: "duration_of_status",
+      inUsOnEffectiveDate: "yes",
+      maintainingStatusOnEffectiveDate: "yes"
+    };
+    const partialDate = fact("currentProgramEndDate", "2026-05");
+    partialDate.confidence = "low";
+    partialDate.needsConfirmation = true;
+    const questions = buildCoreQuestions(scenario, presenceOnly, [partialDate]);
+    const conflict = questions.find((question) => question.id === "effectiveDateCoverage");
+    expect(conflict?.help).toContain("May 2026");
+    expect(questions.map((question) => question.id)).not.toContain("programEnd");
+  });
+
+  it("asks for the approved EAD date before continuing", () => {
+    const scenario = currentStudent("2026-05-20");
+    scenario.optIntent = "yes";
+    scenario.optStage = "post_completion_approved";
+    const questions = buildCoreQuestions(scenario, new Set([...presenceOnly, "programEnd", "effectiveDateCoverage"]));
+    expect(questions.at(-1)?.id).toBe("effectiveEadEnd");
+    expect(questions.map((question) => question.id)).not.toContain("educationLevel");
+  });
+
+  it("continues only after an approved EAD covers September 15", () => {
+    const scenario = currentStudent("2026-05-20");
+    scenario.optIntent = "yes";
+    scenario.optStage = "post_completion_approved";
+    scenario.eadEndOnEffectiveDate = "2027-05-19";
+    scenario.currentEadEndDate = "2027-05-19";
+    const questions = buildCoreQuestions(scenario, new Set([...presenceOnly, "programEnd", "effectiveEadEnd"]));
+    expect(hasEffectiveDateCoverageConflict(scenario)).toBe(false);
+    expect(questions.map((question) => question.id)).toContain("effectiveEadEnd");
+    expect(questions.map((question) => question.id)).toContain("educationLevel");
   });
 });
 

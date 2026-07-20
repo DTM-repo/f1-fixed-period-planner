@@ -248,10 +248,80 @@ function usableFacts(facts: IntakeCandidateFact[]): IntakeCandidateFact[] {
 
 function displayFactValue(fact: IntakeCandidateFact): string {
   if (dateFacts.has(fact.field) && isValidDateString(fact.value)) return formatDate(fact.value);
+  const partialDate = formatPartialDate(fact.value);
+  if (dateFacts.has(fact.field) && partialDate) return partialDate;
   if (fact.value === "yes") return "Yes";
   if (fact.value === "no") return "No";
   if (fact.value === "unknown") return "Not yet known";
   return factValueLabels[fact.field]?.[fact.value] ?? fact.value.replaceAll("_", " ");
+}
+
+const MONTH_LABELS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December"
+];
+
+function formatPartialDate(value?: string): string | undefined {
+  if (!value) return undefined;
+  const monthYear = value.match(/^(\d{4})-(\d{2})$/);
+  if (monthYear) {
+    const month = Number(monthYear[2]);
+    if (month >= 1 && month <= 12) return `${MONTH_LABELS[month - 1]} ${monthYear[1]}`;
+  }
+  if (/^\d{4}$/.test(value)) return value;
+  return undefined;
+}
+
+function dateIsDefinitelyBefore(value: string | undefined, comparison: string): boolean {
+  if (!value) return false;
+  if (isValidDateString(value)) return compareDates(value, comparison) < 0;
+  const monthYear = value.match(/^(\d{4})-(\d{2})$/);
+  if (monthYear) {
+    return `${monthYear[1]}-${monthYear[2]}` < comparison.slice(0, 7);
+  }
+  return /^\d{4}$/.test(value) && value < comparison.slice(0, 4);
+}
+
+function programEndHint(facts: IntakeCandidateFact[]): IntakeCandidateFact | undefined {
+  return facts.find((fact) =>
+    ["programEndOnEffectiveDate", "currentProgramEndDate"].includes(fact.field) &&
+    (isValidDateString(fact.value) || Boolean(formatPartialDate(fact.value)))
+  );
+}
+
+function coverageDateLabel(scenario: StudentScenario, facts: IntakeCandidateFact[]): string | undefined {
+  const value = scenario.programEndOnEffectiveDate ?? scenario.currentProgramEndDate ?? programEndHint(facts)?.value;
+  return isValidDateString(value) ? formatDate(value) : formatPartialDate(value);
+}
+
+function programEndPrecedesEffectiveDate(
+  scenario: StudentScenario,
+  facts: IntakeCandidateFact[] = []
+): boolean {
+  const programEnd = scenario.programEndOnEffectiveDate ?? scenario.currentProgramEndDate ?? programEndHint(facts)?.value;
+  return dateIsDefinitelyBefore(programEnd, DEFAULT_EFFECTIVE_DATE);
+}
+
+export function hasEffectiveDateCoverageConflict(
+  scenario: StudentScenario,
+  facts: IntakeCandidateFact[] = []
+): boolean {
+  if (!isCurrent(scenario) || scenario.inUsOnEffectiveDate !== "yes") return false;
+  if (!programEndPrecedesEffectiveDate(scenario, facts)) return false;
+  const approvedEadEnd = scenario.optStage.endsWith("approved")
+    ? scenario.eadEndOnEffectiveDate ?? scenario.currentEadEndDate
+    : undefined;
+  return !approvedEadEnd || !isValidDateString(approvedEadEnd) || compareDates(approvedEadEnd, DEFAULT_EFFECTIVE_DATE) < 0;
 }
 
 export function mergeFacts(current: StudentScenario, facts: IntakeCandidateFact[], lockPresence = false): StudentScenario {
@@ -438,7 +508,11 @@ function appendTravelQuestions(scenario: StudentScenario, answered: Set<string>,
   return true;
 }
 
-export function buildCoreQuestions(scenario: StudentScenario, answered: Set<string>): Question[] {
+export function buildCoreQuestions(
+  scenario: StudentScenario,
+  answered: Set<string>,
+  intakeFacts: IntakeCandidateFact[] = []
+): Question[] {
   const questions: Question[] = [
     {
       id: "presence",
@@ -539,6 +613,45 @@ export function buildCoreQuestions(scenario: StudentScenario, answered: Set<stri
 
     questions.push({ id: "programStart", eyebrow: "I-20 program start", prompt: "What program start date will be on your I-20?", kind: "date", value: scenario.programStartDate, answerLabel: scenario.programStartDate ? formatDate(scenario.programStartDate) : "I do not know yet", allowUnknownDate: true });
     if (!answered.has("programStart")) return questions;
+  }
+
+  const programEndBeforeRule = isCurrent(scenario) && programEndPrecedesEffectiveDate(scenario, intakeFacts);
+  const coverageConflict = hasEffectiveDateCoverageConflict(scenario, intakeFacts);
+  const statedCoverageDate = coverageDateLabel(scenario, intakeFacts);
+  if (coverageConflict && !scenario.optStage.endsWith("approved")) {
+    questions.push({
+      id: "effectiveDateCoverage",
+      eyebrow: "These dates do not fit yet",
+      prompt: "What will keep your F-1 status active on September 15, 2026?",
+      help: statedCoverageDate
+        ? `You entered ${statedCoverageDate} as your program end. That I-20 does not by itself cover September 15.`
+        : "An I-20 ending before September 15 does not by itself cover that day.",
+      kind: "choice",
+      choices: [
+        { value: "correct_i20", label: "My I-20 end date should be later" },
+        { value: "post_completion_approved", label: "Approved regular OPT will cover that day" },
+        { value: "stem_approved", label: "Approved STEM OPT will cover that day" },
+        { value: "correct_presence", label: "I need to change my September 15 answer" }
+      ]
+    });
+    if (!answered.has("effectiveDateCoverage")) return questions;
+  }
+
+  if (programEndBeforeRule && scenario.optStage.endsWith("approved")) {
+    const eadEnd = scenario.eadEndOnEffectiveDate ?? scenario.currentEadEndDate;
+    const eadIsTooEarly = Boolean(eadEnd && isValidDateString(eadEnd) && compareDates(eadEnd, DEFAULT_EFFECTIVE_DATE) < 0);
+    questions.push({
+      id: "effectiveEadEnd",
+      eyebrow: "Your status on September 15",
+      prompt: `What expiration date ${scenario.optStage === "stem_approved" ? "will be" : "is"} on your approved ${scenario.optStage === "stem_approved" ? "STEM OPT" : "regular OPT"} EAD?`,
+      help: eadIsTooEarly
+        ? "That EAD also ends before September 15. Enter the approved EAD date that will cover that day, or change an earlier answer."
+        : "The approved EAD must cover September 15 for your F-1 status to be active after the I-20 date you entered.",
+      kind: "date",
+      value: eadEnd,
+      answerLabel: eadEnd && isValidDateString(eadEnd) ? formatDate(eadEnd) : undefined
+    });
+    if (!answered.has("effectiveEadEnd")) return questions;
   }
 
   questions.push({
@@ -1344,14 +1457,27 @@ export default function App() {
   const visibleFocusTopics = experience === "story"
     ? raisedTopics
     : focusTopics;
-  const coreQuestions = useMemo(() => buildCoreQuestions(scenario, answered), [scenario, answered]);
+  const coreQuestions = useMemo(
+    () => buildCoreQuestions(scenario, answered, intake?.facts ?? []),
+    [scenario, answered, intake]
+  );
   const coreQuestionIds = useMemo(() => new Set(coreQuestions.map((question) => question.id)), [coreQuestions]);
   const coreQuestion = coreQuestions.find((question) => !answered.has(question.id));
-  const contradiction = result.findings.some((item) => item.id === "future-entry-before-effective-date-contradiction");
+  const coverageConflict = hasEffectiveDateCoverageConflict(activeScenario, intake?.facts ?? []);
+  const contradiction = coverageConflict || result.findings.some((item) =>
+    ["future-entry-before-effective-date-contradiction", "document-ends-before-effective-date"].includes(item.id)
+  );
   const impactMap = useMemo(
     () => buildImpactMap(activeScenario, result, travelResult, visibleFocusTopics),
     [activeScenario, result, travelResult, visibleFocusTopics]
   );
+  const displayedImpactMap: ImpactMap = coverageConflict
+    ? {
+        ...impactMap,
+        headline: "These dates do not fit yet",
+        summary: `An I-20 ending ${coverageDateLabel(activeScenario, intake?.facts ?? []) ?? "before September 15"} does not by itself cover September 15, 2026. Confirm a later I-20 or an approved OPT or STEM OPT EAD.`
+      }
+    : impactMap;
   const explorationQueue = useMemo(
     () => buildExplorationQueue(impactMap, focusTopics),
     [impactMap, focusTopics]
@@ -1473,6 +1599,37 @@ export default function App() {
   }
 
   function answer(question: Question, value: string) {
+    if (question.id === "effectiveDateCoverage" && value === "correct_i20") {
+      setScenario((current) => ({
+        ...current,
+        programEndOnEffectiveDate: undefined,
+        currentProgramEndDate: undefined
+      }));
+      setAnswered((current) => {
+        const next = new Set(current);
+        next.add("effectiveDateCoverage");
+        next.delete("programEnd");
+        next.delete("effectiveEadEnd");
+        return next;
+      });
+      return;
+    }
+    if (question.id === "effectiveDateCoverage" && value === "correct_presence") {
+      setScenario((current) => ({
+        ...resetQuestionValue("presence", current),
+        programEndOnEffectiveDate: undefined,
+        currentProgramEndDate: undefined
+      }));
+      setAnswered((current) => {
+        const next = new Set(current);
+        next.delete("presence");
+        next.delete("programEnd");
+        next.delete("effectiveDateCoverage");
+        next.delete("effectiveEadEnd");
+        return next;
+      });
+      return;
+    }
     const patch: Partial<StudentScenario> = {};
     switch (question.id) {
       case "presence":
@@ -1507,6 +1664,11 @@ export default function App() {
       case "optStatus":
         patch.optStage = value as OptStage;
         if (value.endsWith("pending") || value.endsWith("approved")) patch.dsoRecommendedOpt = "yes";
+        break;
+      case "effectiveDateCoverage":
+        patch.optIntent = "yes";
+        patch.optStage = value as OptStage;
+        patch.dsoRecommendedOpt = "yes";
         break;
       case "dsoRecommendation": patch.dsoRecommendedOpt = value as YesNoUnknown; break;
       case "optBeforeTravel": patch.optFiledBeforeDeparture = value as YesNoUnknown; break;
@@ -1557,12 +1719,28 @@ export default function App() {
         patch.currentProgramEndDate = value;
         if (isCurrent(scenario)) patch.programEndOnEffectiveDate = value;
         break;
+      case "effectiveEadEnd":
+        patch.currentEadEndDate = value;
+        patch.eadEndOnEffectiveDate = value;
+        break;
       case "optFilingDate": patch.optFilingDate = value; break;
       case "eadEndDate": patch.currentEadEndDate = value; break;
       case "earlyEndDate": patch.earlyEndDate = value; break;
     }
     patchScenario(patch);
-    setAnswered((current) => new Set(current).add(question.id));
+    setAnswered((current) => {
+      const next = new Set(current);
+      if (question.id === "effectiveEadEnd" && value && compareDates(value, DEFAULT_EFFECTIVE_DATE) < 0) {
+        next.delete("effectiveEadEnd");
+        return next;
+      }
+      next.add(question.id);
+      if (question.id === "programEnd") {
+        next.delete("effectiveDateCoverage");
+        next.delete("effectiveEadEnd");
+      }
+      return next;
+    });
   }
 
   function resetQuestionValue(id: string, draft: StudentScenario): StudentScenario {
@@ -1583,6 +1761,7 @@ export default function App() {
     }
     if (id === "travelProgramEnd") next.returnProgramEndDate = undefined;
     if (id === "programEnd") { next.programEndOnEffectiveDate = undefined; next.currentProgramEndDate = undefined; }
+    if (id === "effectiveEadEnd") { next.eadEndOnEffectiveDate = undefined; next.currentEadEndDate = undefined; }
     if (id === "programType") next.programType = "unknown";
     if (id === "educationLevel") next.educationLevel = "unknown";
     if (id === "optIntent") next.optIntent = "unknown";
@@ -2044,7 +2223,7 @@ export default function App() {
                     </div>
                   )}
                 </div>
-                <ImpactList map={impactMap} />
+                <ImpactList map={displayedImpactMap} />
               </>
             ) : (
               <div className="understanding-waiting">
@@ -2132,7 +2311,7 @@ export default function App() {
         </section>
 
         <aside className="results-column">
-          <ImpactList map={impactMap} />
+          <ImpactList map={displayedImpactMap} />
           <div className="result-actions" aria-label="Save or share your results">
             <button type="button" onClick={() => window.print()}><Printer aria-hidden="true" /> Print or save PDF</button>
             <button type="button" onClick={() => void copyTestCase()}><ClipboardCopy aria-hidden="true" /> Copy test case</button>

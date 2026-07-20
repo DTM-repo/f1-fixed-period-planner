@@ -123,6 +123,16 @@ describe("concise impact map", () => {
     expect(claims.map((claim) => claim.id)).not.toContain("opt-fixed-period");
   });
 
+  it("puts an I-20 date conflict ahead of the provisional old-rules message", () => {
+    const { map } = allText(current({
+      programEndOnEffectiveDate: "2026-05-20",
+      currentProgramEndDate: "2026-05-20"
+    }));
+    expect(map.headline).toBe("These dates do not fit yet");
+    expect(map.summary).toContain("approved OPT or STEM OPT EAD");
+    expect(map.summary).not.toContain("under the old rules");
+  });
+
   it("shows both effects of travel when a longer program needs more time", () => {
     const scenario = current({
       programEndOnEffectiveDate: "2032-05-22",

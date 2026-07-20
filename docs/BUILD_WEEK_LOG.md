@@ -797,3 +797,26 @@ Each entry should capture:
 - Exact browser case: current undergraduate, I-20 end May 20, 2027, post-completion OPT not yet filed. The timeline rendered September 15, 2026; February 19, 2027 filing-window opening; March 18, 2027 Form I-539 exception deadline; May 20 program end; and July 19 end of the 60-day period.
 - A May 2028 program-end regression shows the March 18, 2027 exception closing before the February 20, 2028 normal filing window.
 - Desktop and 390-pixel screenshots passed. The mobile timeline remained vertical and the page had no horizontal overflow.
+
+### Impossible Program-End Date Becomes a Required Correction
+
+**Research and diagnosis**
+
+- David's live test combined valid F-1 status in the United States on September 15, 2026 with a stated May 2026 program end. The engine already refused to calculate a full past I-20 date, but the interview treated that finding as background and could continue showing a provisional old-rules conclusion.
+- Replayed the exact narrative against the live GPT-5.6 Sol intake. Sol recognized “May 2026,” but the old prompt required a day before returning any date fact. In another run it preserved the date with low confidence because it conflicted with “next spring.” Either path could keep the safety issue out of the deterministic scenario.
+- Rechecked NAFSA's July 20 analysis: transition treatment depends on valid F-1 status in the United States on September 15 and the I-20 or approved OPT/STEM OPT EAD then in effect. A pre-September I-20 end therefore requires a later I-20, qualifying approved EAD, or correction of the September 15 answer before a transition result is established.
+
+**Decisions and Codex assistance**
+
+- Treat incomplete dates such as `2026-05` as clarification clues only. They can stop an inconsistent result but can never become calculation dates or timeline deadlines.
+- Put the conflict ahead of all ordinary questions and results. The student receives one resolving question: correct the I-20 date, identify approved regular OPT, identify approved STEM OPT, or correct the September 15 answer.
+- If approved OPT or STEM OPT is selected, require an exact EAD expiration date that covers September 15 before continuing. A date before September 15 remains on the same question with a direct explanation.
+- Do not discard low-confidence date clues when checking for contradictions. They remain excluded from calculations and are used only to request confirmation.
+- Replace the provisional “You are under the old rules” conclusion with “These dates do not fit yet” until the conflict is resolved.
+
+**Verification**
+
+- Vitest: 95/95 passed; TypeScript and the production Vite build passed.
+- Live Sol intake preserved “May 2026” as a partial date without inventing a day.
+- Exact browser replay showed the conflict on the story screen, then opened the single correction question. Changing the I-20 end to May 20, 2027 cleared the warning and restored the February 19 OPT-window date and March 18 Form I-539 exception deadline on the timeline.
+- Desktop and 390-pixel checks passed with no horizontal overflow or browser-console errors.
