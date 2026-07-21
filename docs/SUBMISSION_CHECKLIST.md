@@ -12,12 +12,12 @@
 ## Repository
 
 - [ ] Push the final `main` branch to [DTM-repo/f1-fixed-period-planner](https://github.com/DTM-repo/f1-fixed-period-planner).
-- [ ] Make the repository public, or share the private repository with `testing@devpost.com` and `build-week-event@openai.com`.
+- [x] Make the repository public, or share the private repository with `testing@devpost.com` and `build-week-event@openai.com`.
 - [x] Include an MIT license.
 - [x] Include local setup and test commands.
 - [x] Explain the Codex collaboration and GPT-5.6 architecture in the README.
-- [ ] Put the deployed Netlify URL near the top of the README.
-- [ ] Verify that a judge can use the demo without an account or rebuilding it.
+- [x] Put the deployed Netlify URL near the top of the README.
+- [ ] Verify that a judge can use the demo without an account or rebuilding it after production secrets are configured.
 
 ## Video
 
