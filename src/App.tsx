@@ -19,12 +19,14 @@ import {
   RotateCcw,
   Share2,
   Sparkles,
-  Square
+  Square,
+  X
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ExplanationResponse } from "./ai/explanationPayload";
 import type { AdvisorTurn, FollowUpResponse } from "./ai/followUpPayload";
 import type { IntakeCandidateFact, IntakeExtractionResponse, IntakeFactField, IntakeTopic } from "./ai/intakePayload";
+import { buildIntakeHighlights } from "./ai/intakeSemantics";
 import { applicableCaseTopics, buildStudentCase, type CaseEvent } from "./case/studentCase";
 import { DEFAULT_SCENARIO } from "./content/demoScenarios";
 import { calculateScenario, DEFAULT_EFFECTIVE_DATE, OPT_TRANSITION_I765_DEADLINE, scenarioForFixedReentry } from "./engine/calculateScenario";
@@ -55,7 +57,7 @@ import {
   topicMeta,
   type CanonicalTopic
 } from "./flow/advisingFlow";
-import { SOURCE_INDEX, sourceLinkLabel } from "./sources/sourceIndex";
+import { SOURCE_INDEX } from "./sources/sourceIndex";
 
 type SpeechRecognitionResultItem = { transcript: string };
 type SpeechRecognitionResult = { isFinal: boolean; 0: SpeechRecognitionResultItem };
@@ -82,7 +84,8 @@ declare global {
   }
 }
 
-type Experience = "welcome" | "story" | "interview";
+type Experience = "welcome" | "gate" | "story" | "interview";
+type StoryMode = "voice" | "type";
 type InterviewMode = "focused" | "full";
 type Page = "planner" | "overview";
 type IntakeState = "idle" | "loading" | "ready" | "failed";
@@ -100,11 +103,13 @@ interface Question {
   eyebrow: string;
   prompt: string;
   help?: string;
+  advice?: { title: string; detail: string };
   kind: QuestionKind;
   choices?: Choice[];
   value?: string;
   answerLabel?: string;
   allowUnknownDate?: boolean;
+  allowEstimate?: boolean;
 }
 
 const yesNoUnknown: Choice[] = [
@@ -353,11 +358,19 @@ export function mergeFacts(current: StudentScenario, facts: IntakeCandidateFact[
   let next = { ...current } as StudentScenario;
   for (const fact of facts) {
     if (fact.confidence === "low" || !formatPartialDate(fact.value)) continue;
-    if (fact.field === "currentProgramEndDate" || fact.field === "programEndOnEffectiveDate") {
-      next.currentProgramEndDateHint = fact.value;
-    }
-    if (fact.field === "currentEadEndDate" || fact.field === "eadEndOnEffectiveDate") {
-      next.currentEadEndDateHint = fact.value;
+    switch (fact.field) {
+      case "programStartDate": next.programStartDateHint = fact.value; break;
+      case "currentProgramEndDate":
+      case "programEndOnEffectiveDate": next.currentProgramEndDateHint = fact.value; break;
+      case "currentEadEndDate":
+      case "eadEndOnEffectiveDate": next.currentEadEndDateHint = fact.value; break;
+      case "optFilingDate": next.optFilingDateHint = fact.value; break;
+      case "reentryDate": next.reentryDateHint = fact.value; break;
+      case "returnProgramStartDate": next.returnProgramStartDateHint = fact.value; break;
+      case "returnProgramEndDate": next.returnProgramEndDateHint = fact.value; break;
+      case "nextProgramStartDate": next.nextProgramStartDateHint = fact.value; break;
+      case "nextProgramEndDate": next.nextProgramEndDateHint = fact.value; break;
+      case "earlyEndDate": next.earlyEndDateHint = fact.value; break;
     }
   }
   for (const fact of usableFacts(facts)) {
@@ -375,6 +388,14 @@ export function mergeFacts(current: StudentScenario, facts: IntakeCandidateFact[
     if (fact.field === "currentEadEndDate" || fact.field === "eadEndOnEffectiveDate") {
       next.currentEadEndDateHint = undefined;
     }
+    if (fact.field === "programStartDate") next.programStartDateHint = undefined;
+    if (fact.field === "optFilingDate") next.optFilingDateHint = undefined;
+    if (fact.field === "reentryDate") next.reentryDateHint = undefined;
+    if (fact.field === "returnProgramStartDate") next.returnProgramStartDateHint = undefined;
+    if (fact.field === "returnProgramEndDate") next.returnProgramEndDateHint = undefined;
+    if (fact.field === "nextProgramStartDate") next.nextProgramStartDateHint = undefined;
+    if (fact.field === "nextProgramEndDate") next.nextProgramEndDateHint = undefined;
+    if (fact.field === "earlyEndDate") next.earlyEndDateHint = undefined;
   }
   if (lockPresence && current.inUsOnEffectiveDate === "yes") {
     next.inUsOnEffectiveDate = "yes";
@@ -498,8 +519,8 @@ function appendTravelQuestions(
         prompt: "When do you expect to return from that trip?",
         help: "CBP issues the controlling I-94 when you return.",
         kind: "date",
-        value: scenario.reentryDate,
-        answerLabel: scenario.reentryDate ? formatDate(scenario.reentryDate) : "I do not know yet",
+        value: scenario.reentryDate ?? scenario.reentryDateHint,
+        answerLabel: scenario.reentryDate ? formatDate(scenario.reentryDate) : formatPartialDate(scenario.reentryDateHint) ?? "I do not know yet",
         allowUnknownDate: true
       });
       if (!answered.has("returnDate")) return false;
@@ -530,8 +551,8 @@ function appendTravelQuestions(
           prompt: "What program start date is printed on that I-20?",
           help: "The new four-year maximum is measured from the I-20 program start date, not from the day you return.",
           kind: "date",
-          value: scenario.programStartDate,
-          answerLabel: scenario.programStartDate ? formatDate(scenario.programStartDate) : "I do not know yet",
+          value: scenario.programStartDate ?? scenario.programStartDateHint,
+          answerLabel: scenario.programStartDate ? formatDate(scenario.programStartDate) : formatPartialDate(scenario.programStartDateHint) ?? "I do not know yet",
           allowUnknownDate: true
         });
         if (!answered.has("travelProgramStart")) return false;
@@ -544,8 +565,8 @@ function appendTravelQuestions(
           prompt: "What program start date is printed on the I-20 you will use to return?",
           help: "The four-year maximum is measured from this date, not from the day you return.",
           kind: "date",
-          value: scenario.returnProgramStartDate,
-          answerLabel: scenario.returnProgramStartDate ? formatDate(scenario.returnProgramStartDate) : "I do not know yet",
+          value: scenario.returnProgramStartDate ?? scenario.returnProgramStartDateHint,
+          answerLabel: scenario.returnProgramStartDate ? formatDate(scenario.returnProgramStartDate) : formatPartialDate(scenario.returnProgramStartDateHint) ?? "I do not know yet",
           allowUnknownDate: true
         });
         if (!answered.has("travelProgramStart")) return false;
@@ -555,8 +576,8 @@ function appendTravelQuestions(
           prompt: "What program end date is printed on that I-20?",
           help: "This I-20 end date controls the new admission period instead of the earlier program end date.",
           kind: "date",
-          value: scenario.returnProgramEndDate,
-          answerLabel: scenario.returnProgramEndDate ? formatDate(scenario.returnProgramEndDate) : "I do not know yet",
+          value: scenario.returnProgramEndDate ?? scenario.returnProgramEndDateHint,
+          answerLabel: scenario.returnProgramEndDate ? formatDate(scenario.returnProgramEndDate) : formatPartialDate(scenario.returnProgramEndDateHint) ?? "I do not know yet",
           allowUnknownDate: true
         });
         if (!answered.has("travelProgramEnd")) return false;
@@ -613,8 +634,8 @@ export function buildCoreQuestions(
           : "When do you expect to enter the United States in F-1 status?",
         help: "Use the month name, day, and year so the date cannot be read in the wrong order.",
         kind: "date",
-        value: scenario.reentryDate,
-        answerLabel: scenario.reentryDate ? formatDate(scenario.reentryDate) : "I do not know yet",
+        value: scenario.reentryDate ?? scenario.reentryDateHint,
+        answerLabel: scenario.reentryDate ? formatDate(scenario.reentryDate) : formatPartialDate(scenario.reentryDateHint) ?? "I do not know yet",
         allowUnknownDate: true
       });
       if (!answered.has("entryDate")) return questions;
@@ -669,7 +690,7 @@ export function buildCoreQuestions(
     });
     if (!answered.has("programType")) return questions;
 
-    questions.push({ id: "programStart", eyebrow: "I-20 program start", prompt: "What program start date will be on your I-20?", kind: "date", value: scenario.programStartDate, answerLabel: scenario.programStartDate ? formatDate(scenario.programStartDate) : "I do not know yet", allowUnknownDate: true });
+    questions.push({ id: "programStart", eyebrow: "I-20 program start", prompt: "What program start date will be on your I-20?", help: "An estimate is enough for now.", kind: "date", value: scenario.programStartDate ?? scenario.programStartDateHint, answerLabel: scenario.programStartDate ? formatDate(scenario.programStartDate) : formatPartialDate(scenario.programStartDateHint) ?? "I do not know yet", allowUnknownDate: true, allowEstimate: true });
     if (!answered.has("programStart")) return questions;
   }
 
@@ -710,8 +731,8 @@ export function buildCoreQuestions(
           ? `You said ${formatPartialDate(eadHint)}. Enter the day printed on the EAD so your exact dates can be calculated.`
           : "The approved EAD must cover September 15 for your F-1 status to remain active after your program ends.",
       kind: "date",
-      value: eadEnd,
-      answerLabel: eadEnd && isValidDateString(eadEnd) ? formatDate(eadEnd) : undefined
+      value: eadEnd ?? eadHint,
+      answerLabel: eadEnd && isValidDateString(eadEnd) ? formatDate(eadEnd) : formatPartialDate(eadHint)
     });
     if (!answered.has("effectiveEadEnd")) return questions;
   }
@@ -834,11 +855,11 @@ export function buildQuestions(
         if (!answered.has("dsoRecommendation")) return questions;
       }
       if (scenario.optStage.endsWith("not_filed") || scenario.optStage.endsWith("pending")) {
-        questions.push({ id: "optFilingDate", eyebrow: "Form I-765", prompt: "When did you file, or when do you plan to file?", help: isCurrent(scenario) ? "The one-time OPT option requires USCIS to receive Form I-765 by March 18, 2027 while the old rules still cover you." : undefined, kind: "date", value: scenario.optFilingDate, answerLabel: scenario.optFilingDate ? formatDate(scenario.optFilingDate) : "I do not know yet", allowUnknownDate: true });
+        questions.push({ id: "optFilingDate", eyebrow: "Form I-765", prompt: "When did you file, or when do you plan to file?", help: isCurrent(scenario) ? "The one-time OPT option requires you to submit Form I-765 by March 18, 2027 while the old rules still cover you." : "An estimate is fine if you have not filed yet.", kind: "date", value: scenario.optFilingDate ?? scenario.optFilingDateHint, answerLabel: scenario.optFilingDate ? formatDate(scenario.optFilingDate) : formatPartialDate(scenario.optFilingDateHint) ?? "I do not know yet", allowUnknownDate: true, allowEstimate: true });
         if (!answered.has("optFilingDate")) return questions;
       }
       if (scenario.optStage.endsWith("approved")) {
-        questions.push({ id: "eadEndDate", eyebrow: "Your EAD", prompt: "What expiration date is on your EAD?", kind: "date", value: scenario.currentEadEndDate, answerLabel: scenario.currentEadEndDate ? formatDate(scenario.currentEadEndDate) : "I do not know yet", allowUnknownDate: true });
+        questions.push({ id: "eadEndDate", eyebrow: "Your EAD", prompt: "What expiration date is on your EAD?", kind: "date", value: scenario.currentEadEndDate ?? scenario.currentEadEndDateHint, answerLabel: scenario.currentEadEndDate ? formatDate(scenario.currentEadEndDate) : formatPartialDate(scenario.currentEadEndDateHint) ?? "I do not know yet", allowUnknownDate: true });
         if (!answered.has("eadEndDate")) return questions;
       }
     }
@@ -860,13 +881,21 @@ export function buildQuestions(
     if (tripCanAffectTransitionOpt && !filingAlreadyPrecedesPlannedTravel) {
       questions.push({
         id: "optBeforeTravel",
-        eyebrow: "OPT and travel order",
+        eyebrow: "Apply before you travel",
         prompt: scenario.travelPosture === "completed"
           ? "Did you submit your Form I-765 before you left the United States?"
-          : "Will you submit your Form I-765 before you leave the United States?",
-        help: "For the one-time OPT option, submit Form I-765 before your trip and no later than March 18, 2027.",
+          : "Can you submit your Form I-765 before you leave the United States?",
+        advice: {
+          title: "Apply for OPT before you travel",
+          detail: "Leaving first can take away the one-time route that avoids Form I-539."
+        },
+        help: "Apply online before your trip and no later than March 18, 2027.",
         kind: "choice",
-        choices: yesNoUnknown,
+        choices: [
+          { value: "yes", label: scenario.travelPosture === "completed" ? "Yes, I applied first" : "Yes, I can apply first" },
+          { value: "no", label: "No, the trip comes first" },
+          { value: "unknown", label: "I am not sure yet" }
+        ],
         value: scenario.optFiledBeforeDeparture,
         answerLabel: factValueLabels.optFiledBeforeDeparture?.[scenario.optFiledBeforeDeparture ?? "unknown"]
       });
@@ -897,9 +926,12 @@ export function buildQuestions(
     questions.push({
       id: "nextProgram",
       eyebrow: "A later program",
-      prompt: "After this program, are you considering another U.S. program at the same education level or a lower level?",
+      prompt: "Are you considering another U.S. program after this one?",
+      advice: dateIsDefinitelyAfter(scenario.currentProgramEndDate ?? scenario.currentProgramEndDateHint, DEFAULT_EFFECTIVE_DATE)
+        ? { title: "Your next F-1 program must be at a higher level", detail: "After this program, the new rule does not allow another F-1 program at the same or a lower education level." }
+        : undefined,
       kind: "choice",
-      choices: [{ value: "same_or_lower", label: "Yes" }, { value: "not_planning", label: "No" }, { value: "higher", label: "Only a higher level" }, { value: "unknown", label: "I do not know yet" }],
+      choices: [{ value: "higher", label: "Yes, at a higher level" }, { value: "same_or_lower", label: "Yes, at the same or a lower level" }, { value: "not_planning", label: "No" }, { value: "unknown", label: "I do not know yet" }],
       value: scenario.nextProgramLevelPlan,
       answerLabel: factValueLabels.nextProgramLevelPlan?.[scenario.nextProgramLevelPlan ?? "unknown"]
     });
@@ -911,11 +943,12 @@ export function buildQuestions(
         id: "nextProgramStart",
         eyebrow: "Your next program",
         prompt: "When would your next program start?",
-        help: "This shows whether your current F-1 stay reaches the new program.",
+        help: "An estimate is fine. This shows whether your current F-1 stay reaches the new program.",
         kind: "date",
-        value: scenario.nextProgramStartDate,
-        answerLabel: scenario.nextProgramStartDate ? formatDate(scenario.nextProgramStartDate) : "I do not know yet",
-        allowUnknownDate: true
+        value: scenario.nextProgramStartDate ?? scenario.nextProgramStartDateHint,
+        answerLabel: scenario.nextProgramStartDate ? formatDate(scenario.nextProgramStartDate) : formatPartialDate(scenario.nextProgramStartDateHint) ?? "I do not know yet",
+        allowUnknownDate: true,
+        allowEstimate: true
       });
       if (!answered.has("nextProgramStart")) return questions;
       questions.push({
@@ -924,9 +957,10 @@ export function buildQuestions(
         prompt: "What program end date would be on that I-20?",
         help: "This date shows how much additional F-1 time the program needs.",
         kind: "date",
-        value: scenario.nextProgramEndDate,
-        answerLabel: scenario.nextProgramEndDate ? formatDate(scenario.nextProgramEndDate) : "I do not know yet",
-        allowUnknownDate: true
+        value: scenario.nextProgramEndDate ?? scenario.nextProgramEndDateHint,
+        answerLabel: scenario.nextProgramEndDate ? formatDate(scenario.nextProgramEndDate) : formatPartialDate(scenario.nextProgramEndDateHint) ?? "I do not know yet",
+        allowUnknownDate: true,
+        allowEstimate: true
       });
       if (!answered.has("nextProgramEnd")) return questions;
     }
@@ -974,7 +1008,7 @@ export function buildQuestions(
     });
     if (!answered.has("earlyEnd")) return questions;
     if (["completed_early", "authorized_withdrawal"].includes(scenario.earlyEndSituation ?? "")) {
-      questions.push({ id: "earlyEndDate", eyebrow: "Actual end date", prompt: "On what date will your study end?", kind: "date", value: scenario.earlyEndDate, answerLabel: scenario.earlyEndDate ? formatDate(scenario.earlyEndDate) : "I do not know yet", allowUnknownDate: true });
+      questions.push({ id: "earlyEndDate", eyebrow: "Actual end date", prompt: "When do you expect your study to end?", help: "An estimate is fine.", kind: "date", value: scenario.earlyEndDate ?? scenario.earlyEndDateHint, answerLabel: scenario.earlyEndDate ? formatDate(scenario.earlyEndDate) : formatPartialDate(scenario.earlyEndDateHint) ?? "I do not know yet", allowUnknownDate: true, allowEstimate: true });
       if (!answered.has("earlyEndDate")) return questions;
     }
   }
@@ -984,7 +1018,80 @@ export function buildQuestions(
 
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-function DateAnswer({ value, onComplete, onUnknown }: { value?: string; onComplete: (value: string) => void; onUnknown?: () => void }) {
+function LiveOscilloscope({ analyser, active }: { analyser: AnalyserNode | null; active: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    let frame = 0;
+    const samples = analyser ? new Uint8Array(analyser.fftSize) : null;
+
+    const draw = () => {
+      const rect = canvas.getBoundingClientRect();
+      const scale = window.devicePixelRatio || 1;
+      const pixelWidth = Math.max(1, Math.round(rect.width * scale));
+      const pixelHeight = Math.max(1, Math.round(rect.height * scale));
+      if (canvas.width !== pixelWidth || canvas.height !== pixelHeight) {
+        canvas.width = pixelWidth;
+        canvas.height = pixelHeight;
+      }
+      context.setTransform(scale, 0, 0, scale, 0, 0);
+      context.clearRect(0, 0, rect.width, rect.height);
+      context.lineWidth = active ? 1.5 : 1;
+      context.strokeStyle = active ? "#8ce4c7" : "#56605a";
+      context.beginPath();
+
+      if (!active || !analyser || !samples) {
+        context.moveTo(0, rect.height / 2);
+        context.lineTo(rect.width, rect.height / 2);
+      } else {
+        analyser.getByteTimeDomainData(samples);
+        let crossing = 0;
+        for (let index = 1; index < samples.length - 1; index += 1) {
+          if (samples[index - 1] < 128 && samples[index] >= 128) {
+            crossing = index;
+            break;
+          }
+        }
+        const visibleSamples = Math.min(samples.length - crossing, 720);
+        let peak = 1;
+        for (let index = crossing; index < crossing + visibleSamples; index += 1) {
+          peak = Math.max(peak, Math.abs(samples[index] - 128));
+        }
+        const gain = Math.min(3.6, Math.max(1, 34 / peak));
+        for (let index = 0; index < visibleSamples; index += 1) {
+          const x = visibleSamples > 1 ? index * rect.width / (visibleSamples - 1) : 0;
+          const normalized = (samples[crossing + index] - 128) / 128;
+          const y = Math.max(5, Math.min(rect.height - 5, rect.height / 2 + normalized * gain * rect.height * 0.44));
+          if (index === 0) context.moveTo(x, y);
+          else context.lineTo(x, y);
+        }
+      }
+      context.stroke();
+      frame = window.requestAnimationFrame(draw);
+    };
+
+    draw();
+    return () => window.cancelAnimationFrame(frame);
+  }, [active, analyser]);
+
+  return <canvas className="live-oscilloscope" ref={canvasRef} aria-hidden="true" />;
+}
+
+function DateAnswer({
+  value,
+  allowEstimate = true,
+  onComplete,
+  onUnknown
+}: {
+  value?: string;
+  allowEstimate?: boolean;
+  onComplete: (value: string) => void;
+  onUnknown?: () => void;
+}) {
   const initialDay = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   const initialMonth = value?.match(/^(\d{4})-(\d{2})$/);
   const initialYear = value?.match(/^(\d{4})$/);
@@ -992,25 +1099,40 @@ function DateAnswer({ value, onComplete, onUnknown }: { value?: string; onComple
   const [day, setDay] = useState(initialDay ? String(Number(initialDay[3])) : "");
   const [year, setYear] = useState(initialDay?.[1] ?? initialMonth?.[1] ?? initialYear?.[1] ?? "");
   const [error, setError] = useState("");
-  const onCompleteRef = useRef(onComplete);
 
-  useEffect(() => {
-    onCompleteRef.current = onComplete;
-  }, [onComplete]);
-
-  useEffect(() => {
-    if (!month || !day || year.length !== 4) return;
-    const candidate = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
-    if (isValidDateString(candidate)) {
-      setError("");
-      onCompleteRef.current(candidate);
-    } else {
-      setError("That is not a calendar date. Check the day, month, and year.");
+  function submitDate(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (year.length !== 4) {
+      setError("Enter a four-digit year.");
+      return;
     }
-  }, [month, day, year]);
+    if (day && !month) {
+      setError("Choose a month for that day.");
+      return;
+    }
+    if (month && day) {
+      const candidate = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+      if (!isValidDateString(candidate)) {
+        setError("That is not a calendar date. Check the day, month, and year.");
+        return;
+      }
+      setError("");
+      onComplete(candidate);
+      return;
+    }
+    if (!allowEstimate) {
+      setError("Enter the month, day, and year shown on the document.");
+      return;
+    }
+    setError("");
+    onComplete(month ? `${year}-${month.padStart(2, "0")}` : year);
+  }
+
+  const canSubmit = year.length === 4 && (!day || Boolean(month));
+  const estimate = canSubmit && (!month || !day);
 
   return (
-    <div className="date-answer">
+    <form className="date-answer" onSubmit={submitDate}>
       <div className="date-fields">
         <label>
           <span>Month</span>
@@ -1028,9 +1150,13 @@ function DateAnswer({ value, onComplete, onUnknown }: { value?: string; onComple
           <input inputMode="numeric" autoComplete="off" value={year} onChange={(event) => setYear(event.currentTarget.value.replace(/\D/g, "").slice(0, 4))} placeholder="Year" aria-label="Year" />
         </label>
       </div>
+      {allowEstimate && <p className="date-estimate-note">An estimate is fine. Leave the day blank for a month estimate, or leave month and day blank if you only know the year.</p>}
       {error && <p className="field-error" role="alert">{error}</p>}
-      {onUnknown && <button type="button" className="text-action" onClick={onUnknown}>I do not know this date yet</button>}
-    </div>
+      <div className="date-actions">
+        <button type="submit" className="date-submit" disabled={!canSubmit}>{estimate ? "Use this estimate" : "Use this date"}<ArrowRight aria-hidden="true" /></button>
+        {onUnknown && <button type="button" className="text-action" onClick={onUnknown}>I do not know this date yet</button>}
+      </div>
+    </form>
   );
 }
 
@@ -1039,6 +1165,7 @@ function QuestionCard({ question, onAnswer, onDate, onUnknownDate }: { question:
     <section className="question-card" aria-labelledby={`question-${question.id}`}>
       <p className="question-kicker">{question.eyebrow}</p>
       <h2 id={`question-${question.id}`}>{question.prompt}</h2>
+      {question.advice && <div className="question-advice"><AlertTriangle aria-hidden="true" /><div><strong>{question.advice.title}</strong><span>{question.advice.detail}</span></div></div>}
       {question.help && <p className="question-help">{question.help}</p>}
       {question.kind === "choice" ? (
         <div className="choice-group">
@@ -1050,10 +1177,47 @@ function QuestionCard({ question, onAnswer, onDate, onUnknownDate }: { question:
           ))}
         </div>
       ) : (
-        <DateAnswer value={question.value} onComplete={onDate} onUnknown={question.allowUnknownDate ? onUnknownDate : undefined} />
+        <DateAnswer value={question.value} allowEstimate={question.allowEstimate} onComplete={onDate} onUnknown={question.allowUnknownDate ? onUnknownDate : undefined} />
       )}
       <p className="answer-prompt">Answer to receive the next question.</p>
     </section>
+  );
+}
+
+function EditQuestionDialog({
+  question,
+  onAnswer,
+  onDate,
+  onUnknownDate,
+  onCancel
+}: {
+  question: Question;
+  onAnswer: (value: string) => void;
+  onDate: (value: string) => void;
+  onUnknownDate: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
+      <div className="edit-dialog" role="dialog" aria-modal="true" aria-label={`Change ${question.eyebrow}`}>
+        <header><span>Change one answer</span><button type="button" onClick={onCancel} title="Cancel"><X aria-hidden="true" /></button></header>
+        <QuestionCard question={question} onAnswer={onAnswer} onDate={onDate} onUnknownDate={onUnknownDate} />
+        <button type="button" className="cancel-edit" onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+function RestartDialog({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
+  return (
+    <div className="dialog-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onCancel(); }}>
+      <section className="restart-dialog" role="dialog" aria-modal="true" aria-labelledby="restart-title">
+        <AlertTriangle aria-hidden="true" />
+        <h2 id="restart-title">Start a new situation?</h2>
+        <p>This clears the answers and advisement in this tab.</p>
+        <div><button type="button" className="secondary-button" onClick={onCancel}>Keep this situation</button><button type="button" className="danger-button" onClick={onConfirm}>Start over</button></div>
+      </section>
+    </div>
   );
 }
 
@@ -1071,7 +1235,7 @@ function I94Correction({ scenario, onPatch }: { scenario: StudentScenario; onPat
               <option value="unknown">I need to check</option>
             </select>
           </label>
-          {scenario.admissionBasis === "fixed_period" && <DateAnswer value={scenario.i94AdmitUntilDate} onComplete={(value) => onPatch({ i94AdmitUntilDate: value })} />}
+          {scenario.admissionBasis === "fixed_period" && <DateAnswer value={scenario.i94AdmitUntilDate} allowEstimate={false} onComplete={(value) => onPatch({ i94AdmitUntilDate: value })} />}
         </div>
       </div>
     </details>
@@ -1104,16 +1268,27 @@ function FindingIcon({ tone }: { tone: Finding["tone"] }) {
 
 function SourceLink({ sourceId }: { sourceId: string }) {
   const citation = SOURCE_INDEX[sourceId];
+  const [open, setOpen] = useState(false);
   if (!citation) return null;
   return (
-    <a className="source-link" href={citation.url} title={citation.locator}>
-      {sourceLinkLabel(citation)}
-      <ExternalLink aria-hidden="true" />
-    </a>
+    <span className="source-link-wrap">
+      <button className="source-link" type="button" onClick={() => setOpen(true)}>See the cited rule <ExternalLink aria-hidden="true" /></button>
+      {open && (
+        <span className="citation-popover" role="dialog" aria-modal="true" aria-label="Rule citation">
+          <span className="citation-sheet">
+            <button type="button" className="citation-close" onClick={() => setOpen(false)} title="Close"><X aria-hidden="true" /></button>
+            <span className="citation-kicker">The exact part of the rule</span>
+            <strong>{citation.title}</strong>
+            <span className="citation-locator">{citation.locator}</span>
+            <a href={citation.url}>Open this paragraph in the official source <ArrowRight aria-hidden="true" /></a>
+          </span>
+        </span>
+      )}
+    </span>
   );
 }
 
-function ImpactClaimList({ claims }: { claims: ImpactClaim[] }) {
+function ImpactClaimList({ claims, onResolveQuestion }: { claims: ImpactClaim[]; onResolveQuestion?: (questionId: string) => void }) {
   return (
     <div className="impact-list">
       {claims.map((item) => (
@@ -1122,6 +1297,7 @@ function ImpactClaimList({ claims }: { claims: ImpactClaim[] }) {
           <div>
             <h3>{item.title}</h3>
             <p>{item.detail}</p>
+            {item.id === "opt-approved-partial-date" && onResolveQuestion && <button type="button" className="claim-action" onClick={() => onResolveQuestion("effectiveEadEnd")}>Add the exact EAD day <ArrowRight aria-hidden="true" /></button>}
             {item.sourceIds[0] && <SourceLink sourceId={item.sourceIds[0]} />}
           </div>
         </article>
@@ -1154,7 +1330,7 @@ function ImpactIndex({
   return (
     <section className="impact-index" aria-labelledby="impact-index-title">
       <header>
-        <p>Every issue this rule raises for you</p>
+        <p>Every issue this rule could raise for you, depending on your circumstances</p>
         <h3 id="impact-index-title">Click any issue to explore deeper</h3>
       </header>
       <div className="impact-index-list">
@@ -1198,7 +1374,8 @@ function ImpactList({
   completedTopics,
   activeTopic,
   fullInterview = false,
-  onExplore
+  onExplore,
+  onResolveQuestion
 }: {
   map: ImpactMap;
   scenario?: StudentScenario;
@@ -1208,6 +1385,7 @@ function ImpactList({
   activeTopic?: CanonicalTopic | null;
   fullInterview?: boolean;
   onExplore?: (topic: CanonicalTopic) => void;
+  onResolveQuestion?: (questionId: string) => void;
 }) {
   return (
     <section className="impact-area" aria-live="polite">
@@ -1221,7 +1399,7 @@ function ImpactList({
       {map.focusClaims.length > 0 && (
         <section className="impact-group">
           <h3>Your priorities</h3>
-          <ImpactClaimList claims={map.focusClaims} />
+          <ImpactClaimList claims={map.focusClaims} onResolveQuestion={onResolveQuestion} />
         </section>
       )}
       {scenario && topics && prominentTopics && completedTopics && onExplore && (
@@ -1365,6 +1543,35 @@ export function buildDisplayTimeline(
   return displayed.sort((left, right) => left.sortKey.localeCompare(right.sortKey));
 }
 
+export function buildTriggeredReturnTimeline(
+  scenario: StudentScenario,
+  calculatedEvents: TimelineItem[] = []
+): DisplayTimelineItem[] {
+  if (calculatedEvents.length) return displayTimelineItems(calculatedEvents);
+  const returnLabel = scenario.reentryDate
+    ? formatDate(scenario.reentryDate)
+    : formatPartialDate(scenario.reentryDateHint) ?? "After Sep 15, 2026";
+  const sortKey = scenario.reentryDate ?? (scenario.reentryDateHint ? `${scenario.reentryDateHint}-15` : "2026-09-16");
+  return [
+    {
+      date: DEFAULT_EFFECTIVE_DATE,
+      dateLabel: formatDate(DEFAULT_EFFECTIVE_DATE),
+      sortKey: DEFAULT_EFFECTIVE_DATE,
+      title: "The new rule begins",
+      detail: "A return after this date uses the new system.",
+      tone: "warning"
+    },
+    {
+      date: scenario.reentryDate,
+      dateLabel: returnLabel,
+      sortKey,
+      title: "Your return triggers the new rules",
+      detail: "You will receive a new I-94 with an end date. Confirm the I-20 you will use to calculate that date.",
+      tone: "warning"
+    }
+  ];
+}
+
 function Timeline({ title, subtitle, events }: { title: string; subtitle: string; events: DisplayTimelineItem[] }) {
   if (!events.length) return null;
   return (
@@ -1447,7 +1654,7 @@ function WhatHappened({ onBack }: { onBack: () => void }) {
         <h2>Travel can change the answer</h2>
         <p>For a current student with D/S, returning after September 15 ends the old-rule path and creates a fixed admission period. Travel can also provide an alternative to Form I-539 when you need more time: you may leave and ask CBP for a new F-1 admission period with an updated I-20 and valid travel documents. The I-20 program dates limit that period, and CBP makes the admission decision.</p>
         <h2>Some current students receive a one-time OPT option</h2>
-        <p>If your normal post-completion OPT filing window opens soon enough, a DSO-recommended Form I-765 received by USCIS by March 18, 2027 can avoid a separate Form I-539 solely because D/S ended. Travel before filing can change that route, so the order of the OPT filing and the trip matters.</p>
+        <p>If your normal post-completion OPT filing window opens soon enough, submitting a DSO-recommended Form I-765 by March 18, 2027 can avoid a separate Form I-539 solely because D/S ended. Travel before filing can change that route, so the order of the OPT filing and the trip matters.</p>
         <h2>School and program choices also change</h2>
         <p>The rule adds limits on first-year undergraduate transfers and program changes, graduate transfers and changes of educational objective, and later programs at the same or a lower education level. DHS can delay these particular provisions through September 14, 2028 and must announce a delay publicly.</p>
         <div className="article-links">
@@ -1475,11 +1682,12 @@ async function writeClipboard(text: string) {
   field.remove();
 }
 
-const PLANNER_SESSION_KEY = "f1-stay-map-session-v1";
+const PLANNER_SESSION_KEY = "f1-duration-mapper-session-v2";
 
 interface PlannerSession {
-  version: 1;
+  version: 2;
   experience: Experience;
+  storyMode?: StoryMode;
   scenario: StudentScenario;
   answered: string[];
   intake: IntakeExtractionResponse | null;
@@ -1498,7 +1706,7 @@ function readPlannerSession(): PlannerSession | null {
     const stored = window.sessionStorage.getItem(PLANNER_SESSION_KEY);
     if (!stored) return null;
     const parsed = JSON.parse(stored) as Partial<PlannerSession>;
-    if (parsed.version !== 1 || !parsed.scenario || !parsed.experience) return null;
+    if (parsed.version !== 2 || !parsed.scenario || !parsed.experience) return null;
     return parsed as PlannerSession;
   } catch {
     return null;
@@ -1525,6 +1733,7 @@ export default function App() {
   const restoredSession = useMemo(readPlannerSession, []);
   const [page, setPage] = useState<Page>(() => window.location.hash === "#what-happened" ? "overview" : "planner");
   const [experience, setExperience] = useState<Experience>(restoredSession?.experience ?? "welcome");
+  const [storyMode, setStoryMode] = useState<StoryMode>(restoredSession?.storyMode ?? "voice");
   const [scenario, setScenario] = useState<StudentScenario>(() => restoredSession?.scenario ? { ...DEFAULT_SCENARIO, ...restoredSession.scenario } : DEFAULT_SCENARIO);
   const [answered, setAnswered] = useState<Set<string>>(() => new Set(restoredSession?.answered ?? []));
   const [intake, setIntake] = useState<IntakeExtractionResponse | null>(restoredSession?.intake ?? null);
@@ -1545,7 +1754,14 @@ export default function App() {
   const [followUpTurns, setFollowUpTurns] = useState<AdvisorTurn[]>(restoredSession?.followUpTurns ?? []);
   const [followUpState, setFollowUpState] = useState<ReportState>("idle");
   const [shareNotice, setShareNotice] = useState("");
+  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
+  const [introSkipped, setIntroSkipped] = useState(false);
+  const [restartPrompt, setRestartPrompt] = useState(false);
+  const [reportReadyNotice, setReportReadyNotice] = useState("");
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   const reportAbortRef = useRef<AbortController | null>(null);
   const latestScenarioRef = useRef(scenario);
   const recordingRef = useRef(recording);
@@ -1556,6 +1772,7 @@ export default function App() {
   const queuedIntakeNarrativeRef = useRef<string | null>(null);
   const lastUnderstoodNarrativeRef = useRef("");
   const storyResultsRef = useRef<HTMLElement | null>(null);
+  const reportRef = useRef<HTMLElement | null>(null);
   const preserveReportForScenarioUpdateRef = useRef(false);
   const restoringReportRef = useRef(Boolean(restoredSession?.report));
 
@@ -1568,6 +1785,8 @@ export default function App() {
   useEffect(() => () => {
     intakeControllerRef.current?.abort();
     recognitionRef.current?.stop();
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    void audioContextRef.current?.close();
   }, []);
 
   useEffect(() => {
@@ -1576,8 +1795,9 @@ export default function App() {
 
   useEffect(() => {
     const session: PlannerSession = {
-      version: 1,
+      version: 2,
       experience,
+      storyMode,
       scenario,
       answered: Array.from(answered),
       intake,
@@ -1591,7 +1811,7 @@ export default function App() {
       followUpTurns
     };
     writePlannerSession(session);
-  }, [answered, experience, exploreTopics, focusCaptured, focusTopics, followUpTurns, intake, interviewMode, report, scenario, storyFinished, understoodNarrative]);
+  }, [answered, experience, exploreTopics, focusCaptured, focusTopics, followUpTurns, intake, interviewMode, report, scenario, storyFinished, storyMode, understoodNarrative]);
 
   useEffect(() => {
     recordingRef.current = recording;
@@ -1708,7 +1928,6 @@ export default function App() {
     return () => window.clearTimeout(timer);
   }, [experience, storyFinished, intakeState, scenario.narrative]);
 
-  const initialPresenceAnswered = answered.has("presence") && scenario.inUsOnEffectiveDate !== "unknown";
   const draftScenario = useMemo(
     () => intake ? mergeFacts(scenario, intake.facts, answered.has("presence")) : scenario,
     [answered, intake, scenario]
@@ -1729,6 +1948,9 @@ export default function App() {
     [studentCase]
   );
   const result = useMemo(() => calculateScenario(activeScenario), [activeScenario]);
+  const returnTriggersNewRules = isCurrent(activeScenario) &&
+    ["planned", "completed"].includes(activeScenario.travelPosture) &&
+    activeScenario.returningAfterEffectiveDate === "yes";
   const travelResult = useMemo(() => {
     if (
       !isCurrent(activeScenario) ||
@@ -1744,8 +1966,8 @@ export default function App() {
     [activeScenario, result.timeline, studentCase.events]
   );
   const returnTimeline = useMemo(
-    () => travelResult ? displayTimelineItems(travelResult.timeline) : [],
-    [travelResult]
+    () => returnTriggersNewRules ? buildTriggeredReturnTimeline(activeScenario, travelResult?.timeline ?? []) : [],
+    [activeScenario, returnTriggersNewRules, travelResult]
   );
   const coreQuestions = useMemo(
     () => buildCoreQuestions(scenario, answered, intake?.facts ?? []),
@@ -1810,14 +2032,23 @@ export default function App() {
     [scenario, answered, historyTopics, result.activityEnd]
   );
   const completedQuestions = questions.filter((question) => answered.has(question.id));
+  const editingQuestion = editingQuestionId
+    ? completedQuestions.find((question) => question.id === editingQuestionId)
+    : undefined;
   const currentNarrative = scenario.narrative?.trim() ?? "";
   const storyReady = Boolean(intake && intakeState === "ready" && understoodNarrative === currentNarrative);
-  const storyHighlights = intake?.highlights?.length
-    ? intake.highlights
-    : intake
-      ? usableFacts(intake.facts).slice(0, 6).map((fact) => `${factLabels[fact.field]}: ${displayFactValue(fact)}`)
-      : [];
-  const assumesEffectiveDatePresence = !answered.has("presence") && Boolean(intake?.facts.some((fact) => fact.field === "inUsOnEffectiveDate" && fact.value === "yes" && fact.needsConfirmation));
+  const storyHighlights = useMemo(() => {
+    if (!intake) return [];
+    const understood = buildIntakeHighlights(currentNarrative, intake.facts, intake.highlights, intake.topics);
+    const presence = scenario.inUsOnEffectiveDate === "yes"
+      ? "Current F-1 student on September 15"
+      : scenario.inUsOnEffectiveDate === "no"
+        ? "Not in U.S. F-1 status on September 15"
+        : undefined;
+    return presence
+      ? [presence, ...understood.filter((item) => !/^(?:current|incoming).*F-?1/i.test(item))].slice(0, 8)
+      : understood;
+  }, [currentNarrative, intake, scenario.inUsOnEffectiveDate]);
   const storyActionLabel = recording
     ? "I am done talking"
     : intakeState === "loading"
@@ -1830,6 +2061,25 @@ export default function App() {
 
   function navigateOverview(show: boolean) {
     window.location.hash = show ? "what-happened" : "";
+  }
+
+  function beginPath(mode: StoryMode | "full") {
+    if (mode !== "full") {
+      setStoryMode(mode);
+      setInterviewMode("focused");
+    } else setInterviewMode("full");
+    setExperience("gate");
+    window.scrollTo({ top: 0, behavior: "auto" });
+  }
+
+  function answerGatePresence(value: "yes" | "no") {
+    answerInitialPresence(value);
+    if (interviewMode === "full") {
+      startFullInterview();
+      return;
+    }
+    setExperience("story");
+    if (storyMode === "voice") void toggleSpeech();
   }
 
   function startFullInterview() {
@@ -1966,37 +2216,66 @@ export default function App() {
 
   function answerDate(question: Question, value?: string) {
     const patch: Partial<StudentScenario> = {};
+    const exact = value && isValidDateString(value) ? value : undefined;
+    const hint = value && !exact && formatPartialDate(value) ? value : undefined;
     switch (question.id) {
       case "entryDate":
-      case "returnDate": patch.reentryDate = value; break;
+      case "returnDate":
+        patch.reentryDate = exact;
+        patch.reentryDateHint = hint;
+        break;
       case "programStart":
-        patch.programStartDate = value;
+        patch.programStartDate = exact;
+        patch.programStartDateHint = hint;
         break;
       case "travelProgramStart":
-        if (scenario.reentryBasis === "longer_program_i20") patch.returnProgramStartDate = value;
-        else patch.programStartDate = value;
+        if (scenario.reentryBasis === "longer_program_i20") {
+          patch.returnProgramStartDate = exact;
+          patch.returnProgramStartDateHint = hint;
+        } else {
+          patch.programStartDate = exact;
+          patch.programStartDateHint = hint;
+        }
         break;
-      case "travelProgramEnd": patch.returnProgramEndDate = value; break;
+      case "travelProgramEnd":
+        patch.returnProgramEndDate = exact;
+        patch.returnProgramEndDateHint = hint;
+        break;
       case "programEnd":
-        patch.currentProgramEndDate = value;
-        patch.currentProgramEndDateHint = undefined;
-        if (isCurrent(scenario)) patch.programEndOnEffectiveDate = value;
+        patch.currentProgramEndDate = exact;
+        patch.currentProgramEndDateHint = hint;
+        if (isCurrent(scenario)) patch.programEndOnEffectiveDate = exact;
         break;
       case "effectiveEadEnd":
-        patch.currentEadEndDate = value;
-        patch.eadEndOnEffectiveDate = value;
-        patch.currentEadEndDateHint = undefined;
+        patch.currentEadEndDate = exact;
+        patch.eadEndOnEffectiveDate = exact;
+        patch.currentEadEndDateHint = hint;
         break;
-      case "optFilingDate": patch.optFilingDate = value; break;
-      case "eadEndDate": patch.currentEadEndDate = value; break;
-      case "earlyEndDate": patch.earlyEndDate = value; break;
-      case "nextProgramStart": patch.nextProgramStartDate = value; break;
-      case "nextProgramEnd": patch.nextProgramEndDate = value; break;
+      case "optFilingDate":
+        patch.optFilingDate = exact;
+        patch.optFilingDateHint = hint;
+        break;
+      case "eadEndDate":
+        patch.currentEadEndDate = exact;
+        patch.currentEadEndDateHint = hint;
+        break;
+      case "earlyEndDate":
+        patch.earlyEndDate = exact;
+        patch.earlyEndDateHint = hint;
+        break;
+      case "nextProgramStart":
+        patch.nextProgramStartDate = exact;
+        patch.nextProgramStartDateHint = hint;
+        break;
+      case "nextProgramEnd":
+        patch.nextProgramEndDate = exact;
+        patch.nextProgramEndDateHint = hint;
+        break;
     }
     patchScenario(patch);
     setAnswered((current) => {
       const next = new Set(current);
-      if (question.id === "effectiveEadEnd" && value && compareDates(value, DEFAULT_EFFECTIVE_DATE) < 0) {
+      if (question.id === "effectiveEadEnd" && exact && compareDates(exact, DEFAULT_EFFECTIVE_DATE) < 0) {
         next.delete("effectiveEadEnd");
         return next;
       }
@@ -2019,14 +2298,14 @@ export default function App() {
       next.startingPosition = "unknown";
     }
     if (id === "futureMethod") next.startingPosition = "unknown";
-    if (id === "entryDate" || id === "returnDate") next.reentryDate = undefined;
+    if (id === "entryDate" || id === "returnDate") { next.reentryDate = undefined; next.reentryDateHint = undefined; }
     if (id === "departBeforeRule") next.departBeforeEffectiveDate = "unknown";
-    if (id === "programStart") next.programStartDate = undefined;
+    if (id === "programStart") { next.programStartDate = undefined; next.programStartDateHint = undefined; }
     if (id === "travelProgramStart") {
-      if (next.reentryBasis === "longer_program_i20") next.returnProgramStartDate = undefined;
-      else next.programStartDate = undefined;
+      if (next.reentryBasis === "longer_program_i20") { next.returnProgramStartDate = undefined; next.returnProgramStartDateHint = undefined; }
+      else { next.programStartDate = undefined; next.programStartDateHint = undefined; }
     }
-    if (id === "travelProgramEnd") next.returnProgramEndDate = undefined;
+    if (id === "travelProgramEnd") { next.returnProgramEndDate = undefined; next.returnProgramEndDateHint = undefined; }
     if (id === "programEnd") { next.programEndOnEffectiveDate = undefined; next.currentProgramEndDate = undefined; next.currentProgramEndDateHint = undefined; }
     if (id === "effectiveEadEnd") { next.eadEndOnEffectiveDate = undefined; next.currentEadEndDate = undefined; next.currentEadEndDateHint = undefined; }
     if (id === "programType") next.programType = "unknown";
@@ -2034,9 +2313,9 @@ export default function App() {
     if (id === "optIntent") next.optIntent = "unknown";
     if (id === "optStatus") next.optStage = "none";
     if (id === "dsoRecommendation") next.dsoRecommendedOpt = "unknown";
-    if (id === "optFilingDate") next.optFilingDate = undefined;
+    if (id === "optFilingDate") { next.optFilingDate = undefined; next.optFilingDateHint = undefined; }
     if (id === "optBeforeTravel") next.optFiledBeforeDeparture = "unknown";
-    if (id === "eadEndDate") next.currentEadEndDate = undefined;
+    if (id === "eadEndDate") { next.currentEadEndDate = undefined; next.currentEadEndDateHint = undefined; }
     if (id === "travelIntent") next.travelPosture = "unknown";
     if (id === "returnAfterRule") next.returningAfterEffectiveDate = "unknown";
     if (id === "travelI20") next.reentryBasis = "unknown";
@@ -2044,22 +2323,17 @@ export default function App() {
     if (id === "programChange") next.academicProgramChangePlan = "unknown";
     if (id === "firstAcademicYear") next.firstAcademicYearCompleted = "unknown";
     if (id === "nextProgram") next.nextProgramLevelPlan = "unknown";
-    if (id === "nextProgramStart") next.nextProgramStartDate = undefined;
-    if (id === "nextProgramEnd") next.nextProgramEndDate = undefined;
+    if (id === "nextProgramStart") { next.nextProgramStartDate = undefined; next.nextProgramStartDateHint = undefined; }
+    if (id === "nextProgramEnd") { next.nextProgramEndDate = undefined; next.nextProgramEndDateHint = undefined; }
     if (id === "cptIntent") next.cptPlan = "none";
     if (id === "f2Dependents") next.hasF2Dependents = "unknown";
     if (id === "earlyEnd") { next.earlyEndSituation = "unknown"; next.earlyEndDate = undefined; }
-    if (id === "earlyEndDate") next.earlyEndDate = undefined;
+    if (id === "earlyEndDate") { next.earlyEndDate = undefined; next.earlyEndDateHint = undefined; }
     return next;
   }
 
   function editQuestion(id: string) {
-    setScenario((current) => resetQuestionValue(id, current));
-    setAnswered((current) => {
-      const next = new Set(current);
-      next.delete(id);
-      return next;
-    });
+    setEditingQuestionId(id);
     const topic = topicForQuestion(id);
     if (topic) {
       const affectedTopics = id === "firstAcademicYear"
@@ -2067,7 +2341,6 @@ export default function App() {
         : [topic];
       setExploreTopics((current) => canonicalTopics([...current, ...affectedTopics]));
     }
-    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function markFactsAnswered(facts: IntakeCandidateFact[]) {
@@ -2142,8 +2415,35 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function stopAudioInput() {
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
+    analyserRef.current = null;
+    const context = audioContextRef.current;
+    audioContextRef.current = null;
+    if (context && context.state !== "closed") void context.close();
+  }
+
+  async function startAudioInput() {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error("Microphone access is unavailable");
+    stopAudioInput();
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+    });
+    const context = new AudioContext();
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.08;
+    context.createMediaStreamSource(stream).connect(analyser);
+    if (context.state === "suspended") await context.resume();
+    mediaStreamRef.current = stream;
+    audioContextRef.current = context;
+    analyserRef.current = analyser;
+  }
+
   function stopTalking() {
     recognitionRef.current?.stop();
+    stopAudioInput();
     recordingRef.current = false;
     setRecording(false);
     setStoryFinished(true);
@@ -2182,7 +2482,7 @@ export default function App() {
   async function copyTestCase() {
     const { narrative: _privateNarrative, ...scenarioWithoutNarrative } = scenario;
     const payload = {
-      purpose: "F-1 Stay Map test case for review",
+      purpose: "F-1 Duration Mapper test case for review",
       privacy: "The voice or typed narrative and personal identifiers are excluded.",
       scenario: scenarioWithoutNarrative,
       primaryResult: resultSnapshot(primaryResult),
@@ -2205,7 +2505,7 @@ export default function App() {
     const text = [impactMap.headline, impactMap.summary, ...claims, report?.title, ...(report?.paragraphs ?? [])].filter(Boolean).join("\n\n");
     try {
       if (navigator.share) {
-        await navigator.share({ title: "My F-1 Stay Map", text, url: window.location.href });
+        await navigator.share({ title: "My F-1 Duration Map", text, url: window.location.href });
         setShareNotice("");
       } else {
         await writeClipboard(text);
@@ -2217,7 +2517,7 @@ export default function App() {
     }
   }
 
-  function toggleSpeech() {
+  async function toggleSpeech() {
     if (recording) {
       stopTalking();
       return;
@@ -2225,6 +2525,12 @@ export default function App() {
     const Recognition = window.SpeechRecognition ?? window.webkitSpeechRecognition;
     if (!Recognition) {
       setIntakeNotice("Voice input is not available in this browser. You can type your story here instead.");
+      return;
+    }
+    try {
+      await startAudioInput();
+    } catch {
+      setIntakeNotice("Microphone access did not start. Check your browser permission, or type your story instead.");
       return;
     }
     const recognition = new Recognition();
@@ -2250,11 +2556,13 @@ export default function App() {
       }
     };
     recognition.onerror = () => {
+      stopAudioInput();
       recordingRef.current = false;
       setRecording(false);
       setIntakeNotice("Voice input stopped. Your transcript is saved below.");
     };
     recognition.onend = () => {
+      stopAudioInput();
       recordingRef.current = false;
       setRecording(false);
       const unfinishedPhrase = interimTranscriptRef.current.trim();
@@ -2270,7 +2578,13 @@ export default function App() {
       if (narrative.length >= 12) void understandNarrative(narrative);
     };
     recognitionRef.current = recognition;
-    recognition.start();
+    try {
+      recognition.start();
+    } catch {
+      stopAudioInput();
+      setIntakeNotice("Voice input did not start. You can try again or type your story instead.");
+      return;
+    }
     recordingRef.current = true;
     setRecording(true);
     setStoryFinished(false);
@@ -2288,6 +2602,7 @@ export default function App() {
     reportAbortRef.current = controller;
     setReportState("loading");
     setReportError("");
+    setReportReadyNotice("");
     try {
       const reportTopics = canonicalTopics([...reportFocusTopics, ...reportExploreTopics]);
       const reportCase = buildStudentCase(reportScenario, intake?.facts ?? [], reportTopics, intake?.events ?? []);
@@ -2346,6 +2661,14 @@ export default function App() {
         setReport(body);
         setReportState("ready");
         setReportError("");
+        setReportReadyNotice("Your advisement is ready.");
+        window.setTimeout(() => {
+          reportRef.current?.focus({ preventScroll: true });
+          reportRef.current?.scrollIntoView({
+            behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+            block: "start"
+          });
+        }, 80);
         return;
       }
       throw new Error("Report did not pass quality checks");
@@ -2353,6 +2676,7 @@ export default function App() {
       if (error instanceof DOMException && error.name === "AbortError") return;
       setReportError(error instanceof Error ? error.message : "The advisement request did not complete.");
       setReportState("failed");
+      window.setTimeout(() => reportRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
     }
   }
 
@@ -2420,6 +2744,7 @@ export default function App() {
     lastUnderstoodNarrativeRef.current = "";
     interimTranscriptRef.current = "";
     recognitionRef.current?.stop();
+    stopAudioInput();
     recognitionRef.current = null;
     recordingRef.current = false;
     clearPlannerSession();
@@ -2438,10 +2763,14 @@ export default function App() {
     setReport(null);
     setReportState("idle");
     setReportError("");
+    setReportReadyNotice("");
     setFollowUpQuestion("");
     setFollowUpTurns([]);
     setFollowUpState("idle");
     setShareNotice("");
+    setEditingQuestionId(null);
+    setRestartPrompt(false);
+    setIntroSkipped(false);
     setExperience("welcome");
   }
 
@@ -2449,88 +2778,95 @@ export default function App() {
 
   if (experience === "welcome") {
     return (
-      <main className="welcome-screen">
-        <nav className="welcome-nav"><strong>F-1 Stay Map</strong><button type="button" onClick={() => navigateOverview(true)}>What happened?</button></nav>
+      <main
+        className={`welcome-screen ${introSkipped ? "intro-complete" : ""}`}
+        onPointerDown={() => setIntroSkipped(true)}
+        onKeyDown={() => setIntroSkipped(true)}
+      >
+        <nav className="welcome-nav wordmark-reveal"><strong>F-1 Duration Mapper</strong><button type="button" onClick={() => navigateOverview(true)}>What happened?</button></nav>
         <section className="welcome-copy">
-          <p className="reveal-line line-one">The world has changed for F-1 students.</p>
-          <h1 className="reveal-line line-two">An F-1 visa no longer means an open-ended stay.</h1>
-          <p className="welcome-detail reveal-line line-three">Tell us your story, and we will show what the new rules mean for you.</p>
-          <section className="welcome-gate reveal-line line-four" aria-labelledby="welcome-gate-question">
-            <p>One question first</p>
-            <h2 id="welcome-gate-question">Will you be in the United States in valid F-1 status on September 15, 2026?</h2>
-            <span>This means you will be physically in the United States and your F-1 status will be active that day.</span>
-            <div className="presence-options" role="group" aria-label="Your September 15 situation">
-              <button type="button" className={scenario.inUsOnEffectiveDate === "yes" ? "selected" : ""} aria-pressed={scenario.inUsOnEffectiveDate === "yes"} onClick={() => answerInitialPresence("yes")}>Yes, I will</button>
-              <button type="button" className={scenario.inUsOnEffectiveDate === "no" ? "selected" : ""} aria-pressed={scenario.inUsOnEffectiveDate === "no"} onClick={() => answerInitialPresence("no")}>No, I will not</button>
-            </div>
-          </section>
-          {initialPresenceAnswered && (
-            <div className="welcome-actions intake-options">
-              <button type="button" className="voice-start" onClick={() => { setExperience("story"); window.setTimeout(toggleSpeech, 0); }}><span className="listening-light" aria-hidden="true" /><Mic aria-hidden="true" /> Start talking</button>
-              <button type="button" className="secondary-start" onClick={() => setExperience("story")}><Keyboard aria-hidden="true" /> Type your story</button>
-              <button type="button" className="quiet-start" onClick={startFullInterview}>Take the full interview <ArrowRight aria-hidden="true" /></button>
-            </div>
-          )}
+          <h1 className="hero-beat beat-one">F-1 status no longer comes with an open-ended stay.</h1>
+          <p className="hero-beat beat-two">Every F-1 student needs to understand what the new rules mean for their own plans.</p>
+          <p className="hero-beat beat-three"><em>We can help.</em></p>
+          <div className="welcome-actions actions-reveal">
+            <button type="button" className="voice-start" onClick={() => beginPath("voice")}><span className="listening-light" aria-hidden="true" /><Mic aria-hidden="true" /> Tell us your situation</button>
+            <button type="button" className="secondary-start" onClick={() => beginPath("type")}><Keyboard aria-hidden="true" /> Type instead</button>
+            <button type="button" className="quiet-start" onClick={() => beginPath("full")}>Take the full interview <ArrowRight aria-hidden="true" /></button>
+          </div>
         </section>
-        <footer><span>Private by design: no SEVIS ID, passport number, or document upload is needed.</span><span>Rule status checked July 19, 2026</span></footer>
+        <footer className="footer-reveal"><span>No SEVIS ID, passport number, or document upload is needed.</span><span>Rule status checked July 19, 2026</span></footer>
+      </main>
+    );
+  }
+
+  if (experience === "gate") {
+    return (
+      <main className="gate-screen">
+        <header className="gate-header"><strong>F-1 Duration Mapper</strong><button type="button" onClick={() => { setExperience("welcome"); setInterviewMode("focused"); }}><ArrowLeft aria-hidden="true" /> Back</button></header>
+        <section className="gate-question" aria-labelledby="gate-question-title">
+          <p>One question first</p>
+          <h1 id="gate-question-title">Will you be in the United States in valid F-1 status on September 15, 2026?</h1>
+          <span>This means you will be physically in the United States with active F-1 status that day.</span>
+          <div className="presence-options" role="group" aria-label="Your September 15 situation">
+            <button type="button" onClick={() => answerGatePresence("yes")}>Yes, I will</button>
+            <button type="button" onClick={() => answerGatePresence("no")}>No, I will not</button>
+          </div>
+        </section>
+        <footer><button type="button" onClick={() => navigateOverview(true)}>What happened? <ArrowRight aria-hidden="true" /></button></footer>
       </main>
     );
   }
 
   if (experience === "story") {
     return (
-      <main className={`story-screen ${currentNarrative ? "has-live-results" : ""} ${storyFinished ? "is-finished" : ""}`}>
-        <header className="app-header"><button type="button" className="brand" onClick={restart}>F-1 Stay Map</button><button type="button" className="header-link" onClick={() => navigateOverview(true)}>What happened?</button></header>
+      <main className={`story-screen ${storyMode === "voice" ? "voice-mode" : "type-mode"} ${currentNarrative ? "has-live-results" : ""} ${storyFinished ? "is-finished" : ""}`}>
+        <header className="app-header"><span className="brand">F-1 Duration Mapper</span><div><button type="button" className="header-link" onClick={() => navigateOverview(true)}>What happened?</button><button type="button" className="start-over-action" onClick={() => setRestartPrompt(true)}><RotateCcw aria-hidden="true" /> Start over</button></div></header>
         <section className={`story-listening ${recording ? "is-recording" : ""}`}>
-          <div className="waveform" aria-hidden="true">{Array.from({ length: 22 }, (_, index) => <span key={index} style={{ animationDelay: `${index * 55}ms` }} />)}</div>
-          <p className="story-state">{recording ? "Listening" : "Tell me what is happening"}</p>
-          <h1>{recording ? "Speak in your own words." : "Talk or type. You do not need to know the legal terms."}</h1>
-          <textarea
-            autoFocus={!recording}
-            value={scenario.narrative ?? ""}
-            onChange={(event) => patchScenario({ narrative: event.currentTarget.value })}
-            placeholder="For example: I am in the U.S. now. My I-20 ends in May 2031, I hope to use OPT, and I may travel next summer..."
-            aria-label="Your F-1 story"
-          />
-          {interimTranscript && <p className="interim-text">{interimTranscript}</p>}
-          <div className="story-controls">
-            <button type="button" className="round-control" onClick={toggleSpeech} title={recording ? "Stop listening" : "Start listening"}>{recording ? <Square aria-hidden="true" /> : <Mic aria-hidden="true" />}</button>
-            <span aria-live="polite">{recording ? (intake ? "Your results are updating as you speak." : "Listening and building your first results...") : intakeNotice || "Do not include a SEVIS ID or passport number."}</span>
-            <button type="button" className="finish-story" onClick={handleStoryAction} disabled={!recording && (!currentNarrative || intakeState === "loading")}>
-              {storyActionLabel}
-              {recording ? <Square aria-hidden="true" /> : intakeState === "loading" ? <RefreshCw className="spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
-            </button>
-          </div>
+          {storyMode === "voice" ? (
+            <>
+              <LiveOscilloscope analyser={analyserRef.current} active={recording} />
+              <p className="story-state">{recording ? "Listening" : storyFinished ? "Finished listening" : "Ready when you are"}</p>
+              <h1>{recording ? "Tell us what is happening." : storyFinished ? "Here is what we heard." : "Speak in your own words."}</h1>
+              <button type="button" className={`microphone-control ${recording ? "active" : ""}`} onClick={() => void toggleSpeech()} title={recording ? "Stop listening" : "Start listening"}>{recording ? <Square aria-hidden="true" /> : <Mic aria-hidden="true" />}</button>
+              <p className="voice-status" aria-live="polite">{recording ? "Speak naturally. Pauses are fine." : intakeNotice || (currentNarrative ? "Press the microphone to add more." : "Press the microphone to start speaking.")}</p>
+              <p className="sr-only" aria-live="polite">{interimTranscript}</p>
+              {!recording && currentNarrative && (
+                <details className="transcript-review"><summary>Review or edit what you said <ChevronDown aria-hidden="true" /></summary><textarea value={scenario.narrative ?? ""} onChange={(event) => patchScenario({ narrative: event.currentTarget.value })} aria-label="Your spoken F-1 story" /></details>
+              )}
+              <button type="button" className="finish-story" onClick={handleStoryAction} disabled={!recording && (!currentNarrative || intakeState === "loading")}>
+                {storyActionLabel}
+                {recording ? <Square aria-hidden="true" /> : intakeState === "loading" ? <RefreshCw className="spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="story-state">Tell us your situation</p>
+              <h1>Write in your own words.</h1>
+              <textarea autoFocus value={scenario.narrative ?? ""} onChange={(event) => patchScenario({ narrative: event.currentTarget.value })} placeholder="For example: My I-20 ends in May 2031, I hope to use OPT, and I may travel next summer..." aria-label="Your F-1 story" />
+              <p className="voice-status" aria-live="polite">{intakeNotice || "You do not need to know the legal terms."}</p>
+              <button type="button" className="finish-story" onClick={handleStoryAction} disabled={!currentNarrative || intakeState === "loading"}>{storyActionLabel}{intakeState === "loading" ? <RefreshCw className="spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}</button>
+            </>
+          )}
         </section>
         {scenario.narrative && (
           <section className="story-understanding" ref={storyResultsRef}>
             {intake ? (
-              <>
-                <div className="understood-facts">
-                  <p className="section-eyebrow">What I understand</p>
-                  <h2>The details that matter for this rule</h2>
-                  <ul className="story-highlights">
-                    {storyHighlights.map((highlight) => <li key={highlight}><Check aria-hidden="true" /><span>{highlight}</span></li>)}
-                  </ul>
-                  {assumesEffectiveDatePresence && (
-                    <div className="working-assumption">
-                      <CircleHelp aria-hidden="true" />
-                      <div><strong>Assuming for now</strong><span>Because your studies continue beyond September 15, I am assuming you will be in the United States in valid F-1 status that day. You can correct this on the next screen.</span></div>
-                    </div>
-                  )}
-                </div>
-                <ImpactList map={displayedImpactMap} />
-              </>
+              <div className="understood-facts">
+                <p className="section-eyebrow">What we understand</p>
+                <h2>Your situation, so far</h2>
+                <ul className="story-highlights">{storyHighlights.map((highlight) => <li key={highlight}><Check aria-hidden="true" /><span>{highlight}</span></li>)}</ul>
+                <div className="story-impact-brief"><span>First result</span><strong>{displayedImpactMap.headline}</strong><p>{displayedImpactMap.summary}</p></div>
+              </div>
             ) : (
               <div className="understanding-waiting">
                 <RefreshCw className={intakeState === "loading" ? "spin" : ""} aria-hidden="true" />
-                <p className="section-eyebrow">Your results will appear here</p>
-                <h2>I am listening for dates, plans, travel, work, and study details.</h2>
-                <p>The first facts will appear while you are still speaking.</p>
+                <p className="section-eyebrow">Listening for what matters</p>
+                <h2>Your relevant details will appear here.</h2>
               </div>
             )}
           </section>
         )}
+        {restartPrompt && <RestartDialog onCancel={() => setRestartPrompt(false)} onConfirm={restart} />}
       </main>
     );
   }
@@ -2538,8 +2874,8 @@ export default function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <button type="button" className="brand" onClick={restart}>F-1 Stay Map</button>
-        <div><button type="button" className="header-link" onClick={() => navigateOverview(true)}>What happened?</button><button type="button" className="icon-action" onClick={restart} title="Start over"><RotateCcw aria-hidden="true" /></button></div>
+        <span className="brand">F-1 Duration Mapper</span>
+        <div><button type="button" className="header-link" onClick={() => navigateOverview(true)}>What happened?</button><button type="button" className="start-over-action" onClick={() => setRestartPrompt(true)}><RotateCcw aria-hidden="true" /> Start over</button></div>
       </header>
 
       <main className="planner-layout">
@@ -2586,6 +2922,7 @@ export default function App() {
             activeTopic={activeImpactTopic}
             fullInterview={interviewMode === "full"}
             onExplore={exploreImpact}
+            onResolveQuestion={editQuestion}
           />
           <div className="result-actions" aria-label="Save or share your results">
             <button type="button" onClick={() => window.print()}><Printer aria-hidden="true" /> Print or save PDF</button>
@@ -2615,11 +2952,12 @@ export default function App() {
           }
           events={stayTimeline}
         />
-        {travelResult && <Timeline title="If you leave and return after September 15" subtitle="Your return creates a separate dated I-94. The I-94 issued by CBP controls." events={returnTimeline} />}
+        {returnTriggersNewRules && <Timeline title="When you return after September 15" subtitle="Your return triggers the new rules immediately. The I-94 issued by CBP controls the exact end date." events={returnTimeline} />}
       </section>
 
       {(report || reportState === "loading" || reportState === "failed") && (
-        <section className="report-band" aria-live="polite">
+        <section className="report-band" aria-live="polite" ref={reportRef} tabIndex={-1}>
+          {reportReadyNotice && reportState === "ready" && <div className="report-ready" role="status"><CheckCircle2 aria-hidden="true" />{reportReadyNotice}</div>}
           {reportState === "loading" && <div className="report-loading"><RefreshCw className="spin" aria-hidden="true" /><p>Writing your advisement.</p></div>}
           {reportState === "failed" && <div className="report-error"><AlertTriangle aria-hidden="true" /><div><h2>The advisement did not finish.</h2><p>Your work is still here. Try the advisor again without re-entering anything.</p>{reportError && <details><summary>Why this attempt failed</summary><p>{reportError}</p></details>}<button type="button" onClick={() => void createReport()}><RefreshCw aria-hidden="true" /> Try the advisor again</button></div></div>}
           {report && (
@@ -2637,6 +2975,16 @@ export default function App() {
           <div className="source-list">{primaryResult.citations.map((citation) => <a key={citation.id} href={citation.url} target="_blank" rel="noreferrer"><span><strong>{citation.title}</strong><small>{citation.locator}</small></span><ExternalLink aria-hidden="true" /></a>)}</div>
         </details>
       </section>
+      {editingQuestion && (
+        <EditQuestionDialog
+          question={editingQuestion}
+          onAnswer={(value) => { answer(editingQuestion, value); setEditingQuestionId(null); }}
+          onDate={(value) => { answerDate(editingQuestion, value); setEditingQuestionId(null); }}
+          onUnknownDate={() => { answerDate(editingQuestion, undefined); setEditingQuestionId(null); }}
+          onCancel={() => setEditingQuestionId(null)}
+        />
+      )}
+      {restartPrompt && <RestartDialog onCancel={() => setRestartPrompt(false)} onConfirm={restart} />}
     </div>
   );
 }

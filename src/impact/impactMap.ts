@@ -173,6 +173,10 @@ function mainConclusion(
 
   const coverageConflict = stayResult.findings.find((item) => item.id === "document-ends-before-effective-date");
   const approvedEadHint = scenario.optStage.endsWith("approved") ? partialDateLabel(scenario.currentEadEndDateHint) : undefined;
+  const returnTriggersNewRules =
+    scenario.startingPosition === "current_ds_inside_us" &&
+    ["planned", "completed"].includes(scenario.travelPosture) &&
+    scenario.returningAfterEffectiveDate === "yes";
   if (transitionPath && approvedEadHint && !scenario.currentEadEndDate) {
     return {
       headline: "You are under the old rules",
@@ -188,13 +192,13 @@ function mainConclusion(
     };
   }
 
-  if (travelResult) {
-    const projected = travelResult.i94AdmitUntilDate
+  if (returnTriggersNewRules) {
+    const projected = travelResult?.i94AdmitUntilDate
       ? ` Your projected I-94 would end ${formatDate(travelResult.i94AdmitUntilDate)}; the I-94 issued by CBP controls.`
       : " The I-20 used at entry and the I-94 issued by CBP will set your new end date.";
     return {
-      headline: "Your return puts you under the new rules",
-      summary: `Returning after September 15, 2026 moves you from the old D/S rules to a dated F-1 admission period.${projected}`,
+      headline: "Travel triggers the new rules",
+      summary: `Returning to the United States after September 15, 2026 puts you under the new rules. You will receive a new I-94 with an end date.${projected}`,
       sourceIds: ["8CFR-214-1-M1", "8CFR-214-1-A4"]
     };
   }
@@ -319,7 +323,7 @@ function optClaim(
       id: "opt-order-before-travel",
       category: "opt",
       tone: "warning",
-      title: "File Form I-765 before you leave",
+      title: "Submit Form I-765 before you leave",
       detail: `Your normal filing window opens ${formatDate(normalWindowOpens!)}. ${scenario.dsoRecommendedOpt === "yes" ? "" : "Your DSO must recommend OPT first. "}Submit Form I-765 before your trip and by March 18, 2027 to avoid Form I-539 for that OPT period.`,
       sourceIds: ["8CFR-214-1-M1-OPT"]
     };
@@ -331,7 +335,7 @@ function optClaim(
       category: "opt",
       tone: "good",
       title: "Your filing date fits the one-time OPT exception",
-      detail: `If USCIS receives your Form I-765 by ${formatDate(OPT_TRANSITION_I765_DEADLINE)} while the old rules still cover you, you do not need Form I-539 solely because the rule changed.`,
+      detail: `If you submit Form I-765 by ${formatDate(OPT_TRANSITION_I765_DEADLINE)} while the old rules still cover you, you do not need Form I-539 solely because the rule changed.`,
       sourceIds: ["8CFR-214-1-M1-OPT"]
     };
   }
@@ -342,7 +346,7 @@ function optClaim(
       category: "opt",
       tone: "good",
       title: "You may be able to skip Form I-539 for OPT",
-      detail: `After your DSO recommends OPT, USCIS must receive Form I-765 by ${formatDate(OPT_TRANSITION_I765_DEADLINE)} and before your old-rule stay ends.`,
+      detail: `After your DSO recommends OPT, submit Form I-765 by ${formatDate(OPT_TRANSITION_I765_DEADLINE)} and before your old-rule stay ends.`,
       sourceIds: ["8CFR-214-1-M1-OPT"]
     };
   }
@@ -406,6 +410,9 @@ export function buildImpactMap(
     scenario.inUsOnEffectiveDate === "yes" &&
     scenario.maintainingStatusOnEffectiveDate === "yes" &&
     scenario.admissionBasis === "duration_of_status";
+  const returnTriggersNewRules = transition &&
+    ["planned", "completed"].includes(scenario.travelPosture) &&
+    scenario.returningAfterEffectiveDate === "yes";
   const fixed = primaryResult.classification !== "transition_ds" && primaryResult.classification !== "manual_review";
   const needsExtension = (result: PlannerResult) => Boolean(
     result.extensionNeededBy ||
@@ -436,13 +443,22 @@ export function buildImpactMap(
           : "Without a post-September 15 return, the old-rule timeline remains available.",
         sourceIds: ["8CFR-214-1-M1"]
       });
+    } else if (returnTriggersNewRules) {
+      push({
+        id: "travel-trigger-confirmed",
+        category: "travel",
+        tone: "warning",
+        title: "Travel triggers the new rules",
+        detail: "Returning after September 15, 2026 gives you a new I-94 with an end date. Confirm which I-20 you will use to calculate that date.",
+        sourceIds: ["8CFR-214-1-M1", "8CFR-214-1-A4"]
+      });
     } else {
       push({
         id: "travel-can-end-ds",
         category: "travel",
         tone: scenario.travelPosture === "planned" ? "warning" : "info",
-        title: "A return after September 15 starts the new rules",
-        detail: "Any F-1 return after that date creates a dated admission period. The I-20 used at entry and the I-94 issued by CBP control the new end date.",
+        title: "Returning after September 15 triggers the new rules",
+        detail: "When you return, you receive a new I-94 with an end date. Your I-20 and the I-94 issued by CBP control that date.",
         sourceIds: ["8CFR-214-1-M1", "8CFR-214-1-A4"]
       });
     }
@@ -482,8 +498,8 @@ export function buildImpactMap(
       id: "later-program-extension-date-needed",
       category: "extension",
       tone: "warning",
-      title: "Your next program dates decide whether Form I-539 is needed",
-      detail: `${eadLabel ? `Your approved OPT ends ${eadLabel}. ` : ""}If the next program needs more time than your old-rule period provides, file Form I-539 before that period ends or leave and request a new admission with the next I-20.`,
+      title: "Another program may require more F-1 time",
+      detail: `${eadLabel ? `Your approved OPT ends ${eadLabel}. ` : ""}If your next program continues beyond your current stay, file Form I-539 before that stay ends or travel and return with the next I-20.`,
       sourceIds: ["8CFR-214-1-M1", "8CFR-214-2-F7"]
     });
   }
@@ -619,16 +635,16 @@ export function buildImpactMap(
       id: "completed-graduate-transfer",
       category: "school_transfer",
       tone: "good",
-      title: "The graduate mid-program transfer limit does not apply to your completed degree",
-      detail: "That restriction applies while a graduate program is still in progress. Moving your SEVIS record after completing the program is analyzed under the rules for a later program.",
+      title: "Your completed degree does not block this transfer",
+      detail: "You finished this graduate program before the new rule begins. Moving your SEVIS record now is treated as starting a later program, not transferring during that completed program.",
       sourceIds: ["8CFR-214-2-F5II-GRADUATE"]
     });
     push({
       id: "completed-graduate-change",
       category: "program_change",
       tone: "good",
-      title: "You are not changing the graduate program you already finished",
-      detail: "Starting a later program is different from changing the major or degree level of an active graduate program.",
+      title: "A later program is not a change to your completed degree",
+      detail: "The rule against changing an active graduate program does not apply to a program you already finished. Separate rules govern what you may study next.",
       sourceIds: ["8CFR-214-2-F5II-GRADUATE"]
     });
   } else if (scenario.educationLevel === "graduate") {

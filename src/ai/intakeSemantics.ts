@@ -94,6 +94,7 @@ function currentStudentCue(narrative: string): boolean {
     /\b(?:first|second|third|fourth|fifth)[ -]?year\b[^.!?\n]{0,50}\b(?:f-?1|international)?\s*student\b/i.test(narrative) ||
     /\b(?:freshman|sophomore|junior|senior)\b[^.!?\n]{0,50}\b(?:f-?1|international)?\s*student\b/i.test(narrative) ||
     /\bcurrent (?:f-?1|international) student\b/i.test(narrative) ||
+    /\bcurrent\s+(?:undergraduate|graduate|college|university)?\s*student\b/i.test(narrative) ||
     /\b(?:currently|now)\b[^.!?\n]{0,35}\b(?:doing|on|using)\s+(?:my\s+)?(?:post-completion\s+)?opt\b/i.test(narrative)
   );
 }
@@ -136,8 +137,16 @@ function addFact(
   value: string,
   needsConfirmation = false
 ) {
-  if (facts.some((fact) => fact.field === field && fact.value !== "unknown")) return;
-  facts.push({ field, value, confidence: needsConfirmation ? "medium" : "high", needsConfirmation });
+  const existingIndex = facts.findIndex((fact) => fact.field === field);
+  if (value === "unknown" && existingIndex >= 0 && facts[existingIndex].value !== "unknown") return;
+  const explicitFact: IntakeCandidateFact = {
+    field,
+    value,
+    confidence: needsConfirmation ? "medium" : "high",
+    needsConfirmation
+  };
+  if (existingIndex >= 0) facts[existingIndex] = explicitFact;
+  else facts.push(explicitFact);
 }
 
 function completionMonth(narrative: string): string | undefined {
@@ -152,6 +161,15 @@ function completionMonth(narrative: string): string | undefined {
     if (match) return monthYear(match[1], match[2]);
   }
   return undefined;
+}
+
+function relativeCompletionMonth(narrative: string, referenceDate: Date): string | undefined {
+  if (!/\b(?:graduate|graduating|finish|finishing|complete|completing)\b[^.!?\n]{0,45}\bnext spring\b/i.test(narrative)) {
+    return undefined;
+  }
+  const currentYear = referenceDate.getUTCFullYear();
+  const currentMonth = referenceDate.getUTCMonth() + 1;
+  return `${currentMonth < 5 ? currentYear : currentYear + 1}-05`;
 }
 
 function optEndMonth(narrative: string): string | undefined {
@@ -169,10 +187,11 @@ function optEndMonth(narrative: string): string | undefined {
 
 export function addExplicitNarrativeFacts(
   narrative: string,
-  modelFacts: IntakeCandidateFact[]
+  modelFacts: IntakeCandidateFact[],
+  referenceDate = new Date()
 ): IntakeCandidateFact[] {
   const facts = [...modelFacts];
-  const completed = completionMonth(narrative);
+  const completed = completionMonth(narrative) ?? relativeCompletionMonth(narrative, referenceDate);
   const optEnd = optEndMonth(narrative);
   const onApprovedOpt = /\b(?:currently|now)\b[^.!?\n]{0,35}\b(?:doing|on|using)\s+(?:my\s+)?(?:post-completion\s+)?opt\b/i.test(narrative) ||
     /\bmy\s+(?:post-completion\s+)?opt\s+is\s+(?:currently\s+)?(?:active|approved|ongoing)\b/i.test(narrative);
@@ -270,7 +289,16 @@ export function buildIntakeHighlights(
   const education = fact("educationLevel");
   if (education?.value === "undergraduate") generated.push("Undergraduate student");
   if (education?.value === "graduate") generated.push("Graduate student");
-  const graduation = completionHighlight(narrative);
+  const explicitProgramEnd = completionMonth(narrative);
+  const programEnd = explicitProgramEnd ?? fact("currentProgramEndDate")?.value ?? fact("programEndOnEffectiveDate")?.value;
+  const programEndLabel = programEnd ? (formatDateFact(programEnd) ?? programEnd) : undefined;
+  const graduation = programEndLabel
+    ? /\b(?:graduated|completed|finished)\b/i.test(narrative)
+      ? `Program completed ${programEndLabel}`
+      : /\b(?:graduate|graduating|finish|finishing|complete|completing)\b/i.test(narrative)
+        ? `Graduating ${programEndLabel}`
+        : `Program ends ${programEndLabel}`
+    : completionHighlight(narrative);
   if (graduation) generated.push(graduation);
   const eadEnd = fact("currentEadEndDate") ?? fact("eadEndOnEffectiveDate");
   const eadEndLabel = eadEnd ? (formatDateFact(eadEnd.value) ?? eadEnd.value) : undefined;

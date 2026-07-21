@@ -86,7 +86,8 @@ describe("voice intake semantics", () => {
       "immigrant_intent",
       "school_filing_support"
     ]));
-    expect(buildIntakeHighlights(narrative, facts, [], topics)).toEqual(expect.arrayContaining([
+    const highlights = buildIntakeHighlights(narrative, facts, [], topics);
+    expect(highlights).toEqual(expect.arrayContaining([
       "Current F-1 student",
       "Graduate student",
       "Program completed May 2026",
@@ -94,6 +95,35 @@ describe("voice intake semantics", () => {
       "Plans a second master's degree",
       "Pending employment-based immigrant petition"
     ]));
+    expect(highlights).not.toContain("Program completed June 2027");
+  });
+
+  it("lets explicit program and OPT wording override a conflicting model guess", () => {
+    const narrative = "I recently graduated this May 2026 and am currently doing my OPT which expires in June 2027.";
+    const facts = addExplicitNarrativeFacts(narrative, [
+      { field: "currentProgramEndDate", value: "2027-06", confidence: "high", needsConfirmation: false },
+      { field: "currentEadEndDate", value: "2026-05", confidence: "high", needsConfirmation: false }
+    ]);
+
+    expect(facts.find((item) => item.field === "currentProgramEndDate")?.value).toBe("2026-05");
+    expect(facts.find((item) => item.field === "currentEadEndDate")?.value).toBe("2027-06");
+    expect(facts.find((item) => item.field === "eadEndOnEffectiveDate")?.value).toBe("2027-06");
+  });
+
+  it("treats next spring as a confirmable future estimate instead of a past date", () => {
+    const narrative = "I am a current undergraduate student graduating next spring. I want to do OPT.";
+    const explicit = addExplicitNarrativeFacts(
+      narrative,
+      [{ field: "currentProgramEndDate", value: "2026-05", confidence: "medium", needsConfirmation: true }],
+      new Date("2026-07-20T12:00:00Z")
+    );
+    const facts = addCurrentStudentAssumptions(narrative, explicit);
+
+    expect(facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "currentProgramEndDate", value: "2027-05", needsConfirmation: true }),
+      expect.objectContaining({ field: "startingPosition", value: "current_ds_inside_us" })
+    ]));
+    expect(buildIntakeHighlights(narrative, facts, [], ["opt"])).toContain("Graduating May 2027");
   });
 
   it("does not drop undergraduate status or a new-program concern when OPT is also mentioned", () => {

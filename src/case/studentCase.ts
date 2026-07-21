@@ -189,6 +189,21 @@ function buildEvents(
   for (const [index, event] of intakeEvents.entries()) {
     const start = caseDate(event.startDate);
     const end = caseDate(event.endDate);
+    const scenarioEvent = events.find((item) =>
+      !item.id.startsWith("intake-") &&
+      item.kind === event.kind &&
+      item.role === event.role
+    );
+    if (scenarioEvent) {
+      if (compatibleDate(start, scenarioEvent.start) && compatibleDate(end, scenarioEvent.end)) {
+        scenarioEvent.start ??= start;
+        scenarioEvent.end ??= end;
+        if (!scenarioEvent.educationLevel || scenarioEvent.educationLevel === "unknown") {
+          scenarioEvent.educationLevel = event.educationLevel;
+        }
+      }
+      continue;
+    }
     const existing = events.find((item) =>
       item.kind === event.kind &&
       item.role === event.role &&

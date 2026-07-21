@@ -493,7 +493,7 @@ function addOptFindings(
         "opt-dso-recommendation-needed",
         "question",
         "Get your DSO's OPT recommendation before filing",
-        "Your DSO must recommend post-completion OPT or STEM OPT in SEVIS first. If you stay in the United States under D/S and USCIS receives your I-765 on time, the new rule does not by itself require a separate Form I-539 with that OPT filing.",
+        "Your DSO must recommend post-completion OPT or STEM OPT in SEVIS first. If you stay in the United States under D/S and submit your I-765 on time, the new rule does not by itself require a separate Form I-539 with that OPT filing.",
         ["8CFR-214-1-M1-OPT"]
       )
     );
@@ -523,7 +523,7 @@ function addOptFindings(
         "opt-filing-date-needed",
         "question",
         "Your I-765 filing date controls the transition OPT path",
-        `If you stay in the United States and do not return after September 15, USCIS must receive your I-765 by March 18, 2027${latestDepartureDate ? ` and before your current D/S timeline ends on ${formatDate(latestDepartureDate)}` : ""}. Filing on time can let you use the transition OPT path without a separate Form I-539 solely because D/S ended.`,
+        `If you stay in the United States and do not return after September 15, submit your I-765 by March 18, 2027${latestDepartureDate ? ` and before your current D/S timeline ends on ${formatDate(latestDepartureDate)}` : ""}. Filing on time can let you use the transition OPT path without a separate Form I-539 solely because D/S ended.`,
         ["8CFR-214-1-M1-OPT"]
       )
     );
@@ -551,11 +551,11 @@ function addOptFindings(
     return;
   }
   if (latestDepartureDate && isAfter(scenario.optFilingDate, latestDepartureDate) && !isStem) {
-    findings.push(finding("opt-after-status-deadline", "danger", "This post-completion OPT filing is too late for the transition path", `USCIS must receive the I-765 before your current D/S timeline ends on ${formatDate(latestDepartureDate)}.`, ["8CFR-214-1-M1-OPT"]));
+    findings.push(finding("opt-after-status-deadline", "danger", "This post-completion OPT filing is too late for the transition path", `Submit the I-765 before your current D/S timeline ends on ${formatDate(latestDepartureDate)}.`, ["8CFR-214-1-M1-OPT"]));
     return;
   }
   if (isStem && scenario.currentEadEndDate && isAfter(scenario.optFilingDate, scenario.currentEadEndDate)) {
-    findings.push(finding("stem-after-ead", "danger", "This STEM OPT filing date is after the current EAD ends", `USCIS must receive the STEM OPT I-765 before the current EAD expires on ${formatDate(scenario.currentEadEndDate)}.`, ["8CFR-214-1-M1-OPT"]));
+    findings.push(finding("stem-after-ead", "danger", "This STEM OPT filing date is after the current EAD ends", `Submit the STEM OPT I-765 before the current EAD expires on ${formatDate(scenario.currentEadEndDate)}.`, ["8CFR-214-1-M1-OPT"]));
     return;
   }
   if (isStem && !scenario.currentEadEndDate) {

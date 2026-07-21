@@ -1,6 +1,6 @@
-# F-1 Stay Map
+# F-1 Duration Mapper
 
-F-1 Stay Map is an OpenAI Build Week app that turns DHS's July 17, 2026 duration-of-status final rule into a personal, source-linked planning experience for F-1 students.
+F-1 Duration Mapper is an OpenAI Build Week app that turns DHS's July 17, 2026 duration-of-status final rule into a personal, source-linked planning experience for F-1 students.
 
 Students can tell their story by voice or text, or answer a progressive interview. The app shows what it understands, updates a personal impact map as facts arrive, draws controlling dates such as OPT filing windows and extension deadlines on visual timelines, and produces a complete advisor-style report.
 
@@ -16,7 +16,7 @@ The legal/date engine is deterministic. The same confirmed facts always produce 
 - The report model may explain verified output; it may not alter a date, classification, or legal consequence.
 - Rule-scoped follow-ups use GPT-5.6 Sol at medium reasoning effort and can add confirmed facts back to the deterministic impact map.
 
-The app gives every supported partial result it can, identifies contradictions before continuing, and asks for the exact missing fact that would change the answer. It does not invent dates or convert ambiguous numeric dates such as `6/2/2029`.
+The app gives every supported partial result it can, identifies contradictions before continuing, and asks for the exact missing fact that would change the answer. It never invents an exact day or converts ambiguous numeric dates such as `6/2/2029`; clear relative phrases such as “next spring” become visible estimates that the student must confirm.
 
 ## Advising Flow
 
@@ -70,6 +70,6 @@ Henry/Chatbase is a private research cross-check only. The submitted runtime is 
 
 ## Sources
 
-The primary authority is the [Federal Register final rule](https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant), published July 17, 2026 and effective September 15, 2026. The app also links to the public [NAFSA overview](https://www.nafsa.org/regulatory-information/dhs-final-rule-ending-duration-status) and relevant USCIS material. Each result card links to the closest available page in the official rule PDF.
+The primary authority is the [Federal Register final rule](https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant), published July 17, 2026 and effective September 15, 2026. The app also links to the public [NAFSA overview](https://www.nafsa.org/regulatory-information/dhs-final-rule-ending-duration-status) and relevant USCIS material. Each rule citation opens a pronounced locator and the closest verified Federal Register paragraph anchor.
 
 This is a planning and issue-spotting tool, not legal advice. Because implementation guidance, fees, and agency practice can change, public release still requires a final source and advisor review.

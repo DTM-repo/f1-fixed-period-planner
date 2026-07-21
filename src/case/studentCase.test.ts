@@ -92,6 +92,29 @@ describe("student temporal case", () => {
     });
   });
 
+  it("does not add a conflicting model date to a role established by explicit facts", () => {
+    const studentCase = buildStudentCase(currentScenario({
+      currentProgramEndDateHint: "2026-05",
+      currentEadEndDateHint: "2027-06",
+      optIntent: "yes",
+      optStage: "post_completion_approved"
+    }), [], ["opt"], [{
+      kind: "program",
+      role: "completed_program",
+      label: "Program completed",
+      startDate: "",
+      endDate: "2027-06",
+      educationLevel: "graduate",
+      confidence: "high",
+      needsConfirmation: false
+    }]);
+
+    const completedPrograms = studentCase.events.filter((event) => event.role === "completed_program");
+    expect(completedPrograms).toHaveLength(1);
+    expect(completedPrograms[0]?.end?.value).toBe("2026-05");
+    expect(studentCase.events.find((event) => event.role === "approved_opt")?.end?.value).toBe("2027-06");
+  });
+
   it("removes categories that cannot apply to a completed-program-only case", () => {
     const studentCase = buildStudentCase(currentScenario({
       currentProgramEndDate: "2026-05-20",

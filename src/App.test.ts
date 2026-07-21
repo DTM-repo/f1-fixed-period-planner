@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCoreQuestions, buildDisplayTimeline, buildQuestions, hasEffectiveDateCoverageConflict, mergeFacts } from "./App";
+import { buildCoreQuestions, buildDisplayTimeline, buildQuestions, buildTriggeredReturnTimeline, hasEffectiveDateCoverageConflict, mergeFacts } from "./App";
 import { DEFAULT_SCENARIO } from "./content/demoScenarios";
 import type { IntakeCandidateFact } from "./ai/intakePayload";
 import type { StudentScenario } from "./engine/types";
@@ -238,7 +238,7 @@ describe("OPT and travel order", () => {
     };
     const questions = buildQuestions(scenario, travelAndOptAnswers, ["travel", "opt"], "2026-12-20");
     expect(questions.find((question) => question.id === "optBeforeTravel")?.prompt).toBe(
-      "Will you submit your Form I-765 before you leave the United States?"
+      "Can you submit your Form I-765 before you leave the United States?"
     );
   });
 
@@ -326,5 +326,17 @@ describe("full interview wording", () => {
     const travelQuestion = questions.find((question) => question.id === "travelIntent");
     expect(travelQuestion?.prompt).toBe("Are you planning to travel outside the United States?");
     expect(travelQuestion?.prompt).not.toContain("mentioned");
+  });
+});
+
+describe("immediate travel timeline", () => {
+  it("shows the rule trigger before the return I-20 is known", () => {
+    const timeline = buildTriggeredReturnTimeline({
+      ...currentStudent("2028-05-22"),
+      travelPosture: "planned",
+      returningAfterEffectiveDate: "yes",
+      reentryBasis: "unknown"
+    });
+    expect(timeline.map((event) => event.title)).toContain("Your return triggers the new rules");
   });
 });

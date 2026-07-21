@@ -149,11 +149,25 @@ describe("concise impact map", () => {
     const travel = calculateScenario(scenarioForFixedReentry(scenario));
     const map = buildImpactMap(scenario, stay, travel, ["travel", "extension"]);
     const ids = [...map.focusClaims, ...map.otherClaims].map((claim) => claim.id);
-    expect(map.headline).toBe("Your return puts you under the new rules");
+    expect(map.headline).toBe("Travel triggers the new rules");
     expect(ids).toContain("travel-stay-alternative");
     expect(ids).toContain("travel-may-avoid-i539");
     expect(ids).toContain("stay-route-needs-extension");
     expect(ids).not.toContain("more-time-needed");
+  });
+
+  it("shows the travel trigger before the return I-20 is known", () => {
+    const scenario = current({
+      travelPosture: "planned",
+      returningAfterEffectiveDate: "yes",
+      reentryBasis: "unknown"
+    });
+    const stay = calculateScenario(scenario);
+    const map = buildImpactMap(scenario, stay, null, ["travel"]);
+    const claims = [...map.focusClaims, ...map.otherClaims];
+
+    expect(map.headline).toBe("Travel triggers the new rules");
+    expect(claims.map((claim) => claim.id)).toContain("travel-trigger-confirmed");
   });
 
   it("does not claim that a return avoids Form I-539 when the projected admission still ends early", () => {

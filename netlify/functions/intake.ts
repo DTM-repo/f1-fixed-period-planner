@@ -37,7 +37,8 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
       task:
         "Build a structured temporal case brief from an F-1 student's narrative. Extract facts, distinguish separate past/current/future events, and identify concerns. Do not calculate legal results, deadlines, or status outcomes.",
       appKnownFacts: {
-        ruleEffectiveDate: DEFAULT_EFFECTIVE_DATE
+        ruleEffectiveDate: DEFAULT_EFFECTIVE_DATE,
+        currentDate: new Date().toISOString().slice(0, 10)
       },
       hardRules: [
         "Return only facts that are directly supported by the student's words.",
@@ -47,6 +48,7 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
         "Never omit a clearly labeled date merely because it conflicts with another fact. Return the conflicting fact with needsConfirmation=true so the app can ask the student to resolve it.",
         "Do not convert numeric slash dates like 6/2/2029 because date order differs by country.",
         "Do not invent a day when the student gives only a month and year.",
+        "Resolve clear relative timing such as next spring from appKnownFacts.currentDate. For a spring graduation, use May of the next spring as a month-level estimate with needsConfirmation=true; never invent a day.",
         "A graduation/program-completion date is not an OPT filing date, OPT start date, or EAD end date unless the student says so.",
         "Represent each distinct program, approved training period, planned trip, later program, and pending immigrant petition as its own event. Never collapse a completed program, current OPT, and a future program into one event.",
         "Use completed_program for a program already finished, active_program for the program covering current study, incoming_program for the first program of a future student, approved_opt only for approved current OPT, planned_opt for future OPT, and future_program for a later program after the current phase.",
@@ -66,7 +68,7 @@ function buildPrompt(payload: IntakeExtractionRequest): string {
         "If the student explicitly says no OPT, return optIntent=no and optStage=none. If an incoming student only describes a future plan to use OPT, return optIntent=yes and optStage=none. STEM OPT is a later extension of regular post-completion OPT, never an alternative first OPT type. Return a STEM stage only when the student says they are already on post-completion OPT or are preparing, filing, or approved for the STEM extension.",
         "If the student says they are currently on, doing, or using post-completion OPT, return optIntent=yes and optStage=post_completion_approved. If they give the month and year when OPT or the EAD expires, return that partial date in currentEadEndDate and eadEndOnEffectiveDate with needsConfirmation=true.",
         "A program the student already completed is not the I-20 program active on September 15. Put its completion date only in currentProgramEndDate. Do not ask the calculator to treat that completed I-20 as active on September 15 when approved OPT covers that day.",
-        "Use optFiledBeforeDeparture=yes only when the student says USCIS received or will receive Form I-765 before they leave. Use no only when they explicitly say the trip comes first. Do not infer this order from a return date.",
+        "Use optFiledBeforeDeparture=yes only when the student says they submitted or will submit Form I-765 before they leave. Use no only when they explicitly say the trip comes first. Do not infer this order from a return date.",
         "If the student says bachelor, associate, undergraduate, or undergrad, use educationLevel=undergraduate. If the student says master's, PhD, doctorate, doctoral, graduate school, or graduate program, use educationLevel=graduate.",
         "If the student explicitly says they use or plan to use CPT, return cptPlan=planned. If they explicitly say they will not use CPT, return cptPlan=none. Never infer an extension filing date or whether CPT crosses an admission deadline from a general CPT plan.",
         "Use programType=english_language_training only for a language-training program, programType=public_high_school only for a public or charter high school, and programType=private_high_school only for a private high school.",

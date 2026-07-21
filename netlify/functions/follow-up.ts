@@ -72,7 +72,7 @@ const RULE_GUIDE = [
   "A qualifying F-1 student in the United States in valid D/S status on September 15, 2026 keeps the later I-20 or approved EAD date then in effect, capped at September 15, 2030, plus 60 days.",
   "An F-1 return after September 15 ends D/S and creates a fixed admission. The period follows I-20 program dates, normally no more than four years from the program start date, plus 30 days included on the I-94.",
   "A student needing more time can file Form I-539 or depart and seek a new admission through CBP with supporting documents. Neither route guarantees approval or admission.",
-  "A transition student recommended for post-completion OPT can avoid Form I-539 for that OPT period if USCIS receives Form I-765 by March 18, 2027, before the D/S period expires. Departure before filing followed by fixed-period readmission requires both forms.",
+  "A transition student recommended for post-completion OPT can avoid Form I-539 for that OPT period by submitting Form I-765 by March 18, 2027, before the D/S period expires. Departure before filing followed by fixed-period readmission requires both forms.",
   "Outside that transition exception, post-completion OPT requires Form I-765 plus either Form I-539 or CBP admission after travel. STEM OPT follows regular post-completion OPT.",
   "The rule does not eliminate Day 1 CPT. A timely stay extension filed before the study or training period ends can continue already-authorized CPT while pending for up to 240 days, never beyond the DSO-authorized CPT end date.",
   "Undergraduates cannot transfer schools or change major or education level during the first academic year unless SEVP approves an extenuating-circumstances exception.",

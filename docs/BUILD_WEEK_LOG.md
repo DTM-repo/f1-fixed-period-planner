@@ -939,3 +939,41 @@ Each entry should capture:
 - Codex mapped all 18 rule citations to the live published HTML, confirmed that every target exists, and visually verified transition, OPT, and graduate-program paragraphs.
 - Vitest: 107/107 passed across eight test files; TypeScript and the production Vite build passed; `git diff --check` passed.
 - Browser verification confirmed exact highlighted landing, preserved state after Back, and no console warnings or errors.
+
+### Duration Mapper Experience and Final Acceptance - July 20, 2026
+
+**Research and diagnosis**
+
+- The completed logic still felt like a form because the opening, story intake, questions, impacts, and report competed on one screen. The UI handoff clarified the intended rhythm: a calm black opening, one mandatory September 15 question, story or interview, a sparse personal map, and a visual timeline.
+- Browser replay of the real-shaped May 2026 graduation / June 2027 approved-OPT case found a subtle role collision. The engine and timeline had the dates right, but a model-written acknowledgment label called June 2027 the program completion date.
+- A second acceptance case found that “graduating next spring” no longer produced an impossible past date but still lost useful timing. The app needed a visible, confirmable estimate rather than either false precision or no understanding.
+- Mobile screenshots initially appeared clipped because of browser pixel scaling. Direct 390-pixel geometry checks confirmed that the impact rows, actions, timeline events, and opening controls all remain within the viewport.
+
+**Decisions**
+
+- Rename the student-facing product **F-1 Duration Mapper**. Use a three-beat black opening, then ask the September 15 question as the only visible gate before voice, typing, or the full interview.
+- Use a real Web Audio time-domain oscilloscope for voice intake: one live line, no fake bars and no visual history. Keep the transcript and relevant fact bullets available after speaking.
+- Generate acknowledgment bullets from normalized case facts, not model-written labels. Role-specific program and EAD dates cannot borrow from one another.
+- Treat “next spring” as an estimated May of the next spring, visibly prefill Month and Year, and still ask the student to confirm the day or keep the estimate. Ambiguous numeric dates remain unconverted.
+- Keep all applicable rule areas visible as short, personalized, clickable lines. Student-raised and student-selected areas receive full cards without demoting earlier priorities.
+- Update the result and timeline immediately when an answer changes the rule, especially a return after September 15. Unknown dates continue the interview instead of stopping it.
+- Edit an earlier answer in an isolated dialog. Preserve later answers, priorities, and timeline data that remain logically valid.
+- Show each citation in a focused sheet with a strong yellow rule locator and an exact Federal Register paragraph link. Keep the student's case in session storage and provide an explicit Start over action.
+- Announce and scroll to the completed advisor report. The report remains a full, coherent synthesis of the deterministic map, not a short addendum.
+
+**Codex and OpenAI assistance**
+
+- Codex translated the design handoff into the opening, gate, voice/type intake, impact map, answer-editing dialog, responsive timelines, citation sheet, report-ready state, and restart flow.
+- Codex used exact browser replays to catch the May/June role collision, verify immediate travel updates, confirm OPT dates on the timeline, inspect mobile geometry, and validate the complete advisor report.
+- GPT-5.6 Luna remains the bounded temporal-case extractor. GPT-5.6 Sol writes the complete advisor report from server-recalculated facts, events, findings, and citations.
+- The deterministic TypeScript layer remains authoritative for classifications, deadlines, applicable categories, contradictions, and timeline dates.
+
+**Verification**
+
+- Vitest: 112/112 passed across eight test files; TypeScript, the production Vite build, and `git diff --check` passed.
+- Exact replay: “graduated this May 2026” and “OPT expires June 2027” remained separate in the acknowledgment, impact cards, timeline, and report.
+- OPT/travel replay: “graduating next spring” became an estimated May 2027; after confirming May 31, the timeline showed March 2 filing-window opening, March 18 transition deadline, May 31 program end, and July 30 end of the 60-day period.
+- Travel replay: confirming any return after September 15 immediately changed the headline to “Travel triggers the new rules” and added the return branch before the student supplied a return date or I-20.
+- Answer editing preserved the active later-program question and all calculated dates after canceling an EAD edit. Start over cleared the case only after confirmation.
+- The live GPT-5.6 Sol report completed, displayed a ready announcement, moved into view, and covered travel, OPT, the later program, transfer timing, and the pending immigrant petition without contradicting the deterministic cards.
+- Desktop and 390 by 844 responsive checks found no horizontal overflow or overlapping controls. Browser console: no warnings or errors.
