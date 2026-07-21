@@ -146,6 +146,7 @@ interface Question {
   answerLabel?: string;
   allowUnknownDate?: boolean;
   allowEstimate?: boolean;
+  validateDate?: (value: string) => string | undefined;
 }
 
 const yesNoUnknown: Choice[] = [
@@ -358,6 +359,28 @@ function dateIsDefinitelyAfter(value: string | undefined, comparison: string): b
   return /^\d{4}$/.test(value) && value > comparison.slice(0, 4);
 }
 
+function dateIsDefinitelyOnOrBefore(value: string | undefined, comparison: string): boolean {
+  if (!value) return false;
+  if (isValidDateString(value)) return compareDates(value, comparison) <= 0;
+  const monthYear = value.match(/^(\d{4})-(\d{2})$/);
+  if (monthYear) return `${monthYear[1]}-${monthYear[2]}` < comparison.slice(0, 7);
+  return /^\d{4}$/.test(value) && value < comparison.slice(0, 4);
+}
+
+export function plannedReturnDateError(
+  value: string,
+  posture: TravelPosture,
+  today = new Date().toISOString().slice(0, 10)
+): string | undefined {
+  if (posture === "planned" && dateIsDefinitelyBefore(value, today)) {
+    return "That date has already passed. Enter the date you now expect to return.";
+  }
+  if (dateIsDefinitelyOnOrBefore(value, DEFAULT_EFFECTIVE_DATE)) {
+    return "You said this trip brings you back after September 15, 2026. Enter a return date after that day.";
+  }
+  return undefined;
+}
+
 function programEndHint(facts: IntakeCandidateFact[]): IntakeCandidateFact | undefined {
   return facts.find((fact) =>
     ["programEndOnEffectiveDate", "currentProgramEndDate"].includes(fact.field) &&
@@ -451,15 +474,24 @@ export function mergeFacts(current: StudentScenario, facts: IntakeCandidateFact[
     next.startingPosition = "current_ds_inside_us";
     next.maintainingStatusOnEffectiveDate = "yes";
     if (next.admissionBasis === "unknown") next.admissionBasis = "duration_of_status";
-    next.programEndOnEffectiveDate ??= next.currentProgramEndDate;
+    if (!next.optStage.endsWith("approved")) next.programEndOnEffectiveDate ??= next.currentProgramEndDate;
     next.currentProgramEndDate ??= next.programEndOnEffectiveDate;
   }
   if (next.inUsOnEffectiveDate === "no" && next.startingPosition === "unknown") {
     next.startingPosition = "prospective_outside_us";
     next.admissionBasis = "fixed_period";
   }
-  if (next.currentProgramEndDate && next.startingPosition === "current_ds_inside_us") {
+  if (next.currentProgramEndDate && next.startingPosition === "current_ds_inside_us" && !next.optStage.endsWith("approved")) {
     next.programEndOnEffectiveDate ??= next.currentProgramEndDate;
+  }
+  if (
+    next.optStage.endsWith("approved") &&
+    next.programEndOnEffectiveDate &&
+    next.currentProgramEndDate &&
+    next.programEndOnEffectiveDate === next.currentProgramEndDate &&
+    dateIsDefinitelyBefore(next.currentProgramEndDate, DEFAULT_EFFECTIVE_DATE)
+  ) {
+    next.programEndOnEffectiveDate = undefined;
   }
   if (
     ["undergraduate", "graduate"].includes(next.educationLevel ?? "unknown") &&
@@ -557,7 +589,8 @@ function appendTravelQuestions(
         kind: "date",
         value: scenario.reentryDate ?? scenario.reentryDateHint,
         answerLabel: scenario.reentryDate ? formatDate(scenario.reentryDate) : formatPartialDate(scenario.reentryDateHint) ?? "I do not know yet",
-        allowUnknownDate: true
+        allowUnknownDate: true,
+        validateDate: (value) => plannedReturnDateError(value, scenario.travelPosture)
       });
       if (!answered.has("returnDate")) return false;
       questions.push({
@@ -972,6 +1005,26 @@ export function buildQuestions(
       answerLabel: factValueLabels.nextProgramLevelPlan?.[scenario.nextProgramLevelPlan ?? "unknown"]
     });
     if (!answered.has("nextProgram")) return questions;
+    const previousProgramEnd = scenario.currentProgramEndDate ?? scenario.currentProgramEndDateHint;
+    const previousCompletionNeedsDate = scenario.nextProgramLevelPlan === "same_or_lower" &&
+      !dateIsDefinitelyOnOrBefore(previousProgramEnd, DEFAULT_EFFECTIVE_DATE) &&
+      !dateIsDefinitelyAfter(previousProgramEnd, DEFAULT_EFFECTIVE_DATE);
+    if (previousCompletionNeedsDate) {
+      questions.push({
+        id: "previousProgramEnd",
+        eyebrow: "Your earlier degree",
+        prompt: "When did your earlier F-1 program end?",
+        help: "This date decides whether the new rule allows another program at the same education level. An estimate is fine.",
+        kind: "date",
+        value: previousProgramEnd,
+        answerLabel: scenario.currentProgramEndDate
+          ? formatDate(scenario.currentProgramEndDate)
+          : formatPartialDate(scenario.currentProgramEndDateHint) ?? "I do not know yet",
+        allowUnknownDate: true,
+        allowEstimate: true
+      });
+      if (!answered.has("previousProgramEnd")) return questions;
+    }
     const priorProgramClearlyTriggersBar = scenario.nextProgramLevelPlan === "same_or_lower" &&
       dateIsDefinitelyAfter(scenario.currentProgramEndDate ?? scenario.currentProgramEndDateHint, DEFAULT_EFFECTIVE_DATE);
     if (!["not_planning", "unknown"].includes(scenario.nextProgramLevelPlan ?? "unknown") && !priorProgramClearlyTriggersBar) {
@@ -1052,6 +1105,13 @@ export function buildQuestions(
   return questions;
 }
 
+function questionNeedsAnswer(question: Question, answered: Set<string>, scenario: StudentScenario): boolean {
+  if (!answered.has(question.id)) return true;
+  if (question.id !== "returnDate") return false;
+  const value = scenario.reentryDate ?? scenario.reentryDateHint;
+  return Boolean(value && plannedReturnDateError(value, scenario.travelPosture));
+}
+
 const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 function LiveOscilloscope({ analyser, active }: { analyser: AnalyserNode | null; active: boolean }) {
@@ -1120,11 +1180,13 @@ function LiveOscilloscope({ analyser, active }: { analyser: AnalyserNode | null;
 function DateAnswer({
   value,
   allowEstimate = true,
+  validate,
   onComplete,
   onUnknown
 }: {
   value?: string;
   allowEstimate?: boolean;
+  validate?: (value: string) => string | undefined;
   onComplete: (value: string) => void;
   onUnknown?: () => void;
 }) {
@@ -1152,6 +1214,11 @@ function DateAnswer({
         setError("That is not a calendar date. Check the day, month, and year.");
         return;
       }
+      const validationError = validate?.(candidate);
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
       setError("");
       onComplete(candidate);
       return;
@@ -1160,8 +1227,14 @@ function DateAnswer({
       setError("Enter the month, day, and year shown on the document.");
       return;
     }
+    const estimateValue = month ? `${year}-${month.padStart(2, "0")}` : year;
+    const validationError = validate?.(estimateValue);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
     setError("");
-    onComplete(month ? `${year}-${month.padStart(2, "0")}` : year);
+    onComplete(estimateValue);
   }
 
   const canSubmit = year.length === 4 && (!day || Boolean(month));
@@ -1213,7 +1286,7 @@ function QuestionCard({ question, onAnswer, onDate, onUnknownDate }: { question:
           ))}
         </div>
       ) : (
-        <DateAnswer value={question.value} allowEstimate={question.allowEstimate} onComplete={onDate} onUnknown={question.allowUnknownDate ? onUnknownDate : undefined} />
+        <DateAnswer value={question.value} allowEstimate={question.allowEstimate} validate={question.validateDate} onComplete={onDate} onUnknown={question.allowUnknownDate ? onUnknownDate : undefined} />
       )}
       <p className="answer-prompt">Answer to receive the next question.</p>
     </section>
@@ -1316,7 +1389,7 @@ function SourceLink({ sourceId }: { sourceId: string }) {
             <span className="citation-kicker">The exact part of the rule</span>
             <strong>{citation.title}</strong>
             <span className="citation-locator">{citation.locator}</span>
-            <a href={citation.url}>Open this paragraph in the official source <ArrowRight aria-hidden="true" /></a>
+            <a href={citation.url} target="_blank" rel="noreferrer">Open this paragraph in the official source <ArrowRight aria-hidden="true" /></a>
           </span>
         </span>
       )}
@@ -1478,6 +1551,25 @@ function AdvisementAction({
   );
 }
 
+function AdvisementDraft({ map, topics }: { map: ImpactMap; topics: IntakeTopic[] }) {
+  const headings = canonicalTopics(topics).slice(0, 4).map((topic) => topicMeta(topic).title);
+  return (
+    <article className="advisement-draft" aria-label="Your advisement is being written">
+      <p className="section-eyebrow">Your advisement</p>
+      <h2>{map.headline}</h2>
+      <p className="draft-opening">{map.summary}</p>
+      <div className="draft-sections" aria-hidden="true">
+        {(headings.length ? headings : ["Your situation", "What to do next"]).map((heading, index) => (
+          <span style={{ "--draft-index": index } as React.CSSProperties} key={heading}>
+            <strong>{heading}</strong><i />
+          </span>
+        ))}
+      </div>
+      <p className="draft-status"><RefreshCw className="spin" aria-hidden="true" /> Bringing the details together.</p>
+    </article>
+  );
+}
+
 function ExplorationHome({ fullInterview }: { fullInterview: boolean }) {
   return (
     <section className="exploration-home">
@@ -1551,24 +1643,32 @@ export function buildDisplayTimeline(
   for (const event of caseEvents) {
     const milestones = event.role === "future_program"
       ? [
-          { point: event.start, title: "Your next program may begin", detail: "The exact day will determine how this program connects to your current stay." },
-          { point: event.end, title: "Your next program may end", detail: "The exact day will determine whether you need additional F-1 time." }
+          { point: event.start, title: "Your next program begins", detail: "This date connects your OPT or current program to the next program.", match: /next program|classes begin/i },
+          { point: event.end, title: "Your next program ends", detail: "This date shows whether the admission period covers the whole program.", match: /next program|program ends/i }
         ]
       : event.role === "active_program"
-        ? [{ point: event.end, title: "Your program is expected to end", detail: "Confirm the day printed on your I-20 to calculate the exact OPT and departure dates." }]
+        ? [{ point: event.end, title: "Your program is expected to end", detail: "This date controls the next study, OPT, and departure steps.", match: /program|study period/i }]
         : event.role === "completed_program"
-          ? [{ point: event.end, title: "Your previous program ended", detail: "A later document or approved training can control your September 15 status." }]
-          : [];
+          ? [{ point: event.end, title: "Your previous program ended", detail: "This date controls whether the new education-level limit applies.", match: /previous program|program completed/i }]
+          : event.role === "approved_opt"
+            ? [{ point: event.end, title: "Your approved OPT ends", detail: "A transfer to the next program can end this work period earlier.", match: /OPT|training/i }]
+            : event.role === "planned_return"
+              ? [{ point: event.start, title: "You return to the United States", detail: "This return puts you under the new fixed-date rules.", match: /return|enter/i }]
+              : [];
     for (const milestone of milestones) {
-      if (!milestone.point || milestone.point.precision === "day") continue;
-      const dateLabel = formatPartialDate(milestone.point.value);
-      if (!dateLabel || displayed.some((item) => item.dateLabel === dateLabel && item.title === milestone.title)) continue;
+      if (!milestone.point) continue;
+      const exact = milestone.point.precision === "day";
+      const dateLabel = exact ? formatDate(milestone.point.value) : formatPartialDate(milestone.point.value);
+      if (!dateLabel || displayed.some((item) =>
+        (exact ? item.date === milestone.point!.value : item.dateLabel === dateLabel) && milestone.match.test(item.title)
+      )) continue;
       displayed.push({
+        date: exact ? milestone.point.value : undefined,
         dateLabel,
-        sortKey: milestone.point.precision === "month" ? `${milestone.point.value}-15` : `${milestone.point.value}-06-30`,
+        sortKey: exact ? milestone.point.value : milestone.point.precision === "month" ? `${milestone.point.value}-15` : `${milestone.point.value}-06-30`,
         title: milestone.title,
         detail: milestone.detail,
-        tone: "neutral"
+        tone: event.role === "planned_return" ? "warning" : event.role === "approved_opt" ? "good" : "neutral"
       });
     }
   }
@@ -1578,14 +1678,15 @@ export function buildDisplayTimeline(
 
 export function buildTriggeredReturnTimeline(
   scenario: StudentScenario,
-  calculatedEvents: TimelineItem[] = []
+  calculatedEvents: TimelineItem[] = [],
+  caseEvents: CaseEvent[] = []
 ): DisplayTimelineItem[] {
-  if (calculatedEvents.length) return displayTimelineItems(calculatedEvents);
+  const displayed = buildDisplayTimeline(scenario, calculatedEvents, caseEvents);
   const returnLabel = scenario.reentryDate
     ? formatDate(scenario.reentryDate)
     : formatPartialDate(scenario.reentryDateHint) ?? "After Sep 15, 2026";
   const sortKey = scenario.reentryDate ?? (scenario.reentryDateHint ? `${scenario.reentryDateHint}-15` : "2026-09-16");
-  return [
+  const required: DisplayTimelineItem[] = [
     {
       date: DEFAULT_EFFECTIVE_DATE,
       dateLabel: formatDate(DEFAULT_EFFECTIVE_DATE),
@@ -1603,6 +1704,16 @@ export function buildTriggeredReturnTimeline(
       tone: "warning"
     }
   ];
+  for (const event of required) {
+    const alreadyPresent = event.title === "The new rule begins"
+      ? displayed.some((item) => item.date === DEFAULT_EFFECTIVE_DATE)
+      : displayed.some((item) =>
+          (event.date && item.date === event.date && /return|enter/i.test(item.title)) ||
+          (!event.date && /return/i.test(item.title))
+        );
+    if (!alreadyPresent) displayed.push(event);
+  }
+  return displayed.sort((left, right) => left.sortKey.localeCompare(right.sortKey));
 }
 
 function Timeline({ title, subtitle, events }: { title: string; subtitle: string; events: DisplayTimelineItem[] }) {
@@ -1627,15 +1738,15 @@ function Timeline({ title, subtitle, events }: { title: string; subtitle: string
   );
 }
 
-function MiniTimeline({ events, onOpen }: { events: DisplayTimelineItem[]; onOpen: () => void }) {
+function TimelineDock({ events, onOpen }: { events: DisplayTimelineItem[]; onOpen: () => void }) {
   if (!events.length) return null;
   const visibleEvents = events.length <= 4
     ? events
     : [events[0], ...events.slice(1, -1).filter((event) => event.tone === "warning" || event.tone === "danger").slice(0, 2), events.at(-1)!];
   return (
-    <section className="mini-timeline" aria-label="Your changing timeline">
-      <header><span>Your timeline</span><button type="button" onClick={onOpen}>See all dates <ArrowRight aria-hidden="true" /></button></header>
-      <div>
+    <button type="button" className="timeline-dock" onClick={onOpen} aria-label="Open your full timeline">
+      <span className="timeline-dock-label"><CalendarDays aria-hidden="true" /> Your timeline</span>
+      <span className="timeline-dock-events" aria-hidden="true">
         {visibleEvents.map((event, index) => (
           <span className={event.tone} key={`${event.sortKey}-${event.title}-${index}`}>
             <i aria-hidden="true" />
@@ -1643,8 +1754,9 @@ function MiniTimeline({ events, onOpen }: { events: DisplayTimelineItem[]; onOpe
             <small>{event.title}</small>
           </span>
         ))}
-      </div>
-    </section>
+      </span>
+      <span className="timeline-dock-open">See all <ArrowRight aria-hidden="true" /></span>
+    </button>
   );
 }
 
@@ -1668,15 +1780,11 @@ function PrintTimeline({ title, events }: { title: string; events: DisplayTimeli
 function PrintableReport({
   report,
   map,
-  stayTimeline,
-  returnTimeline,
-  returnTriggersNewRules
+  timeline
 }: {
   report: ExplanationResponse;
   map: ImpactMap;
-  stayTimeline: DisplayTimelineItem[];
-  returnTimeline: DisplayTimelineItem[];
-  returnTriggersNewRules: boolean;
+  timeline: DisplayTimelineItem[];
 }) {
   return (
     <article className="print-report">
@@ -1690,8 +1798,7 @@ function PrintableReport({
         <div>{map.summary}</div>
       </section>
       <section className="print-report-timelines">
-        <PrintTimeline title={returnTriggersNewRules ? "If you stay in the United States" : "Your timeline"} events={stayTimeline} />
-        {returnTriggersNewRules && <PrintTimeline title="If you leave and return after September 15" events={returnTimeline} />}
+        <PrintTimeline title="Your timeline" events={timeline} />
       </section>
       <section className="print-advisement">
         <p className="print-kicker">Your advisement</p>
@@ -2061,27 +2168,36 @@ export default function App() {
     [studentCase]
   );
   const result = useMemo(() => calculateScenario(activeScenario), [activeScenario]);
+  const returnDateConflict = Boolean(
+    isCurrent(activeScenario) &&
+    activeScenario.returningAfterEffectiveDate === "yes" &&
+    activeScenario.reentryDate &&
+    compareDates(activeScenario.reentryDate, DEFAULT_EFFECTIVE_DATE) <= 0
+  );
   const returnTriggersNewRules = isCurrent(activeScenario) &&
     ["planned", "completed"].includes(activeScenario.travelPosture) &&
-    activeScenario.returningAfterEffectiveDate === "yes";
+    activeScenario.returningAfterEffectiveDate === "yes" &&
+    !returnDateConflict;
   const travelResult = useMemo(() => {
     if (
       !isCurrent(activeScenario) ||
       (activeScenario.travelPosture !== "planned" && activeScenario.travelPosture !== "completed") ||
       activeScenario.returningAfterEffectiveDate !== "yes" ||
+      returnDateConflict ||
       !["same_i20_balance", "longer_program_i20"].includes(activeScenario.reentryBasis)
     ) return null;
     return calculateScenario(scenarioForFixedReentry(activeScenario));
-  }, [activeScenario]);
+  }, [activeScenario, returnDateConflict]);
   const primaryResult = travelResult ?? result;
   const stayTimeline = useMemo(
     () => buildDisplayTimeline(activeScenario, result.timeline, studentCase.events),
     [activeScenario, result.timeline, studentCase.events]
   );
   const returnTimeline = useMemo(
-    () => returnTriggersNewRules ? buildTriggeredReturnTimeline(activeScenario, travelResult?.timeline ?? []) : [],
-    [activeScenario, returnTriggersNewRules, travelResult]
+    () => returnTriggersNewRules ? buildTriggeredReturnTimeline(activeScenario, travelResult?.timeline ?? [], studentCase.events) : [],
+    [activeScenario, returnTriggersNewRules, studentCase.events, travelResult]
   );
+  const activeTimeline = returnTriggersNewRules ? returnTimeline : stayTimeline;
   const coreQuestions = useMemo(
     () => buildCoreQuestions(scenario, answered, intake?.facts ?? []),
     [scenario, answered, intake]
@@ -2092,7 +2208,7 @@ export default function App() {
     if (coreQuestion) return [];
     const topicsToCheck = interviewMode === "full" ? impactTopics : priorityTopics;
     return topicsToCheck.filter((topic) => !buildQuestions(scenario, answered, [topic], result.activityEnd)
-      .some((question) => !coreQuestionIds.has(question.id) && !answered.has(question.id)));
+      .some((question) => !coreQuestionIds.has(question.id) && questionNeedsAnswer(question, answered, scenario)));
   }, [answered, coreQuestion, coreQuestionIds, impactTopics, interviewMode, priorityTopics, result.activityEnd, scenario]);
   const selectedProminentTopics = useMemo(
     () => interviewMode === "full"
@@ -2104,19 +2220,27 @@ export default function App() {
     ? raisedTopics
     : selectedProminentTopics;
   const coverageConflict = hasEffectiveDateCoverageConflict(activeScenario, intake?.facts ?? []);
-  const contradiction = coverageConflict || result.findings.some((item) =>
-    ["future-entry-before-effective-date-contradiction", "document-ends-before-effective-date"].includes(item.id)
+  const contradiction = coverageConflict || returnDateConflict || result.findings.some((item) =>
+    ["future-entry-before-effective-date-contradiction", "return-date-before-effective-date-contradiction", "document-ends-before-effective-date"].includes(item.id)
   );
   const impactMap = useMemo(
     () => buildImpactMap(
       activeScenario,
       result,
       travelResult,
-      visibleFocusTopics
+      visibleFocusTopics,
+      studentCase.events
     ),
-    [activeScenario, coreQuestion, experience, result, travelResult, visibleFocusTopics]
+    [activeScenario, coreQuestion, experience, result, studentCase.events, travelResult, visibleFocusTopics]
   );
-  const displayedImpactMap: ImpactMap = coverageConflict
+  const displayedImpactMap: ImpactMap = returnDateConflict
+    ? {
+        ...impactMap,
+        headline: "Correct the return date",
+        summary: `A return on ${formatDate(activeScenario.reentryDate)} cannot be the trip that brings you back after September 15, 2026. Change that date before continuing.`,
+        unresolved: ["Enter the planned return date after September 15, 2026."]
+      }
+    : coverageConflict
     ? {
         ...impactMap,
         headline: "These dates do not fit yet",
@@ -2126,11 +2250,11 @@ export default function App() {
     : impactMap;
   const focusedQuestion = interviewMode === "focused" && !coreQuestion
     ? buildQuestions(scenario, answered, priorityTopics, result.activityEnd)
-      .find((question) => !coreQuestionIds.has(question.id) && !answered.has(question.id))
+      .find((question) => !coreQuestionIds.has(question.id) && questionNeedsAnswer(question, answered, scenario))
     : undefined;
   const fullInterviewQuestion = interviewMode === "full" && !coreQuestion
     ? buildQuestions(scenario, answered, impactTopics, result.activityEnd)
-      .find((question) => !coreQuestionIds.has(question.id) && !answered.has(question.id))
+      .find((question) => !coreQuestionIds.has(question.id) && questionNeedsAnswer(question, answered, scenario))
     : undefined;
   const activeQuestion = coreQuestion ?? focusedQuestion ?? fullInterviewQuestion;
   const activeImpactTopic = activeQuestion ? topicForQuestion(activeQuestion.id) ?? null : null;
@@ -2144,7 +2268,7 @@ export default function App() {
     () => buildQuestions(scenario, answered, historyTopics, result.activityEnd),
     [scenario, answered, historyTopics, result.activityEnd]
   );
-  const completedQuestions = questions.filter((question) => answered.has(question.id));
+  const completedQuestions = questions.filter((question) => !questionNeedsAnswer(question, answered, scenario));
   const editingQuestion = editingQuestionId
     ? completedQuestions.find((question) => question.id === editingQuestionId)
     : undefined;
@@ -2363,6 +2487,11 @@ export default function App() {
         patch.currentProgramEndDateHint = hint;
         if (isCurrent(scenario)) patch.programEndOnEffectiveDate = exact;
         break;
+      case "previousProgramEnd":
+        patch.currentProgramEndDate = exact;
+        patch.currentProgramEndDateHint = hint;
+        if (scenario.optStage.endsWith("approved")) patch.programEndOnEffectiveDate = undefined;
+        break;
       case "effectiveEadEnd":
         patch.currentEadEndDate = exact;
         patch.eadEndOnEffectiveDate = exact;
@@ -2424,6 +2553,7 @@ export default function App() {
     }
     if (id === "travelProgramEnd") { next.returnProgramEndDate = undefined; next.returnProgramEndDateHint = undefined; }
     if (id === "programEnd") { next.programEndOnEffectiveDate = undefined; next.currentProgramEndDate = undefined; next.currentProgramEndDateHint = undefined; }
+    if (id === "previousProgramEnd") { next.currentProgramEndDate = undefined; next.currentProgramEndDateHint = undefined; }
     if (id === "effectiveEadEnd") { next.eadEndOnEffectiveDate = undefined; next.currentEadEndDate = undefined; next.currentEadEndDateHint = undefined; }
     if (id === "programType") next.programType = "unknown";
     if (id === "educationLevel") next.educationLevel = "unknown";
@@ -2735,9 +2865,11 @@ export default function App() {
     reportAbortRef.current?.abort();
     const controller = new AbortController();
     reportAbortRef.current = controller;
+    setReport(null);
     setReportState("loading");
     setReportError("");
     setReportReadyNotice("");
+    window.setTimeout(() => reportRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
     try {
       const reportTopics = canonicalTopics([...reportFocusTopics, ...reportExploreTopics]);
       const reportCase = buildStudentCase(reportScenario, intake?.facts ?? [], reportTopics, intake?.events ?? []);
@@ -3086,7 +3218,6 @@ export default function App() {
             completedTopics={completedTopics}
             activeTopic={activeImpactTopic}
             fullInterview={interviewMode === "full"}
-            timelinePreview={<MiniTimeline events={returnTriggersNewRules ? returnTimeline : stayTimeline} onOpen={() => timelineRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />}
             onExplore={exploreImpact}
             onResolveQuestion={editQuestion}
           />
@@ -3097,28 +3228,31 @@ export default function App() {
         <div className="band-heading"><p>Your dates, in order</p><h2>See where each rule changes your path</h2></div>
         <Timeline
           title={
-            travelResult || result.classification === "transition_ds"
-              ? "If you stay in the United States"
+            returnTriggersNewRules
+              ? "Your planned timeline"
+              : result.classification === "transition_ds"
+                ? "If you stay in the United States"
               : result.classification === "manual_review"
                 ? "September 15 determines which rules apply"
                 : "Your dated I-94 timeline"
           }
           subtitle={
-            result.classification === "transition_ds"
+            returnTriggersNewRules
+              ? "Your return moves you into the new rules. These are the dates that now control your plan."
+              : result.classification === "transition_ds"
               ? "This is how long the old rules continue if you do not travel."
               : result.classification === "manual_review"
                 ? "Your September 15 location and F-1 status determine which rules apply."
                 : "The final point is the date shown on the projected or actual I-94."
           }
-          events={stayTimeline}
+          events={activeTimeline}
         />
-        {returnTriggersNewRules && <Timeline title="When you return after September 15" subtitle="Your return triggers the new rules immediately. The I-94 issued by CBP controls the exact end date." events={returnTimeline} />}
       </section>
 
       {(report || reportState === "loading" || reportState === "failed") && (
         <section className="report-band" aria-live="polite" ref={reportRef} tabIndex={-1}>
           {reportReadyNotice && reportState === "ready" && <div className="report-ready" role="status"><CheckCircle2 aria-hidden="true" />{reportReadyNotice}</div>}
-          {reportState === "loading" && <div className="report-loading"><RefreshCw className="spin" aria-hidden="true" /><p>Writing your advisement.</p></div>}
+          {reportState === "loading" && <AdvisementDraft map={displayedImpactMap} topics={visibleFocusTopics} />}
           {reportState === "failed" && <div className="report-error"><AlertTriangle aria-hidden="true" /><div><h2>The advisement did not finish.</h2><p>Your work is still here. Try the advisor again without re-entering anything.</p>{reportError && <details><summary>Why this attempt failed</summary><p>{reportError}</p></details>}<button type="button" onClick={() => void createReport()}><RefreshCw aria-hidden="true" /> Try the advisor again</button></div></div>}
           {report && (
             <>
@@ -3145,7 +3279,8 @@ export default function App() {
           <div className="source-list">{primaryResult.citations.map((citation) => <a key={citation.id} href={citation.url} target="_blank" rel="noreferrer"><span><strong>{citation.title}</strong><small>{citation.locator}</small></span><ExternalLink aria-hidden="true" /></a>)}</div>
         </details>
       </section>
-      {report && <PrintableReport report={report} map={displayedImpactMap} stayTimeline={stayTimeline} returnTimeline={returnTimeline} returnTriggersNewRules={returnTriggersNewRules} />}
+      <TimelineDock events={activeTimeline} onOpen={() => timelineRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />
+      {report && <PrintableReport report={report} map={displayedImpactMap} timeline={activeTimeline} />}
       {editingQuestion && (
         <EditQuestionDialog
           question={editingQuestion}

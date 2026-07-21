@@ -77,8 +77,8 @@ const RULE_GUIDE = [
   "The rule does not eliminate Day 1 CPT. A timely stay extension filed before the study or training period ends can continue already-authorized CPT while pending for up to 240 days, never beyond the DSO-authorized CPT end date.",
   "Undergraduates cannot transfer schools or change major or education level during the first academic year unless SEVP approves an extenuating-circumstances exception.",
   "Graduate students cannot change educational objective during the program and cannot transfer unless SEVP approves an extenuating-circumstances exception.",
-  "After completing a U.S. F-1 program on or after September 15, 2026, a later F-1 program must be at a higher education level.",
-  "A program completed before September 15, 2026 does not count toward the new same- or lower-level limit. A master's completed before that date does not by itself bar a second master's.",
+  "After completing a U.S. F-1 program after September 15, 2026, a later F-1 program must be at a higher education level.",
+  "A program completed on or before September 15, 2026 does not count toward the new same- or lower-level limit. A master's completed by that date does not by itself bar a second master's.",
   "The final rule creates no automatic approval or denial outcome for a pending I-140. USCIS still assesses the temporary-purpose requirements for F-1 status during an extension adjudication.",
   "Form I-539 is the student's USCIS filing. The school supplies a properly endorsed Form I-20 when appropriate, but the rule does not require the school to prepare or represent the student in the filing.",
   "English-language training has a 24-month aggregate cap. Public high school has a 12-month aggregate cap. F-2 periods cannot exceed the F-1 principal's period.",
@@ -122,14 +122,15 @@ const responseSchema = {
 function buildPrompt(payload: FollowUpRequest): string {
   const stayResult = calculateScenario(payload.scenario);
   const travelResult = travelComparisonFor(payload.scenario);
-  const map = buildImpactMap(payload.scenario, stayResult, travelResult, payload.focusTopics);
   const studentCase = buildStudentCase(payload.scenario, [], payload.focusTopics);
+  const caseEvents = payload.caseEvents ?? studentCase.events;
+  const map = buildImpactMap(payload.scenario, stayResult, travelResult, payload.focusTopics, caseEvents);
   return JSON.stringify({
     task: "Add the shortest complete answer to the student's latest question. The impact map and recent conversation are already visible; do not repeat them. Extract only facts explicitly stated in the latest question.",
     latestQuestion: payload.question,
     recentConversation: payload.history.slice(-8),
     studentSituation: payload.scenario,
-    caseTimeline: payload.caseEvents ?? studentCase.events,
+    caseTimeline: caseEvents,
     applicableRuleAreas: payload.applicableRuleAreas ?? studentCase.topicEvaluations,
     verifiedImpactMap: map,
     verifiedRuleGuide: RULE_GUIDE,

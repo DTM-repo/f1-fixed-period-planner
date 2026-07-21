@@ -54,6 +54,7 @@ const QUESTION_TOPICS: Record<string, CanonicalTopic> = {
   programChange: "program_change",
   firstAcademicYear: "program_change",
   nextProgram: "later_program",
+  previousProgramEnd: "later_program",
   nextProgramStart: "later_program",
   nextProgramEnd: "later_program",
   cptIntent: "cpt",

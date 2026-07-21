@@ -81,9 +81,9 @@ export const SOURCE_INDEX: Record<string, SourceReference> = {
   "8CFR-214-2-F5II-SAME-LOWER": {
     id: "8CFR-214-2-F5II-SAME-LOWER",
     title: "8 CFR 214.2(f)(5)(ii)(C), same- or lower-level study",
-    locator: "DHS explanation that programs completed before the effective date do not count toward the new limit",
+    locator: "DHS explanation that only programs completed after September 15, 2026 count toward the new limit",
     url: ruleParagraph(794),
-    lastVerified: "2026-07-20"
+    lastVerified: "2026-07-21"
   },
   "8CFR-214-2-F5VIII-CPT": {
     id: "8CFR-214-2-F5VIII-CPT",

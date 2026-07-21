@@ -1,4 +1,5 @@
 import type { IntakeTopic } from "../ai/intakePayload";
+import type { CaseEvent } from "../case/studentCase";
 import {
   DEFAULT_EFFECTIVE_DATE,
   OPT_TRANSITION_I765_DEADLINE,
@@ -82,6 +83,7 @@ const SPECIAL_FINDING_IDS = new Set([
   "date-input-normalized",
   "date-confirmation-needed",
   "future-entry-before-effective-date-contradiction",
+  "return-date-before-effective-date-contradiction",
   "post-rule-return-date-needed",
   "entry-more-than-thirty-days-early",
   "entry-after-authorized-study-end",
@@ -122,6 +124,57 @@ function definitelyAfter(value: string | undefined, comparison: string): boolean
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return compareDates(value, comparison) > 0;
   if (/^\d{4}-\d{2}$/.test(value)) return value > comparison.slice(0, 7);
   return /^\d{4}$/.test(value) && value > comparison.slice(0, 4);
+}
+
+function definitelyOnOrBefore(value: string | undefined, comparison: string): boolean {
+  if (!value) return false;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return compareDates(value, comparison) <= 0;
+  if (/^\d{4}-\d{2}$/.test(value)) return value < comparison.slice(0, 7);
+  return /^\d{4}$/.test(value) && value < comparison.slice(0, 4);
+}
+
+function eventDate(events: CaseEvent[], role: CaseEvent["role"], point: "start" | "end"): string | undefined {
+  return events.find((event) => event.role === role)?.[point]?.value;
+}
+
+function withEventDates(scenario: StudentScenario, events: CaseEvent[]): StudentScenario {
+  if (!events.length) return scenario;
+  const next = { ...scenario };
+  const assign = (
+    value: string | undefined,
+    exactField: keyof StudentScenario,
+    hintField: keyof StudentScenario
+  ) => {
+    if (!value) return;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      (next as unknown as Record<string, string | undefined>)[exactField] = value;
+      (next as unknown as Record<string, string | undefined>)[hintField] = undefined;
+    } else {
+      (next as unknown as Record<string, string | undefined>)[exactField] = undefined;
+      (next as unknown as Record<string, string | undefined>)[hintField] = value;
+    }
+  };
+
+  assign(eventDate(events, "completed_program", "end"), "currentProgramEndDate", "currentProgramEndDateHint");
+  assign(eventDate(events, "approved_opt", "end"), "currentEadEndDate", "currentEadEndDateHint");
+  assign(eventDate(events, "planned_return", "start"), "reentryDate", "reentryDateHint");
+  assign(eventDate(events, "future_program", "start"), "nextProgramStartDate", "nextProgramStartDateHint");
+  assign(eventDate(events, "future_program", "end"), "nextProgramEndDate", "nextProgramEndDateHint");
+  return next;
+}
+
+function readableDate(value?: string): string | undefined {
+  if (!value) return undefined;
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? formatDate(value) : partialDateLabel(value);
+}
+
+function addCalendarMonths(value: string, months: number): string | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  const [year, month, day] = value.split("-").map(Number);
+  const target = new Date(Date.UTC(year, month - 1 + months, 1));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(day, lastDay));
+  return target.toISOString().slice(0, 10);
 }
 
 function hasFinding(result: PlannerResult, id: string): boolean {
@@ -252,6 +305,18 @@ function optClaim(
   if (!transitionPath) return null;
 
   if (scenario.optStage.endsWith("approved") && scenario.currentEadEndDate) {
+    const nextProgramStart = scenario.nextProgramStartDate ?? scenario.nextProgramStartDateHint;
+    const nextProgramLabel = readableDate(nextProgramStart);
+    if (nextProgramLabel) {
+      return {
+        id: "opt-approved-before-later-program",
+        category: "opt",
+        tone: "info",
+        title: `Your OPT is approved through ${formatDate(scenario.currentEadEndDate)}`,
+        detail: `Your next program is planned to start ${nextProgramLabel}. Coordinate the SEVIS release date with both schools because that transfer changes how long you may keep working on OPT.`,
+        sourceIds: ["8CFR-214-1-M1-OPT", "8CFR-214-2-F8-TRANSFER"]
+      };
+    }
     return {
       id: "opt-approved",
       category: "opt",
@@ -384,11 +449,13 @@ function optClaim(
 }
 
 export function buildImpactMap(
-  scenario: StudentScenario,
+  inputScenario: StudentScenario,
   stayResult: PlannerResult,
   travelResult: PlannerResult | null,
-  focusTopics: IntakeTopic[] = []
+  focusTopics: IntakeTopic[] = [],
+  caseEvents: CaseEvent[] = []
 ): ImpactMap {
+  const scenario = withEventDates(inputScenario, caseEvents);
   const primaryResult = travelResult ?? stayResult;
   const conclusion = mainConclusion(scenario, stayResult, travelResult);
   const approvedEadHintCoversRule = scenario.optStage.endsWith("approved") &&
@@ -433,15 +500,16 @@ export function buildImpactMap(
 
   if (transition) {
     if (travelResult) {
+      const returnLabel = readableDate(scenario.reentryDate ?? scenario.reentryDateHint);
       push({
-        id: "travel-stay-alternative",
+        id: "travel-fixed-return",
         category: "travel",
-        tone: "info",
-        title: "Staying in the United States keeps the old rules",
-        detail: stayResult.latestDepartureDate
-          ? `Without a post-September 15 return, your current old-rule timeline runs through ${formatDate(stayResult.latestDepartureDate)}.`
-          : "Without a post-September 15 return, the old-rule timeline remains available.",
-        sourceIds: ["8CFR-214-1-M1"]
+        tone: "warning",
+        title: returnLabel ? `Your ${returnLabel} return triggers the new rules` : "Your return triggers the new rules",
+        detail: travelResult.i94AdmitUntilDate
+          ? `CBP will issue a new I-94. The projected end date is ${formatDate(travelResult.i94AdmitUntilDate)}, but the I-94 issued when you enter controls.`
+          : "CBP will issue a new I-94 with an end date based on the I-20 you use to return.",
+        sourceIds: ["8CFR-214-1-M1", "8CFR-214-1-A4"]
       });
     } else if (returnTriggersNewRules) {
       push({
@@ -564,7 +632,7 @@ export function buildImpactMap(
       detail: "DHS said it will continue exploring premium processing for these requests, but no premium option exists now.",
       sourceIds: ["FR-I539-PREMIUM"]
     });
-  } else if (transition && stayResult.activityEnd) {
+  } else if (transition && stayResult.activityEnd && !returnTriggersNewRules) {
     push({
       id: scenario.optStage.endsWith("approved") ? "no-extension-for-approved-opt" : "no-extension-for-current-program",
       category: "extension",
@@ -629,7 +697,7 @@ export function buildImpactMap(
   }
 
   const completedProgramDate = scenario.currentProgramEndDate ?? scenario.currentProgramEndDateHint;
-  const completedBeforeRule = definitelyBefore(completedProgramDate, DEFAULT_EFFECTIVE_DATE);
+  const completedBeforeRule = definitelyOnOrBefore(completedProgramDate, DEFAULT_EFFECTIVE_DATE);
   if (scenario.educationLevel === "graduate" && completedBeforeRule) {
     push({
       id: "completed-graduate-transfer",
@@ -701,8 +769,8 @@ export function buildImpactMap(
         tone: "good",
         title: scenario.nextProgramLevelPlan === "same_or_lower"
           ? "Your earlier degree does not block this same-level program"
-          : "Programs completed before September 15 do not count toward the new level limit",
-        detail: `You completed that program ${completionLabel}. The new same-or-lower-level bar counts programs completed after September 15, 2026, so you do not need an SEVP exception to overcome that particular bar.`,
+          : "Programs completed by September 15 do not count toward the new level limit",
+        detail: `You completed that program ${completionLabel}. The new same-or-lower-level bar counts programs completed after September 15, 2026, so this rule does not block the later program.`,
         sourceIds: ["8CFR-214-2-F5II-SAME-LOWER"]
       });
     } else if (definitelyAfter(completedProgramDate, DEFAULT_EFFECTIVE_DATE)) {
@@ -711,7 +779,7 @@ export function buildImpactMap(
         category: "later_program",
         tone: scenario.nextProgramLevelPlan === "same_or_lower" ? "danger" : "info",
         title: "Your next F-1 program must be at a higher level",
-        detail: "After completing a U.S. F-1 program on or after September 15, 2026, you cannot start another F-1 program at the same or a lower education level.",
+        detail: "After completing a U.S. F-1 program after September 15, 2026, you cannot start another F-1 program at the same or a lower education level.",
         sourceIds: ["8CFR-214-2-F5II-SAME-LOWER"]
       });
     } else {
@@ -730,12 +798,28 @@ export function buildImpactMap(
     scenario.optStage.endsWith("approved") &&
     (focusTopics.includes("later_program") || focusTopics.includes("school_transfer") || !["unknown", "not_planning"].includes(scenario.nextProgramLevelPlan ?? "unknown"))
   ) {
+    const nextStart = scenario.nextProgramStartDate;
+    const nextStartLabel = readableDate(nextStart ?? scenario.nextProgramStartDateHint);
+    const eadEnd = scenario.currentEadEndDate;
+    const latestStartFromEad = eadEnd ? addCalendarMonths(eadEnd, 5) : undefined;
+    const startsBeforeOptEnds = Boolean(nextStart && eadEnd && compareDates(nextStart, eadEnd) <= 0);
+    const startsTooLate = Boolean(nextStart && latestStartFromEad && compareDates(nextStart, latestStartFromEad) > 0);
     push({
       id: "opt-to-later-program-timing",
       category: "later_program",
-      tone: "warning",
-      title: "Your next program has a five-month start limit",
-      detail: "Classes must begin within five months of your SEVIS transfer release or your approved OPT end date, whichever comes first. Choose the release date with both schools.",
+      tone: startsTooLate ? "danger" : startsBeforeOptEnds ? "good" : "warning",
+      title: startsTooLate
+        ? "Your planned start is more than five months after OPT ends"
+        : startsBeforeOptEnds && nextStartLabel
+          ? `Your ${nextStartLabel} start is before your OPT ends`
+          : nextStartLabel
+            ? `Check the SEVIS release date for your ${nextStartLabel} start`
+            : "Your next program has a five-month start limit",
+      detail: startsTooLate && latestStartFromEad
+        ? `Based on the EAD date alone, classes would need to begin by ${formatDate(latestStartFromEad)}. The transfer release date can create an earlier limit.`
+        : startsBeforeOptEnds
+          ? "The EAD end date does not create a gap. Set the SEVIS transfer release no more than five months before classes begin."
+          : "Classes must begin within five months of the SEVIS transfer release or the approved OPT end date, whichever comes first. Choose the release date with both schools.",
       sourceIds: ["8CFR-214-2-F8-TRANSFER"]
     });
   }

@@ -1012,3 +1012,30 @@ Each entry should capture:
 - A live current-undergraduate case carried May 30, 2027, OPT, and travel from story intake through confirmation, the September 15 gate, the impact map, and the timeline without duplicate questions.
 - The compact timeline immediately showed September 15, the March 18 OPT transition deadline, and the end of the 60-day period. The full timeline also showed the normal OPT filing-window opening and program end.
 - The live advisor report completed, announced that it was ready, scrolled into view, used headings for each short section, and omitted unrelated CPT, F-2, and early-ending discussion. Browser console: no warnings or errors.
+
+### Connected Case Events and One Timeline - July 21, 2026
+
+**Research and diagnosis**
+
+- A current-OPT student planning travel and a second master's exposed a context split: the final GPT-5.6 report received separate completed-program, OPT, travel, and future-program events, while the live deterministic cards still read only the flattened scenario fields.
+- The final rule was rechecked at the controlling same- or lower-level provision. That restriction counts an earlier F-1 program completed **after** September 15, 2026. Travel after September 15 creates a new fixed-date admission, but does not by itself bar a second master's when the earlier master's was completed by September 15.
+- A mistyped January 2026 return date revealed that a stated post-rule return could still enter the travel branch with a date before the rule. The timeline reacted after correction, but the missing event context made the cards appear stale and generic.
+
+**Decisions**
+
+- Use the same semantic case events for the deterministic impact map, the timeline, follow-up answers, and the final report. The model may extract the events, but verified TypeScript logic decides their legal effects.
+- Ask for the earlier program completion date only when a same- or lower-level plan makes that date controlling and the story has not already supplied it.
+- Reject a planned return date in the past or on/before September 15 when the student says the trip returns after the rule begins. Keep the question active until the contradiction is corrected.
+- Replace generic travel and five-month cards with case-specific statements that name the planned return, projected I-94 date, next-program start, approved OPT end, and SEVIS release timing when those facts are known.
+- Render one active timeline. A compact fixed dock keeps its controlling dates visible and opens the full timeline; the print report uses that same timeline.
+- Open exact-rule citations in a new tab so the mapper remains intact. Show an immediate verified advisement draft while the structured GPT-5.6 report is generated, then replace it with the complete report.
+
+**Codex and OpenAI assistance**
+
+- Codex traced the discrepancy across the intake event model, deterministic impact map, Netlify report function, and React timeline instead of patching the student-facing sentence in isolation.
+- Codex converted the semantic events into shared deterministic inputs and added regression cases for the real completed-master's / approved-OPT / holiday-return / second-master's sequence.
+- GPT-5.6 remains responsible for understanding the student's natural-language chronology and writing the final synthesis. The verified matrix remains responsible for dates, classifications, contradictions, and rule-specific claims.
+
+**Verification**
+
+- Vitest: 122/122 passed across nine test files, including the past-return contradiction, an exact September 15 completion, and the four-event second-master's case. TypeScript and the production Vite build passed.

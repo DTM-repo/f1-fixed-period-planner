@@ -862,6 +862,31 @@ export function calculateScenario(input: StudentScenario): PlannerResult {
     );
   }
 
+  if (
+    (scenario.startingPosition === "current_ds_inside_us" || scenario.inUsOnEffectiveDate === "yes") &&
+    scenario.returningAfterEffectiveDate === "yes" &&
+    scenario.reentryDate &&
+    isOnOrBefore(scenario.reentryDate, effectiveDate)
+  ) {
+    const findings = [
+      ...normalized.findings,
+      finding(
+        "return-date-before-effective-date-contradiction",
+        "question",
+        "Your return date conflicts with your travel answer",
+        `You said this trip brings you back after September 15, 2026, but the return date entered is ${formatDate(scenario.reentryDate)}.`,
+        ["8CFR-214-1-M1", "8CFR-214-1-A4"]
+      )
+    ];
+    return buildClarificationResult(
+      scenario,
+      findings,
+      [...normalized.followUpQuestions, "What date will you return after September 15, 2026?"],
+      "Correct the return date",
+      "The return must be after September 15, 2026 for this travel branch to apply."
+    );
+  }
+
   const fixedPath =
     scenario.startingPosition === "prospective_outside_us" ||
     scenario.startingPosition === "change_status_inside_us" ||

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCoreQuestions, buildDisplayTimeline, buildQuestions, buildTriggeredReturnTimeline, hasEffectiveDateCoverageConflict, mergeFacts } from "./App";
+import { buildCoreQuestions, buildDisplayTimeline, buildQuestions, buildTriggeredReturnTimeline, hasEffectiveDateCoverageConflict, mergeFacts, plannedReturnDateError } from "./App";
 import { DEFAULT_SCENARIO } from "./content/demoScenarios";
 import type { IntakeCandidateFact } from "./ai/intakePayload";
 import type { StudentScenario } from "./engine/types";
@@ -121,6 +121,7 @@ describe("September 15 document conflicts", () => {
     expect(merged.educationLevel).toBe("undergraduate");
     expect(merged.nextProgramLevelPlan).toBe("same_or_lower");
     expect(buildCoreQuestions(merged, new Set(["presence"]), []).at(-1)?.id).toBe("effectiveEadEnd");
+    expect(merged.programEndOnEffectiveDate).toBeUndefined();
   });
 
   it("shows known month-and-year milestones before the exact EAD day is confirmed", () => {
@@ -329,6 +330,43 @@ describe("full interview wording", () => {
   });
 });
 
+describe("later program completion date", () => {
+  const approvedOptStudent = (): StudentScenario => ({
+    ...currentStudent("2028-05-22"),
+    programEndOnEffectiveDate: undefined,
+    currentProgramEndDate: undefined,
+    optIntent: "yes",
+    optStage: "post_completion_approved",
+    currentEadEndDate: "2027-02-18",
+    eadEndOnEffectiveDate: "2027-02-18",
+    nextProgramLevelPlan: "same_or_lower"
+  });
+
+  it("asks when the completed degree ended before advising on a same-level program", () => {
+    const scenario = approvedOptStudent();
+    const answered = new Set([...completedCoreAnswers, "effectiveEadEnd", "nextProgram"]);
+    const questions = buildQuestions(scenario, answered, ["later_program"], "2027-02-18");
+    expect(questions.find((question) => question.id === "previousProgramEnd")?.prompt).toBe(
+      "When did your earlier F-1 program end?"
+    );
+  });
+
+  it("does not repeat that question when a pre-rule completion month is already known", () => {
+    const scenario = { ...approvedOptStudent(), currentProgramEndDateHint: "2026-05" };
+    const answered = new Set([...completedCoreAnswers, "effectiveEadEnd", "nextProgram"]);
+    const questions = buildQuestions(scenario, answered, ["later_program"], "2027-02-18");
+    expect(questions.map((question) => question.id)).not.toContain("previousProgramEnd");
+  });
+});
+
+describe("planned return date validation", () => {
+  it("rejects a past date and a date before the rule for a planned post-rule return", () => {
+    expect(plannedReturnDateError("2026-01-10", "planned", "2026-07-21")).toContain("already passed");
+    expect(plannedReturnDateError("2026-09-15", "planned", "2026-07-21")).toContain("after September 15");
+    expect(plannedReturnDateError("2027-01-10", "planned", "2026-07-21")).toBeUndefined();
+  });
+});
+
 describe("immediate travel timeline", () => {
   it("shows the rule trigger before the return I-20 is known", () => {
     const timeline = buildTriggeredReturnTimeline({
@@ -338,5 +376,30 @@ describe("immediate travel timeline", () => {
       reentryBasis: "unknown"
     });
     expect(timeline.map((event) => event.title)).toContain("Your return triggers the new rules");
+  });
+
+  it("keeps the return and later program visible when the calculated timeline is incomplete", () => {
+    const scenario = {
+      ...currentStudent("2026-05-20"),
+      optIntent: "yes" as const,
+      optStage: "post_completion_approved" as const,
+      currentEadEndDate: "2027-02-18",
+      travelPosture: "planned" as const,
+      returningAfterEffectiveDate: "yes" as const,
+      reentryDate: "2027-01-10",
+      nextProgramLevelPlan: "same_or_lower" as const,
+      nextProgramStartDate: "2027-01-23"
+    };
+    const caseEvents = buildStudentCase(scenario, [], ["travel", "later_program"]).events;
+    const timeline = buildTriggeredReturnTimeline(scenario, [{
+      date: "2026-09-15",
+      title: "The new rule begins",
+      detail: "The effective date.",
+      tone: "warning"
+    }], caseEvents);
+    expect(timeline).toEqual(expect.arrayContaining([
+      expect.objectContaining({ date: "2027-01-10", title: expect.stringMatching(/return/i) }),
+      expect.objectContaining({ date: "2027-01-23", title: "Your next program begins" })
+    ]));
   });
 });

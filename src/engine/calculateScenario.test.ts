@@ -189,6 +189,18 @@ describe("contradictions and travel", () => {
     expect(ids(result)).toContain("post-rule-return-date-needed");
   });
 
+  it("stops when a current student labels a pre-rule date as a post-rule return", () => {
+    const result = calculateScenario({
+      ...transition,
+      travelPosture: "planned",
+      returningAfterEffectiveDate: "yes",
+      reentryDate: "2026-01-10"
+    });
+    expect(result.classification).toBe("manual_review");
+    expect(ids(result)).toContain("return-date-before-effective-date-contradiction");
+    expect(result.headline).toBe("Correct the return date");
+  });
+
   it("does not claim that a return creates a new four-year clock from the return date", () => {
     const result = calculateScenario({
       ...transition,

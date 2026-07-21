@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_SCENARIO } from "../content/demoScenarios";
 import { calculateScenario, scenarioForFixedReentry } from "../engine/calculateScenario";
 import type { StudentScenario } from "../engine/types";
+import type { CaseEvent } from "../case/studentCase";
 import { buildImpactMap } from "./impactMap";
 
 function current(overrides: Partial<StudentScenario> = {}): StudentScenario {
@@ -150,7 +151,7 @@ describe("concise impact map", () => {
     const map = buildImpactMap(scenario, stay, travel, ["travel", "extension"]);
     const ids = [...map.focusClaims, ...map.otherClaims].map((claim) => claim.id);
     expect(map.headline).toBe("Travel triggers the new rules");
-    expect(ids).toContain("travel-stay-alternative");
+    expect(ids).toContain("travel-fixed-return");
     expect(ids).toContain("travel-may-avoid-i539");
     expect(ids).toContain("stay-route-needs-extension");
     expect(ids).not.toContain("more-time-needed");
@@ -294,6 +295,56 @@ describe("concise impact map", () => {
     ]));
     expect(ids).not.toContain("graduate-transfer");
     expect(ids).not.toContain("graduate-program-change");
-    expect(claims.find((claim) => claim.id === "later-program-pre-rule-completion")?.detail).toContain("do not need an SEVP exception");
+    expect(claims.find((claim) => claim.id === "later-program-pre-rule-completion")?.detail).toContain("does not block the later program");
+  });
+
+  it("does not apply the same-level bar to a program completed on September 15", () => {
+    const scenario = current({
+      educationLevel: "graduate",
+      currentProgramEndDate: "2026-09-15",
+      nextProgramLevelPlan: "same_or_lower"
+    });
+    const map = buildImpactMap(scenario, calculateScenario(scenario), null, ["later_program"]);
+    const claims = [...map.focusClaims, ...map.otherClaims];
+
+    expect(claims.map((claim) => claim.id)).toContain("later-program-pre-rule-completion");
+    expect(claims.map((claim) => claim.id)).not.toContain("later-program-level");
+  });
+
+  it("uses separate case events to connect completed study, OPT, travel, and a later program", () => {
+    const scenario = current({
+      educationLevel: "graduate",
+      programEndOnEffectiveDate: undefined,
+      currentProgramEndDate: undefined,
+      optIntent: "yes",
+      optStage: "post_completion_approved",
+      currentEadEndDate: "2027-02-18",
+      eadEndOnEffectiveDate: "2027-02-18",
+      travelPosture: "planned",
+      returningAfterEffectiveDate: "yes",
+      reentryDate: "2027-01-10",
+      reentryBasis: "longer_program_i20",
+      returnProgramStartDate: "2027-01-23",
+      returnProgramEndDate: "2029-05-20",
+      nextProgramLevelPlan: "same_or_lower",
+      nextProgramStartDate: undefined,
+      nextProgramEndDate: undefined
+    });
+    const events: CaseEvent[] = [
+      { id: "completed", kind: "program", role: "completed_program", label: "First master's", end: { value: "2026-05", precision: "month" }, educationLevel: "graduate", source: "student" },
+      { id: "opt", kind: "practical_training", role: "approved_opt", label: "Approved OPT", end: { value: "2027-02-18", precision: "day" }, source: "confirmed" },
+      { id: "return", kind: "travel", role: "planned_return", label: "Holiday return", start: { value: "2027-01-10", precision: "day" }, source: "confirmed" },
+      { id: "later", kind: "later_program", role: "future_program", label: "Second master's", start: { value: "2027-01-23", precision: "day" }, end: { value: "2029-05-20", precision: "day" }, educationLevel: "graduate", source: "confirmed" }
+    ];
+    const stay = calculateScenario(scenario);
+    const travel = calculateScenario(scenarioForFixedReentry(scenario));
+    const map = buildImpactMap(scenario, stay, travel, ["travel", "opt", "later_program"], events);
+    const claims = [...map.focusClaims, ...map.otherClaims];
+
+    expect(claims.find((claim) => claim.id === "later-program-pre-rule-completion")?.title).toContain("does not block");
+    expect(claims.find((claim) => claim.id === "opt-approved-before-later-program")?.detail).toContain("Jan 23, 2027");
+    expect(claims.find((claim) => claim.id === "opt-to-later-program-timing")?.title).toContain("before your OPT ends");
+    expect(claims.map((claim) => claim.id)).toContain("travel-fixed-return");
+    expect(claims.map((claim) => claim.id)).not.toContain("later-program-level-date-needed");
   });
 });

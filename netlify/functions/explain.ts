@@ -55,7 +55,7 @@ function buildPrompt(payload: ExplanationRequest): string {
     Boolean(result.extensionNeededBy)
   );
   const reportTopicSet = new Set(reportTopics);
-  const impactMap = buildImpactMap(scenario, result, travelResult, reportTopics);
+  const impactMap = buildImpactMap(scenario, result, travelResult, reportTopics, payload.caseEvents ?? []);
   const reportClaims = [...new Map(reportTopics
     .flatMap((topic) => claimsForTopic(impactMap, topic))
     .map((claim) => [claim.id, claim])).values()];
