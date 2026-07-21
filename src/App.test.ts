@@ -391,15 +391,24 @@ describe("immediate travel timeline", () => {
       nextProgramStartDate: "2027-01-23"
     };
     const caseEvents = buildStudentCase(scenario, [], ["travel", "later_program"]).events;
-    const timeline = buildTriggeredReturnTimeline(scenario, [{
-      date: "2026-09-15",
-      title: "The new rule begins",
-      detail: "The effective date.",
-      tone: "warning"
-    }], caseEvents);
+    const timeline = buildTriggeredReturnTimeline(scenario, [
+      {
+        date: "2026-09-15",
+        title: "The new rule begins",
+        detail: "The effective date.",
+        tone: "warning"
+      },
+      {
+        date: "2027-01-23",
+        title: "Program starts",
+        detail: "The program start date on the return I-20.",
+        tone: "neutral"
+      }
+    ], caseEvents);
     expect(timeline).toEqual(expect.arrayContaining([
       expect.objectContaining({ date: "2027-01-10", title: expect.stringMatching(/return/i) }),
-      expect.objectContaining({ date: "2027-01-23", title: "Your next program begins" })
+      expect.objectContaining({ date: "2027-01-23", title: expect.stringMatching(/program starts|next program begins/i) })
     ]));
+    expect(timeline.filter((event) => event.date === "2027-01-23")).toHaveLength(1);
   });
 });

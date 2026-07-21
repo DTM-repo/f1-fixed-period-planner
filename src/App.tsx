@@ -1643,7 +1643,7 @@ export function buildDisplayTimeline(
   for (const event of caseEvents) {
     const milestones = event.role === "future_program"
       ? [
-          { point: event.start, title: "Your next program begins", detail: "This date connects your OPT or current program to the next program.", match: /next program|classes begin/i },
+          { point: event.start, title: "Your next program begins", detail: "This date connects your OPT or current program to the next program.", match: /next program|program starts|classes begin/i },
           { point: event.end, title: "Your next program ends", detail: "This date shows whether the admission period covers the whole program.", match: /next program|program ends/i }
         ]
       : event.role === "active_program"
@@ -1740,9 +1740,16 @@ function Timeline({ title, subtitle, events }: { title: string; subtitle: string
 
 function TimelineDock({ events, onOpen }: { events: DisplayTimelineItem[]; onOpen: () => void }) {
   if (!events.length) return null;
+  const important = events.filter((event) =>
+    event.tone === "warning" ||
+    event.tone === "danger" ||
+    /return|enter|OPT|program starts|program begins|program ends|period ends|must leave/i.test(event.title)
+  );
   const visibleEvents = events.length <= 4
     ? events
-    : [events[0], ...events.slice(1, -1).filter((event) => event.tone === "warning" || event.tone === "danger").slice(0, 2), events.at(-1)!];
+    : important.length
+      ? important.slice(0, 4)
+      : [events[0], events.at(-1)!];
   return (
     <button type="button" className="timeline-dock" onClick={onOpen} aria-label="Open your full timeline">
       <span className="timeline-dock-label"><CalendarDays aria-hidden="true" /> Your timeline</span>
