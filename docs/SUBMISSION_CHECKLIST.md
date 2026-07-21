@@ -2,11 +2,11 @@
 
 ## Product
 
-- [ ] Run one current-student travel/OPT case on the deployed site.
+- [x] Run one current-student travel/OPT case on the deployed site.
 - [ ] Run one incoming-student case on the deployed site.
 - [ ] Confirm voice, typed intake, exact citations, advisement generation, Explore further, PDF, and Start over.
-- [ ] Confirm the production browser console has no errors.
-- [ ] Confirm the OpenAI environment variables are present in Netlify.
+- [x] Confirm the production browser console has no errors.
+- [x] Confirm the OpenAI environment variables are present in Netlify.
 - [ ] Confirm the disclaimer and rule-status date are accurate.
 
 ## Repository
@@ -17,7 +17,7 @@
 - [x] Include local setup and test commands.
 - [x] Explain the Codex collaboration and GPT-5.6 architecture in the README.
 - [x] Put the deployed Netlify URL near the top of the README.
-- [ ] Verify that a judge can use the demo without an account or rebuilding it after production secrets are configured.
+- [x] Verify that a judge can use the demo without an account or rebuilding it after production secrets are configured.
 
 ## Video
 

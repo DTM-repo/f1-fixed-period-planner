@@ -1073,3 +1073,17 @@ Each entry should capture:
 - The completed report locked all seven answered facts. Explore further opened in a separate route, marked Travel and OPT as report priorities, and left the report unchanged.
 - The explorer's “Need more time” topic opened to Form I-539 guidance with exact source links even though the student had not previously selected that issue.
 - At 390 by 844, the desktop timeline strip was hidden and all three applicable events rendered as a vertical rail without horizontal overflow.
+
+### Production OpenAI Activation - July 21, 2026
+
+**Deployment decision**
+
+- Keep the OpenAI credential entirely server-side as a write-only Netlify secret. No API key is committed to GitHub or exposed through a `VITE_` browser variable.
+- Deploy GPT-5.6 Luna for structured narrative intake and GPT-5.6 Sol for the full advisement and rule-scoped follow-ups.
+
+**Production verification**
+
+- Redeployed the verified production build with all three Netlify Functions: `intake`, `explain`, and `follow-up`.
+- The public intake endpoint returned HTTP 200 and correctly extracted a current undergraduate student's I-20 date, travel concern, program event, and travel event with GPT-5.6 Luna.
+- The public background advisement endpoint completed with GPT-5.6 Sol and returned a five-section report covering the key consequence, current timeline, return period, OPT after travel, and next actions.
+- The public follow-up endpoint returned HTTP 200 with a concise GPT-5.6 Sol answer and exact source IDs for a travel-before-OPT question.
