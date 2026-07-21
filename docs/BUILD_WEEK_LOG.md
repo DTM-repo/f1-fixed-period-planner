@@ -1087,3 +1087,24 @@ Each entry should capture:
 - The public intake endpoint returned HTTP 200 and correctly extracted a current undergraduate student's I-20 date, travel concern, program event, and travel event with GPT-5.6 Luna.
 - The public background advisement endpoint completed with GPT-5.6 Sol and returned a five-section report covering the key consequence, current timeline, return period, OPT after travel, and next actions.
 - The public follow-up endpoint returned HTTP 200 with a concise GPT-5.6 Sol answer and exact source IDs for a travel-before-OPT question.
+
+### Submission Demo and Public Disclaimer - July 21, 2026
+
+**Decisions**
+
+- Capture the deployed application itself rather than presenting slides. The demo includes the cinematic opening, live history-free oscilloscope, fact extraction, one-question flow, deterministic timeline, exact-rule citation preview, final advisement, and rule explorer.
+- Keep the first completed 2:33 edit as a submission-safe fallback. Produce a separate 2:43 revision with a warm male narrator to match David's first-person script, roughly five percent more breathing room, stronger click-centered focus zooms, and a quiet original instrumental bed with no third-party licensing dependency.
+- Keep the existing `durationofstatuschanges.netlify.app` URL through submission. The page, repository, video, and submission copy consistently use **F-1 Duration Mapper**; renaming the working production URL on deadline day would create avoidable broken-link risk.
+- Add a concise legal-information boundary to the completed on-screen advisement and printable PDF: the tool is educational information, not legal advice, and status-changing decisions should be confirmed with a DSO or qualified immigration attorney.
+
+**Codex and OpenAI assistance**
+
+- Codex scripted and replayed a real student case against the deployed app, captured the live UI at 1920 by 1080, assembled the timed edit, generated captions and YouTube metadata, and verified representative frames, full-file decoding, and audio loudness.
+- OpenAI text-to-speech generated the narration. Codex generated the background score procedurally so the submission does not rely on copyrighted third-party music.
+- Codex preserved the original edit while producing the revised cut, giving the final submission a tested fallback rather than replacing the only usable artifact.
+
+**Verification**
+
+- Revised demo: 2:43.07, 1920 by 1080, 30 fps, stereo AAC audio, complete decode pass, synchronized SRT captions, and approximately -16 LUFS program loudness.
+- Vitest: 124/124 passed across nine test files. TypeScript and the production Vite build passed from a fast local verification copy after the cloud-backed workspace made the equivalent build impractically slow.
+- Commit `4e35684` was pushed to `main`; the production Netlify deploy was verified to contain the new disclaimer.
