@@ -1709,7 +1709,7 @@ function PrintableReport({
       </section>
       <footer>
         <span>Based on the DHS final rule published July 17, 2026</span>
-        <span>Planning and issue-spotting guidance, not legal advice</span>
+        <span>Educational information, not legal advice. Confirm decisions that could affect your status with your DSO or a qualified immigration attorney.</span>
       </footer>
     </article>
   );
@@ -3278,6 +3278,10 @@ export default function App() {
                   <button type="button" onClick={() => void shareSummary()}><Share2 aria-hidden="true" /> Share</button>
                 </div>
                 {shareNotice && <p className="share-notice" role="status">{shareNotice}</p>}
+                <footer>
+                  <span>Educational information, not legal advice.</span>
+                  <span>Confirm decisions that could affect your status with your DSO or a qualified immigration attorney.</span>
+                </footer>
               </article>
             </>
           )}
