@@ -1055,6 +1055,7 @@ Each entry should capture:
 - Put **Explore further** beside the completed report. Its separate page contains only applicable topics, concise personalized summaries, exact source links, and a rule-scoped question box.
 - Exploration cannot silently mutate or regenerate the report. A material change requires the explicit **Create a revised advisement** path.
 - When the deterministic map has a student-specific claim for an explorer topic, show it first. Otherwise show concise, verified baseline guidance with a rule citation instead of an empty state.
+- Place the rule-scoped question box directly beneath the selected explorer topic so the issue list stays stable and the guidance column uses its available space; on mobile, the question box follows the guidance.
 - Keep the report generation call unchanged and restore the honest “Writing your advisement” loading state. The earlier temporary draft treatment is superseded by this decision.
 - On mobile, replace the truncated horizontal dock with an always-visible vertical date rail whose reserved page space scales with the number of events.
 

@@ -1853,18 +1853,17 @@ function RuleExplorer({
             ) : (
               <div className="explorer-empty-state"><Compass aria-hidden="true" /><h2>Choose an issue.</h2><p>Its guidance and exact rule sources will open here.</p></div>
             )}
+            <AdvisorFollowUp
+              turns={turns}
+              question={question}
+              state={followUpState}
+              eyebrow="Ask additional questions"
+              title="What else would you like to know?"
+              onQuestion={onQuestion}
+              onSubmit={onSubmit}
+            />
           </section>
         </div>
-
-        <AdvisorFollowUp
-          turns={turns}
-          question={question}
-          state={followUpState}
-          eyebrow="Ask additional questions"
-          title="What else would you like to know?"
-          onQuestion={onQuestion}
-          onSubmit={onSubmit}
-        />
       </main>
       <TimelineDock events={timeline} onOpen={onOpenTimeline} />
       {restartPrompt && <RestartDialog onCancel={onCancelRestart} onConfirm={onConfirmRestart} />}

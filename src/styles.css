@@ -750,7 +750,8 @@ details[open] > summary svg { transform: rotate(180deg); }
 .explorer-empty-state > svg { width: 28px; height: 28px; margin-bottom: 16px; color: var(--cyan); }
 .explorer-empty-state p,
 .explorer-empty { color: var(--muted); line-height: 1.55; }
-.explorer-page > .advisor-follow-up { width: 100%; margin-top: 82px; }
+.explorer-detail > .advisor-follow-up { width: 100%; margin: 48px 0 0; padding-top: 34px; border-top-width: 1px; }
+.explorer-detail > .advisor-follow-up > h2 { font-size: 1.75rem; }
 
 .source-band { padding: 0 clamp(20px, 5vw, 72px) 52px; background: #fff; }
 .source-band details { width: min(1100px, 100%); margin: 0 auto; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
@@ -890,7 +891,7 @@ details[open] > summary svg { transform: rotate(180deg); }
   .explorer-detail > h2,
   .explorer-empty-state h2 { font-size: 2rem; }
   .explorer-empty-state { min-height: 220px; }
-  .explorer-page > .advisor-follow-up { margin-top: 62px; }
+  .explorer-detail > .advisor-follow-up { margin-top: 42px; }
   .overview-page { padding-inline: 18px; }
   .overview-page article { margin-top: 48px; }
 }
