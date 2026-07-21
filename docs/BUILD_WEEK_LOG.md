@@ -977,3 +977,38 @@ Each entry should capture:
 - Answer editing preserved the active later-program question and all calculated dates after canceling an EAD edit. Start over cleared the case only after confirmation.
 - The live GPT-5.6 Sol report completed, displayed a ready announcement, moved into view, and covered travel, OPT, the later program, transfer timing, and the pending immigrant petition without contradicting the deterministic cards.
 - Desktop and 390 by 844 responsive checks found no horizontal overflow or overlapping controls. Browser console: no warnings or errors.
+
+### Cinematic Intake, Visible Change, and Shareable Advisement - July 21, 2026
+
+**Research and diagnosis**
+
+- A final student walkthrough showed that the working logic was still visually competing with itself. The opening revealed too much at once, changing dates were easy to miss beside the active question, and the complete impact index repeated every explanation even before the student chose an issue.
+- The story extractor was reliably identifying the student's situation, but there was no explicit moment for the student to approve or correct that understanding before the legal flow began.
+- The six-step progress label could move backward after a priority question finished. The answers were preserved, but the interface implied regression.
+- The final advisor report needed stronger visual structure and stricter scope. Generic CPT, F-2, or early-ending material does not belong in a report unless the student's facts or chosen areas make it relevant.
+- Browser printing reproduced the interactive page and could omit the visual timeline. A useful shareable result needs its own document composition.
+
+**Decisions**
+
+- Begin on a completely black field. Type the first sentence letter by letter, fade the next two beats, and reveal the wordmark and actions last. A click or key press completes the sequence immediately, and reduced-motion users see the complete opening without animation.
+- Voice and typed story intake now precede the September 15 question. The full interview still begins with that question because no narrative is supplied. Story users explicitly choose “This information is correct” or “Add or correct information.”
+- Keep the student's priority guidance expanded, but reduce the complete impact map to scannable issue names. Hover, focus, or selection reveals the personalized one-line consequence.
+- Show a compact live timeline beside the current question and keep the full visual timeline below. Dates continue to come from the deterministic engine.
+- Keep save, share, and test-case actions out of the exploratory flow. They appear only after the final advisement.
+- Return the advisor report as headed sections. The model receives only verified claims for the student's stated, explored, or directly established topics; unrelated hypothetical categories remain in the clickable impact map instead.
+- Give printing a separate, letter-sized report with a document header, personal conclusion, vertical timelines, headed advisement sections, and no interactive follow-up prompt.
+
+**Codex and OpenAI assistance**
+
+- Codex implemented the staged opening, fact-confirmation handoff, six-step progress treatment, compact impact disclosure, live timeline preview, report layout, and print-only document.
+- Codex extracted report-topic selection into a tested deterministic function so confirmed travel, OPT, and uncommon circumstances enter the report while unrelated defaults do not.
+- A live GPT-5.6 Luna intake carried the student's program date, undergraduate level, OPT plan, and travel concern into the planner without asking for those facts again. GPT-5.6 Sol then produced a complete headed advisor report from the verified map.
+- Browser replay caught a character-animation line-break bug inside “F-1” and a progress indicator that moved backward; both were repaired before release.
+
+**Verification**
+
+- Vitest: 115/115 passed across nine test files; TypeScript and the production Vite build passed.
+- The opening was visually checked during the first beat and after completion. During the first beat, only the partially typed opening sentence was visible.
+- A live current-undergraduate case carried May 30, 2027, OPT, and travel from story intake through confirmation, the September 15 gate, the impact map, and the timeline without duplicate questions.
+- The compact timeline immediately showed September 15, the March 18 OPT transition deadline, and the end of the 60-day period. The full timeline also showed the normal OPT filing-window opening and program end.
+- The live advisor report completed, announced that it was ready, scrolled into view, used headings for each short section, and omitted unrelated CPT, F-2, and early-ending discussion. Browser console: no warnings or errors.

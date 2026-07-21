@@ -15,8 +15,13 @@ export interface ExplanationRequest {
 
 export interface ExplanationResponse {
   title: string;
-  paragraphs: string[];
+  sections: AdvisorSection[];
   model?: string;
+}
+
+export interface AdvisorSection {
+  heading: string;
+  body: string;
 }
 
 const REPORT_PROCESS_LANGUAGE = /(?:malformed json|proper (?:json )?object|let(?:'s| us) produce|need (?:a )?correct final|word count|paragraphs? array|structured output|title perhaps|\boops\b|\}\]\})/i;
@@ -30,11 +35,14 @@ export function hasInvalidAdvisorProse(text: string, maxWords: number): boolean 
   return REPORT_PROCESS_LANGUAGE.test(text) || MARKDOWN_FORMATTING.test(text) || wordCount(text) > maxWords;
 }
 
-export function hasInvalidReportContent(report: Pick<ExplanationResponse, "title" | "paragraphs">): boolean {
-  const text = [report.title, ...report.paragraphs].join("\n");
-  const normalizedParagraphs = report.paragraphs.map((paragraph) => paragraph.trim().toLowerCase());
+export function hasInvalidReportContent(report: Pick<ExplanationResponse, "title" | "sections">): boolean {
+  const text = [report.title, ...report.sections.flatMap((section) => [section.heading, section.body])].join("\n");
+  const normalizedHeadings = report.sections.map((section) => section.heading.trim().toLowerCase());
+  const normalizedBodies = report.sections.map((section) => section.body.trim().toLowerCase());
   return (
-    hasInvalidAdvisorProse(text, 800) ||
-    new Set(normalizedParagraphs).size !== normalizedParagraphs.length
+    hasInvalidAdvisorProse(text, 650) ||
+    new Set(normalizedHeadings).size !== normalizedHeadings.length ||
+    new Set(normalizedBodies).size !== normalizedBodies.length ||
+    report.sections.some((section) => section.body.includes("\n"))
   );
 }

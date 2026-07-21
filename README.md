@@ -22,11 +22,11 @@ The app gives every supported partial result it can, identifies contradictions b
 
 The student experience is deliberately one question at a time:
 
-1. Confirm whether the student will be in the United States in valid F-1 status on September 15, 2026.
-2. Ask what brought the student here, in the student's own words. Voice and text intake use the same fact-and-concern extraction.
-3. Address the student's concern first, while the deterministic impact map shows every other rule change that applies to the student's categories.
-4. Offer one additional area at a time for deeper exploration. The app leads with a concrete consequence; it never asks the student to choose from a wall of legal topics.
-5. Ask only the controlling questions for an accepted area, one at a time, and preserve still-compatible answers when an earlier answer changes.
+1. Ask what brought the student here, in the student's own words. Voice and text intake use the same fact-and-concern extraction; students who choose the full interview begin with the September 15 question instead.
+2. Let the student confirm or correct what the app understood, then confirm whether the student will be in the United States in valid F-1 status on September 15, 2026.
+3. Confirm only the controlling dates or facts that remain unknown.
+4. Address the student's concern first, while the deterministic impact map shows every other rule change that applies to the student's categories.
+5. Let the student choose any additional area for deeper exploration, one question at a time, while preserving compatible answers and earlier priorities.
 6. Create a complete AI advisor overview from the verified map, then accept open-ended follow-up questions that can add facts and refresh the map.
 
 Every explored area ends with substantive guidance. A topic with no missing field cannot silently skip the student to the report.

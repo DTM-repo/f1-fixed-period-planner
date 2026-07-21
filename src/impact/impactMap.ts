@@ -49,7 +49,7 @@ export const EXPLORATION_OPTIONS: Array<{
 }> = [
   { topic: "stay_length", title: "How long I can stay", description: "Your I-94, I-20, and the dates that control your stay." },
   { topic: "travel", title: "Travel", description: "What changes when you leave and return." },
-  { topic: "extension", title: "Needing more time", description: "Form I-539 and the travel alternative." },
+  { topic: "extension", title: "Need more time", description: "Form I-539 and the travel alternative." },
   { topic: "opt", title: "OPT or STEM OPT", description: "Filing, travel, and the one-time OPT deadline." },
   { topic: "cpt", title: "CPT", description: "Work during study and a pending extension." },
   { topic: "school_transfer", title: "Transfer schools", description: "New limits for undergraduate and graduate students." },

@@ -18,11 +18,10 @@ import {
   RefreshCw,
   RotateCcw,
   Share2,
-  Sparkles,
   Square,
   X
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type { ExplanationResponse } from "./ai/explanationPayload";
 import type { AdvisorTurn, FollowUpResponse } from "./ai/followUpPayload";
 import type { IntakeCandidateFact, IntakeExtractionResponse, IntakeFactField, IntakeTopic } from "./ai/intakePayload";
@@ -91,6 +90,43 @@ type Page = "planner" | "overview";
 type IntakeState = "idle" | "loading" | "ready" | "failed";
 type ReportState = "idle" | "loading" | "ready" | "failed";
 type QuestionKind = "choice" | "date";
+
+const OPENING_LINE = "F-1 status no longer comes with an open-ended stay.";
+
+function TypeOnOpeningLine() {
+  const words = OPENING_LINE.split(" ");
+  return (
+    <h1 className="hero-beat beat-one typed-opening" aria-label={OPENING_LINE}>
+      <span aria-hidden="true">
+        {words.map((word, wordIndex) => {
+          const characterOffset = words.slice(0, wordIndex).reduce((total, item) => total + item.length, 0) + wordIndex;
+          return (
+            <Fragment key={`${word}-${wordIndex}`}>
+              {wordIndex > 0 ? " " : null}
+              <span className="type-word">
+                {[...word].map((character, index) => (
+                  <span className="type-char" style={{ "--char-index": characterOffset + index } as React.CSSProperties} key={`${character}-${index}`}>{character}</span>
+                ))}
+              </span>
+            </Fragment>
+          );
+        })}
+      </span>
+    </h1>
+  );
+}
+
+function FlowProgress({ step, label, dark = false }: { step: number; label: string; dark?: boolean }) {
+  return (
+    <div className={`flow-progress ${dark ? "dark" : ""}`} aria-label={`Step ${step} of 6: ${label}`}>
+      <span>Step {step} of 6</span>
+      <span className="flow-progress-label">{label}</span>
+      <span className="flow-progress-dots" aria-hidden="true">
+        {Array.from({ length: 6 }, (_, index) => <i className={index < step ? "complete" : ""} key={index} />)}
+      </span>
+    </div>
+  );
+}
 
 interface Choice {
   value: string;
@@ -1374,6 +1410,7 @@ function ImpactList({
   completedTopics,
   activeTopic,
   fullInterview = false,
+  timelinePreview,
   onExplore,
   onResolveQuestion
 }: {
@@ -1384,6 +1421,7 @@ function ImpactList({
   completedTopics?: CanonicalTopic[];
   activeTopic?: CanonicalTopic | null;
   fullInterview?: boolean;
+  timelinePreview?: React.ReactNode;
   onExplore?: (topic: CanonicalTopic) => void;
   onResolveQuestion?: (questionId: string) => void;
 }) {
@@ -1402,6 +1440,7 @@ function ImpactList({
           <ImpactClaimList claims={map.focusClaims} onResolveQuestion={onResolveQuestion} />
         </section>
       )}
+      {timelinePreview}
       {scenario && topics && prominentTopics && completedTopics && onExplore && (
         <ImpactIndex
           map={map}
@@ -1430,7 +1469,6 @@ function AdvisementAction({
 }) {
   return (
     <section className="advisement-action" aria-label="Create your advisement">
-      <div><Sparkles aria-hidden="true" /><span><strong>Ready when you are</strong><small>Your advisement brings your situation and priorities together.</small></span></div>
       <button type="button" onClick={onCreate} disabled={state === "loading" || disabled}>
         {state === "loading" ? <RefreshCw className="spin" aria-hidden="true" /> : <FileText aria-hidden="true" />}
         {state === "loading" ? "Writing your advisement" : "I'm ready for my advisement"}
@@ -1442,14 +1480,9 @@ function AdvisementAction({
 
 function ExplorationHome({ fullInterview }: { fullInterview: boolean }) {
   return (
-    <section className="question-card exploration-home">
-      <p className="question-kicker">{fullInterview ? "Full interview" : "You choose what comes next"}</p>
-      <h2>{fullInterview ? "Your full interview is complete" : "Explore another issue, or create your advisement"}</h2>
-      <p className="question-help">
-        {fullInterview
-          ? "Every area shown in your impact map is included. You can still open any issue before creating your advisement."
-          : "Use the impact list to open only the areas you want. Your original priorities stay at the top."}
-      </p>
+    <section className="exploration-home">
+      <CheckCircle2 aria-hidden="true" />
+      <p>{fullInterview ? "Your full interview is complete." : "Choose another issue from the list, or create your advisement."}</p>
     </section>
   );
 }
@@ -1594,6 +1627,85 @@ function Timeline({ title, subtitle, events }: { title: string; subtitle: string
   );
 }
 
+function MiniTimeline({ events, onOpen }: { events: DisplayTimelineItem[]; onOpen: () => void }) {
+  if (!events.length) return null;
+  const visibleEvents = events.length <= 4
+    ? events
+    : [events[0], ...events.slice(1, -1).filter((event) => event.tone === "warning" || event.tone === "danger").slice(0, 2), events.at(-1)!];
+  return (
+    <section className="mini-timeline" aria-label="Your changing timeline">
+      <header><span>Your timeline</span><button type="button" onClick={onOpen}>See all dates <ArrowRight aria-hidden="true" /></button></header>
+      <div>
+        {visibleEvents.map((event, index) => (
+          <span className={event.tone} key={`${event.sortKey}-${event.title}-${index}`}>
+            <i aria-hidden="true" />
+            <time dateTime={event.date}>{event.dateLabel}</time>
+            <small>{event.title}</small>
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PrintTimeline({ title, events }: { title: string; events: DisplayTimelineItem[] }) {
+  if (!events.length) return null;
+  return (
+    <section className="print-timeline">
+      <h3>{title}</h3>
+      <ol>
+        {events.map((event, index) => (
+          <li className={event.tone} key={`${event.sortKey}-${event.title}-${index}`}>
+            <time dateTime={event.date}>{event.dateLabel}</time>
+            <div><strong>{event.title}</strong><p>{event.detail}</p></div>
+          </li>
+        ))}
+      </ol>
+    </section>
+  );
+}
+
+function PrintableReport({
+  report,
+  map,
+  stayTimeline,
+  returnTimeline,
+  returnTriggersNewRules
+}: {
+  report: ExplanationResponse;
+  map: ImpactMap;
+  stayTimeline: DisplayTimelineItem[];
+  returnTimeline: DisplayTimelineItem[];
+  returnTriggersNewRules: boolean;
+}) {
+  return (
+    <article className="print-report">
+      <header>
+        <strong>F-1 Duration Mapper</strong>
+        <span>Personal advisement</span>
+      </header>
+      <section className="print-report-intro">
+        <p>How this affects you</p>
+        <h1>{map.headline}</h1>
+        <div>{map.summary}</div>
+      </section>
+      <section className="print-report-timelines">
+        <PrintTimeline title={returnTriggersNewRules ? "If you stay in the United States" : "Your timeline"} events={stayTimeline} />
+        {returnTriggersNewRules && <PrintTimeline title="If you leave and return after September 15" events={returnTimeline} />}
+      </section>
+      <section className="print-advisement">
+        <p className="print-kicker">Your advisement</p>
+        <h2>{report.title}</h2>
+        {report.sections.map((section) => <section key={section.heading}><h3>{section.heading}</h3><p>{section.body}</p></section>)}
+      </section>
+      <footer>
+        <span>Based on the DHS final rule published July 17, 2026</span>
+        <span>Planning and issue-spotting guidance, not legal advice</span>
+      </footer>
+    </article>
+  );
+}
+
 function AdvisorFollowUp({
   turns,
   question,
@@ -1682,10 +1794,10 @@ async function writeClipboard(text: string) {
   field.remove();
 }
 
-const PLANNER_SESSION_KEY = "f1-duration-mapper-session-v2";
+const PLANNER_SESSION_KEY = "f1-duration-mapper-session-v3";
 
 interface PlannerSession {
-  version: 2;
+  version: 3;
   experience: Experience;
   storyMode?: StoryMode;
   scenario: StudentScenario;
@@ -1706,7 +1818,7 @@ function readPlannerSession(): PlannerSession | null {
     const stored = window.sessionStorage.getItem(PLANNER_SESSION_KEY);
     if (!stored) return null;
     const parsed = JSON.parse(stored) as Partial<PlannerSession>;
-    if (parsed.version !== 2 || !parsed.scenario || !parsed.experience) return null;
+    if (parsed.version !== 3 || !parsed.scenario || !parsed.experience) return null;
     return parsed as PlannerSession;
   } catch {
     return null;
@@ -1772,6 +1884,7 @@ export default function App() {
   const queuedIntakeNarrativeRef = useRef<string | null>(null);
   const lastUnderstoodNarrativeRef = useRef("");
   const storyResultsRef = useRef<HTMLElement | null>(null);
+  const timelineRef = useRef<HTMLElement | null>(null);
   const reportRef = useRef<HTMLElement | null>(null);
   const preserveReportForScenarioUpdateRef = useRef(false);
   const restoringReportRef = useRef(Boolean(restoredSession?.report));
@@ -1795,7 +1908,7 @@ export default function App() {
 
   useEffect(() => {
     const session: PlannerSession = {
-      version: 2,
+      version: 3,
       experience,
       storyMode,
       scenario,
@@ -2054,7 +2167,7 @@ export default function App() {
     : intakeState === "loading"
       ? "Finishing your results"
       : storyReady
-        ? "Continue to your results"
+        ? "Review what we understood"
         : intakeState === "failed"
           ? "Try understanding again"
           : "Understand my story";
@@ -2067,8 +2180,12 @@ export default function App() {
     if (mode !== "full") {
       setStoryMode(mode);
       setInterviewMode("focused");
-    } else setInterviewMode("full");
-    setExperience("gate");
+      setExperience("story");
+      if (mode === "voice") void toggleSpeech();
+    } else {
+      setInterviewMode("full");
+      setExperience("gate");
+    }
     window.scrollTo({ top: 0, behavior: "auto" });
   }
 
@@ -2078,8 +2195,8 @@ export default function App() {
       startFullInterview();
       return;
     }
-    setExperience("story");
-    if (storyMode === "voice") void toggleSpeech();
+    setExperience("interview");
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function startFullInterview() {
@@ -2401,8 +2518,18 @@ export default function App() {
       void understandNarrative(currentNarrative);
       return;
     }
-    setScenario(draftScenario);
+    setScenario({
+      ...draftScenario,
+      inUsOnEffectiveDate: "unknown",
+      maintainingStatusOnEffectiveDate: "unknown",
+      admissionBasis: "unknown"
+    });
     markFactsAnswered(intake.facts);
+    setAnswered((current) => {
+      const next = new Set(current);
+      next.delete("presence");
+      return next;
+    });
     const storyTopics: IntakeTopic[] = intake.topics.length ? intake.topics : ["stay_length"];
     setFocusTopics(storyTopics);
     setInterviewMode("focused");
@@ -2411,7 +2538,13 @@ export default function App() {
     recognitionRef.current?.stop();
     recordingRef.current = false;
     setRecording(false);
-    setExperience("interview");
+    setExperience("gate");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function correctStory() {
+    setStoryFinished(false);
+    setStoryMode("type");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -2459,7 +2592,8 @@ export default function App() {
       return;
     }
     if (storyReady) {
-      finishStory();
+      setStoryFinished(true);
+      window.setTimeout(() => storyResultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
       return;
     }
     setStoryFinished(true);
@@ -2490,7 +2624,7 @@ export default function App() {
       applicableRuleAreas: studentCase.topicEvaluations,
       impactMap,
       stayInUnitedStatesResult: travelResult ? resultSnapshot(result) : undefined,
-      advisorReport: report ? { title: report.title, paragraphs: report.paragraphs } : undefined
+      advisorReport: report ? { title: report.title, sections: report.sections } : undefined
     };
     try {
       await writeClipboard(JSON.stringify(payload, null, 2));
@@ -2502,7 +2636,8 @@ export default function App() {
 
   async function shareSummary() {
     const claims = [...impactMap.focusClaims, ...impactMap.otherClaims].flatMap((claim) => [claim.title, claim.detail]);
-    const text = [impactMap.headline, impactMap.summary, ...claims, report?.title, ...(report?.paragraphs ?? [])].filter(Boolean).join("\n\n");
+    const reportText = report?.sections.flatMap((section) => [section.heading, section.body]) ?? [];
+    const text = [impactMap.headline, impactMap.summary, ...claims, report?.title, ...reportText].filter(Boolean).join("\n\n");
     try {
       if (navigator.share) {
         await navigator.share({ title: "My F-1 Duration Map", text, url: window.location.href });
@@ -2785,7 +2920,7 @@ export default function App() {
       >
         <nav className="welcome-nav wordmark-reveal"><strong>F-1 Duration Mapper</strong><button type="button" onClick={() => navigateOverview(true)}>What happened?</button></nav>
         <section className="welcome-copy">
-          <h1 className="hero-beat beat-one">F-1 status no longer comes with an open-ended stay.</h1>
+          <TypeOnOpeningLine />
           <p className="hero-beat beat-two">Every F-1 student needs to understand what the new rules mean for their own plans.</p>
           <p className="hero-beat beat-three"><em>We can help.</em></p>
           <div className="welcome-actions actions-reveal">
@@ -2794,17 +2929,24 @@ export default function App() {
             <button type="button" className="quiet-start" onClick={() => beginPath("full")}>Take the full interview <ArrowRight aria-hidden="true" /></button>
           </div>
         </section>
-        <footer className="footer-reveal"><span>No SEVIS ID, passport number, or document upload is needed.</span><span>Rule status checked July 19, 2026</span></footer>
       </main>
     );
   }
 
   if (experience === "gate") {
+    const gateFollowsStory = interviewMode !== "full" && Boolean(scenario.narrative);
     return (
       <main className="gate-screen">
-        <header className="gate-header"><strong>F-1 Duration Mapper</strong><button type="button" onClick={() => { setExperience("welcome"); setInterviewMode("focused"); }}><ArrowLeft aria-hidden="true" /> Back</button></header>
+        <header className="gate-header">
+          <strong>F-1 Duration Mapper</strong>
+          <FlowProgress step={gateFollowsStory ? 2 : 1} label={gateFollowsStory ? "Confirm your starting point" : "Your starting point"} dark />
+          <button type="button" onClick={() => {
+            if (gateFollowsStory) setExperience("story");
+            else { setExperience("welcome"); setInterviewMode("focused"); }
+          }}><ArrowLeft aria-hidden="true" /> Back</button>
+        </header>
         <section className="gate-question" aria-labelledby="gate-question-title">
-          <p>One question first</p>
+          <p>One important detail</p>
           <h1 id="gate-question-title">Will you be in the United States in valid F-1 status on September 15, 2026?</h1>
           <span>This means you will be physically in the United States with active F-1 status that day.</span>
           <div className="presence-options" role="group" aria-label="Your September 15 situation">
@@ -2820,7 +2962,7 @@ export default function App() {
   if (experience === "story") {
     return (
       <main className={`story-screen ${storyMode === "voice" ? "voice-mode" : "type-mode"} ${currentNarrative ? "has-live-results" : ""} ${storyFinished ? "is-finished" : ""}`}>
-        <header className="app-header"><span className="brand">F-1 Duration Mapper</span><div><button type="button" className="header-link" onClick={() => navigateOverview(true)}>What happened?</button><button type="button" className="start-over-action" onClick={() => setRestartPrompt(true)}><RotateCcw aria-hidden="true" /> Start over</button></div></header>
+        <header className="app-header"><span className="brand">F-1 Duration Mapper</span><FlowProgress step={storyFinished ? 2 : 1} label={storyFinished ? "Check what we understood" : "Tell your situation"} dark /><div className="header-actions"><button type="button" className="header-link" onClick={() => navigateOverview(true)}>What happened?</button><button type="button" className="start-over-action" onClick={() => setRestartPrompt(true)}><RotateCcw aria-hidden="true" /> Start over</button></div></header>
         <section className={`story-listening ${recording ? "is-recording" : ""}`}>
           {storyMode === "voice" ? (
             <>
@@ -2833,10 +2975,12 @@ export default function App() {
               {!recording && currentNarrative && (
                 <details className="transcript-review"><summary>Review or edit what you said <ChevronDown aria-hidden="true" /></summary><textarea value={scenario.narrative ?? ""} onChange={(event) => patchScenario({ narrative: event.currentTarget.value })} aria-label="Your spoken F-1 story" /></details>
               )}
-              <button type="button" className="finish-story" onClick={handleStoryAction} disabled={!recording && (!currentNarrative || intakeState === "loading")}>
-                {storyActionLabel}
-                {recording ? <Square aria-hidden="true" /> : intakeState === "loading" ? <RefreshCw className="spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
-              </button>
+              {(!storyFinished || recording || intakeState === "loading") && (
+                <button type="button" className="finish-story" onClick={handleStoryAction} disabled={!recording && (!currentNarrative || intakeState === "loading")}>
+                  {storyActionLabel}
+                  {recording ? <Square aria-hidden="true" /> : intakeState === "loading" ? <RefreshCw className="spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
+                </button>
+              )}
             </>
           ) : (
             <>
@@ -2844,7 +2988,7 @@ export default function App() {
               <h1>Write in your own words.</h1>
               <textarea autoFocus value={scenario.narrative ?? ""} onChange={(event) => patchScenario({ narrative: event.currentTarget.value })} placeholder="For example: My I-20 ends in May 2031, I hope to use OPT, and I may travel next summer..." aria-label="Your F-1 story" />
               <p className="voice-status" aria-live="polite">{intakeNotice || "You do not need to know the legal terms."}</p>
-              <button type="button" className="finish-story" onClick={handleStoryAction} disabled={!currentNarrative || intakeState === "loading"}>{storyActionLabel}{intakeState === "loading" ? <RefreshCw className="spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}</button>
+              {(!storyFinished || intakeState === "loading") && <button type="button" className="finish-story" onClick={handleStoryAction} disabled={!currentNarrative || intakeState === "loading"}>{storyActionLabel}{intakeState === "loading" ? <RefreshCw className="spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}</button>}
             </>
           )}
         </section>
@@ -2855,7 +2999,12 @@ export default function App() {
                 <p className="section-eyebrow">What we understand</p>
                 <h2>Your situation, so far</h2>
                 <ul className="story-highlights">{storyHighlights.map((highlight) => <li key={highlight}><Check aria-hidden="true" /><span>{highlight}</span></li>)}</ul>
-                <div className="story-impact-brief"><span>First result</span><strong>{displayedImpactMap.headline}</strong><p>{displayedImpactMap.summary}</p></div>
+                {storyFinished && storyReady && (
+                  <div className="story-confirm-actions">
+                    <button type="button" className="primary-command" onClick={finishStory}>This information is correct <ArrowRight aria-hidden="true" /></button>
+                    <button type="button" className="text-action" onClick={correctStory}>Add or correct information</button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="understanding-waiting">
@@ -2871,11 +3020,27 @@ export default function App() {
     );
   }
 
+  const plannerStep = reportState !== "idle" || report
+    ? 6
+    : coreQuestion
+      ? 3
+      : activeQuestion
+        ? 4
+        : 5;
+  const plannerStepLabel = plannerStep === 3
+    ? "Confirm key facts"
+    : plannerStep === 4
+      ? "Explore what matters"
+      : plannerStep === 5
+        ? "Review every impact"
+        : "Your advisement";
+
   return (
     <div className="app-shell">
       <header className="app-header">
         <span className="brand">F-1 Duration Mapper</span>
-        <div><button type="button" className="header-link" onClick={() => navigateOverview(true)}>What happened?</button><button type="button" className="start-over-action" onClick={() => setRestartPrompt(true)}><RotateCcw aria-hidden="true" /> Start over</button></div>
+        <FlowProgress step={plannerStep} label={plannerStepLabel} />
+        <div className="header-actions"><button type="button" className="header-link" onClick={() => navigateOverview(true)}>What happened?</button><button type="button" className="start-over-action" onClick={() => setRestartPrompt(true)}><RotateCcw aria-hidden="true" /> Start over</button></div>
       </header>
 
       <main className="planner-layout">
@@ -2921,19 +3086,14 @@ export default function App() {
             completedTopics={completedTopics}
             activeTopic={activeImpactTopic}
             fullInterview={interviewMode === "full"}
+            timelinePreview={<MiniTimeline events={returnTriggersNewRules ? returnTimeline : stayTimeline} onOpen={() => timelineRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })} />}
             onExplore={exploreImpact}
             onResolveQuestion={editQuestion}
           />
-          <div className="result-actions" aria-label="Save or share your results">
-            <button type="button" onClick={() => window.print()}><Printer aria-hidden="true" /> Print or save PDF</button>
-            <button type="button" onClick={() => void copyTestCase()}><ClipboardCopy aria-hidden="true" /> Copy test case</button>
-            <button type="button" onClick={() => void shareSummary()}><Share2 aria-hidden="true" /> Share</button>
-          </div>
-          {shareNotice && <p className="share-notice" role="status">{shareNotice}</p>}
         </aside>
       </main>
 
-      <section className="timeline-band">
+      <section className="timeline-band" ref={timelineRef}>
         <div className="band-heading"><p>Your dates, in order</p><h2>See where each rule changes your path</h2></div>
         <Timeline
           title={
@@ -2962,7 +3122,17 @@ export default function App() {
           {reportState === "failed" && <div className="report-error"><AlertTriangle aria-hidden="true" /><div><h2>The advisement did not finish.</h2><p>Your work is still here. Try the advisor again without re-entering anything.</p>{reportError && <details><summary>Why this attempt failed</summary><p>{reportError}</p></details>}<button type="button" onClick={() => void createReport()}><RefreshCw aria-hidden="true" /> Try the advisor again</button></div></div>}
           {report && (
             <>
-              <article className="advisor-report"><p className="section-eyebrow">Your advisement</p><h2>{report.title}</h2>{report.paragraphs.map((paragraph, index) => <p key={index}>{paragraph}</p>)}<footer><span>Rule status checked July 19, 2026</span></footer></article>
+              <article className="advisor-report">
+                <p className="section-eyebrow">Your advisement</p>
+                <h2>{report.title}</h2>
+                {report.sections.map((section) => <section className="advisor-section" key={section.heading}><h3>{section.heading}</h3><p>{section.body}</p></section>)}
+                <div className="result-actions final-actions" aria-label="Save or share your completed advisement">
+                  <button type="button" onClick={() => window.print()}><Printer aria-hidden="true" /> Save as PDF</button>
+                  <button type="button" onClick={() => void copyTestCase()}><ClipboardCopy aria-hidden="true" /> Copy test case</button>
+                  <button type="button" onClick={() => void shareSummary()}><Share2 aria-hidden="true" /> Share</button>
+                </div>
+                {shareNotice && <p className="share-notice" role="status">{shareNotice}</p>}
+              </article>
               <AdvisorFollowUp turns={followUpTurns} question={followUpQuestion} state={followUpState} onQuestion={setFollowUpQuestion} onSubmit={askFollowUp} />
             </>
           )}
@@ -2975,6 +3145,7 @@ export default function App() {
           <div className="source-list">{primaryResult.citations.map((citation) => <a key={citation.id} href={citation.url} target="_blank" rel="noreferrer"><span><strong>{citation.title}</strong><small>{citation.locator}</small></span><ExternalLink aria-hidden="true" /></a>)}</div>
         </details>
       </section>
+      {report && <PrintableReport report={report} map={displayedImpactMap} stayTimeline={stayTimeline} returnTimeline={returnTimeline} returnTriggersNewRules={returnTriggersNewRules} />}
       {editingQuestion && (
         <EditQuestionDialog
           question={editingQuestion}
