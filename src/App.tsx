@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   ChevronDown,
   CircleHelp,
-  ClipboardCopy,
   Compass,
   ExternalLink,
   FileText,
@@ -2759,40 +2758,6 @@ export default function App() {
     void understandNarrative(currentNarrative);
   }
 
-  function resultSnapshot(value: ReturnType<typeof calculateScenario>) {
-    return {
-      classification: value.classification,
-      headline: value.headline,
-      summary: value.summary,
-      activityEnd: value.activityEnd,
-      i94AdmitUntilDate: value.i94AdmitUntilDate,
-      latestDepartureDate: value.latestDepartureDate,
-      findings: value.findings.map(({ id, tone, title, detail }) => ({ id, tone, title, detail })),
-      followUpQuestions: value.followUpQuestions
-    };
-  }
-
-  async function copyTestCase() {
-    const { narrative: _privateNarrative, ...scenarioWithoutNarrative } = scenario;
-    const payload = {
-      purpose: "F-1 Duration Mapper test case for review",
-      privacy: "The voice or typed narrative and personal identifiers are excluded.",
-      scenario: scenarioWithoutNarrative,
-      primaryResult: resultSnapshot(primaryResult),
-      caseEvents: studentCase.events,
-      applicableRuleAreas: studentCase.topicEvaluations,
-      impactMap,
-      stayInUnitedStatesResult: travelResult ? resultSnapshot(result) : undefined,
-      advisorReport: report ? { title: report.title, sections: report.sections } : undefined
-    };
-    try {
-      await writeClipboard(JSON.stringify(payload, null, 2));
-      setShareNotice("Test case copied. Paste it into Codex with your comments.");
-    } catch {
-      setShareNotice("The test case could not be copied in this browser.");
-    }
-  }
-
   async function shareSummary() {
     const claims = [...impactMap.focusClaims, ...impactMap.otherClaims].flatMap((claim) => [claim.title, claim.detail]);
     const reportText = report?.sections.flatMap((section) => [section.heading, section.body]) ?? [];
@@ -3310,7 +3275,6 @@ export default function App() {
                 {report.sections.map((section) => <section className="advisor-section" key={section.heading}><h3>{section.heading}</h3><p>{section.body}</p></section>)}
                 <div className="result-actions final-actions" aria-label="Save or share your completed advisement">
                   <button type="button" onClick={() => window.print()}><Printer aria-hidden="true" /> Save as PDF</button>
-                  <button type="button" onClick={() => void copyTestCase()}><ClipboardCopy aria-hidden="true" /> Copy test case</button>
                   <button type="button" onClick={() => void shareSummary()}><Share2 aria-hidden="true" /> Share</button>
                 </div>
                 {shareNotice && <p className="share-notice" role="status">{shareNotice}</p>}

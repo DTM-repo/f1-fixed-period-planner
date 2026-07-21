@@ -1056,6 +1056,7 @@ Each entry should capture:
 - Exploration cannot silently mutate or regenerate the report. A material change requires the explicit **Create a revised advisement** path.
 - When the deterministic map has a student-specific claim for an explorer topic, show it first. Otherwise show concise, verified baseline guidance with a rule citation instead of an empty state.
 - Place the rule-scoped question box directly beneath the selected explorer topic so the issue list stays stable and the guidance column uses its available space; on mobile, the question box follows the guidance.
+- Remove the internal **Copy test case** action from the completed student report. Final report actions are now limited to saving the advisement as a PDF and sharing the student-facing summary.
 - Keep the report generation call unchanged and restore the honest “Writing your advisement” loading state. The earlier temporary draft treatment is superseded by this decision.
 - On mobile, replace the truncated horizontal dock with an always-visible vertical date rail whose reserved page space scales with the number of events.
 
