@@ -140,6 +140,98 @@ export function topicImpactLine(map: ImpactMap, topic: CanonicalTopic, scenario:
   return fallbacks[topic];
 }
 
+export function baselineClaimForTopic(
+  map: ImpactMap,
+  topic: CanonicalTopic,
+  scenario: StudentScenario
+): ImpactClaim {
+  const currentStudent = scenario.inUsOnEffectiveDate === "yes";
+  const undergraduate = scenario.educationLevel === "undergraduate";
+  const graduate = scenario.educationLevel === "graduate";
+  const guidance: Record<CanonicalTopic, { detail: string; sourceIds: string[] }> = {
+    stay_length: currentStudent
+      ? {
+          detail: "The I-20 or approved EAD in effect on September 15, 2026 controls how long the old rules continue, no later than September 15, 2030. The 60-day period follows.",
+          sourceIds: ["8CFR-214-1-M1"]
+        }
+      : {
+          detail: "Under the new system, CBP issues a dated I-94. The study period follows your I-20 but is normally limited to four years from the I-20 program start date, followed by 30 days.",
+          sourceIds: ["8CFR-214-1-A4", "FR-FOUR-YEAR-START", "8CFR-214-2-F5V"]
+        },
+    travel: currentStudent
+      ? {
+          detail: "If you leave and return after September 15, 2026, you receive a dated I-94 under the new rules. The I-20 you use and the I-94 issued by CBP control the new end date. Leaving and returning can also be an alternative to Form I-539 when you need more time.",
+          sourceIds: ["8CFR-214-1-A4", "FR-FOUR-YEAR-START"]
+        }
+      : {
+          detail: "Each F-1 admission uses the program dates on the I-20 you present. Returning later does not automatically begin four years from the travel date; the I-20 and the I-94 issued by CBP control.",
+          sourceIds: ["8CFR-214-1-A4", "FR-FOUR-YEAR-START"]
+        },
+    extension: {
+      detail: "If your I-94 ends before your study or authorized training, you must either file a complete Form I-539 on time or leave and request a new admission with an updated I-20. USCIS must receive a timely filing by the I-94 date.",
+      sourceIds: ["8CFR-214-2-F7", "8CFR-214-2-F7-TIMELY"]
+    },
+    opt: currentStudent
+      ? {
+          detail: "The one-time OPT option applies only if your normal filing window lets you submit a DSO-recommended Form I-765 by March 18, 2027 and before your old-rule stay ends. If you plan to travel, submit the online application before you leave.",
+          sourceIds: ["8CFR-214-1-M1-OPT"]
+        }
+      : {
+          detail: "Post-completion OPT begins with a DSO recommendation and Form I-765. STEM OPT, if you qualify later, is a separate 24-month extension after regular post-completion OPT.",
+          sourceIds: ["8CFR-214-2-F11", "USCIS-OPT-STEM"]
+        },
+    cpt: {
+      detail: "The rule does not remove Day 1 CPT or change the basic CPT eligibility rules. CPT still requires DSO authorization and cannot continue past its authorized date or the end of the underlying program.",
+      sourceIds: ["8CFR-214-2-F5VIII-CPT"]
+    },
+    school_transfer: {
+      detail: graduate
+        ? "During a graduate program, you cannot transfer schools unless SEVP approves an exception for extenuating circumstances."
+        : undergraduate
+          ? "During your first academic year, you cannot transfer schools unless SEVP approves an exception for extenuating circumstances."
+          : "The new rule restricts school transfers. The exact limit depends on your education level and where you are in the program.",
+      sourceIds: ["8CFR-214-2-F5II"]
+    },
+    program_change: {
+      detail: graduate
+        ? "During a graduate program, you cannot change your educational objective, including your major or education level."
+        : undergraduate
+          ? "During your first academic year, you cannot change your major or education level unless SEVP approves an exception for extenuating circumstances."
+          : "The new rule restricts changes to a major or education level. The exact limit depends on your education level and where you are in the program.",
+      sourceIds: ["8CFR-214-2-F5II"]
+    },
+    later_program: {
+      detail: "After you complete an F-1 program on or after September 15, 2026, a later F-1 program generally must be at a higher education level. A program completed before that date does not count toward this limit.",
+      sourceIds: ["8CFR-214-2-F5II-SAME-LOWER"]
+    },
+    dependents: {
+      detail: "An F-2 spouse or child cannot receive a longer period of stay than you. Include each dependent when you plan an extension and check each I-94 after travel.",
+      sourceIds: ["8CFR-214-2-F5-EXCEPTIONS", "8CFR-214-2-F7"]
+    },
+    early_end: {
+      detail: "The ordinary timeline assumes you complete the program on your I-20 end date. Finishing early, withdrawing with school approval, or losing F-1 status can move your departure date earlier.",
+      sourceIds: ["8CFR-214-2-F5V"]
+    },
+    immigrant_intent: {
+      detail: "This final rule does not create a special answer for a pending I-140. USCIS can review whether you still meet the temporary-purpose requirements for F-1 status when it decides a Form I-539, so this needs individual advice.",
+      sourceIds: ["FR-F1-TEMPORARY-INTENT", "FR-I140-OUT-OF-SCOPE"]
+    },
+    school_filing_support: {
+      detail: "The rule sets the government filing requirements for Form I-539. It does not require a school to prepare or file the application for you; ask the school what support it provides.",
+      sourceIds: ["8CFR-214-2-F7"]
+    }
+  };
+  const canonical = canonicalTopic(topic);
+  return {
+    id: `explorer-baseline-${canonical}`,
+    category: TOPIC_CATEGORIES[canonical][0],
+    tone: "info",
+    title: topicImpactLine(map, canonical, scenario),
+    detail: guidance[canonical].detail,
+    sourceIds: guidance[canonical].sourceIds
+  };
+}
+
 export function topicForQuestion(questionId: string): CanonicalTopic | undefined {
   return QUESTION_TOPICS[questionId];
 }

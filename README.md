@@ -14,7 +14,7 @@ The legal/date engine is deterministic. The same confirmed facts always produce 
 - The deterministic TypeScript engine calculates the result and cites the rule.
 - The server recalculates the result before GPT-5.6 Sol turns the verified map into a complete advisor-style overview at medium reasoning effort.
 - The report model may explain verified output; it may not alter a date, classification, or legal consequence.
-- Rule-scoped follow-ups use GPT-5.6 Sol at medium reasoning effort and can add confirmed facts back to the deterministic impact map.
+- Rule-scoped follow-ups use GPT-5.6 Sol at medium reasoning effort. A completed advisement is a locked snapshot; exploration cannot silently change it, and recalculation requires the student to explicitly create a revised advisement.
 
 The app gives every supported partial result it can, identifies contradictions before continuing, and asks for the exact missing fact that would change the answer. It never invents an exact day or converts ambiguous numeric dates such as `6/2/2029`; clear relative phrases such as “next spring” become visible estimates that the student must confirm.
 
@@ -26,10 +26,32 @@ The student experience is deliberately one question at a time:
 2. Let the student confirm or correct what the app understood, then confirm whether the student will be in the United States in valid F-1 status on September 15, 2026.
 3. Confirm only the controlling dates or facts that remain unknown.
 4. Address the student's concern first, while the deterministic impact map shows every other rule change that applies to the student's categories.
-5. Let the student choose any additional area for deeper exploration, one question at a time, while preserving compatible answers and earlier priorities.
-6. Create a complete AI advisor overview from the verified map, then accept open-ended follow-up questions that can add facts and refresh the map.
+5. Create a complete advisor overview from the verified map and lock it to the answers used for that report.
+6. Let the student open a separate rule explorer containing every additional issue that could apply to their categories, exact rule citations, and an open-ended follow-up. New facts never rewrite the finished report without an explicit revision.
 
-Every explored area ends with substantive guidance. A topic with no missing field cannot silently skip the student to the report.
+Every explorer topic opens to student-specific guidance when the case supports it and concise, source-linked baseline guidance when another fact is still needed.
+
+## Stack
+
+- React, TypeScript, and Vite for the student experience.
+- A deterministic TypeScript rule matrix for classifications, contradictions, dates, and timelines.
+- Netlify Functions for the OpenAI-backed intake, advisor report, and rule-scoped follow-up endpoints.
+- GPT-5.6 Luna for bounded temporal fact extraction and GPT-5.6 Sol for grounded explanation.
+
+## Collaboration with Codex and GPT-5.6
+
+The domain model came from fifteen years of international-student advising and current graduate study in immigration law. Codex served as the engineering collaborator that turned that expertise into a working product:
+
+- Codex translated the final rule into a deterministic, source-indexed rule matrix and generated a regression suite for current students, incoming students, travel, OPT, CPT, extensions, school changes, dependents, and unusual endings.
+- A real student case exposed a flat-data flaw: a completed program, approved OPT, planned travel, and a later program were being treated as one situation. Codex traced that failure across intake, routing, cards, and timelines, then refactored the app around connected temporal events without replacing the tested legal engine.
+- Browser replays caught failures that unit tests alone would miss, including a program date being confused with an EAD date, a past return date entering a post-rule branch, a timeline that updated one answer late, and mobile controls that visually competed with the result.
+- David made the substantive and product calls: which rules belong in scope, what language an international student can understand, when a question is unnecessary, which uncertainty requires a DSO, and how the six-step advising experience should feel.
+
+GPT-5.6 has two deliberately bounded jobs. Luna converts a student's story into candidate facts and separate events that the student can verify. Sol receives a server-recalculated impact map and turns those verified facts, consequences, dates, and citations into a coherent advisor-style report. Neither model is allowed to invent a controlling date or legal outcome.
+
+## Verification
+
+The current suite contains 124 passing tests across nine files. It includes real-shaped multi-event cases, impossible-date contradictions, OPT transition deadlines, travel-triggered fixed admissions, academic-mobility limits, and timeline merging. TypeScript checking and the production Vite build run with `npm run build`.
 
 ## Local Setup
 
@@ -73,3 +95,7 @@ Henry/Chatbase is a private research cross-check only. The submitted runtime is 
 The primary authority is the [Federal Register final rule](https://www.federalregister.gov/documents/2026/07/17/2026-14439/establishing-a-fixed-time-period-of-admission-and-an-extension-of-stay-procedure-for-nonimmigrant), published July 17, 2026 and effective September 15, 2026. The app also links to the public [NAFSA overview](https://www.nafsa.org/regulatory-information/dhs-final-rule-ending-duration-status) and relevant USCIS material. Each rule citation opens a pronounced locator and the closest verified Federal Register paragraph anchor.
 
 This is a planning and issue-spotting tool, not legal advice. Because implementation guidance, fees, and agency practice can change, public release still requires a final source and advisor review.
+
+## License
+
+Released under the [MIT License](LICENSE). The regulatory source material remains subject to its original terms.

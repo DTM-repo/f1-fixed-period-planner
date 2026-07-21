@@ -8,10 +8,12 @@ import {
   ChevronDown,
   CircleHelp,
   ClipboardCopy,
+  Compass,
   ExternalLink,
   FileText,
   Info,
   Keyboard,
+  Lock,
   Mic,
   Pencil,
   Printer,
@@ -50,7 +52,9 @@ import {
   type ImpactMap
 } from "./impact/impactMap";
 import {
+  baselineClaimForTopic,
   canonicalTopics,
+  claimsForTopic,
   topicImpactLine,
   topicForQuestion,
   topicMeta,
@@ -86,7 +90,7 @@ declare global {
 type Experience = "welcome" | "gate" | "story" | "interview";
 type StoryMode = "voice" | "type";
 type InterviewMode = "focused" | "full";
-type Page = "planner" | "overview";
+type Page = "planner" | "overview" | "explorer";
 type IntakeState = "idle" | "loading" | "ready" | "failed";
 type ReportState = "idle" | "loading" | "ready" | "failed";
 type QuestionKind = "choice" | "date";
@@ -1415,87 +1419,11 @@ function ImpactClaimList({ claims, onResolveQuestion }: { claims: ImpactClaim[];
   );
 }
 
-function ImpactIndex({
-  map,
-  scenario,
-  topics,
-  prominentTopics,
-  completedTopics,
-  activeTopic,
-  fullInterview,
-  onExplore
-}: {
-  map: ImpactMap;
-  scenario: StudentScenario;
-  topics: CanonicalTopic[];
-  prominentTopics: CanonicalTopic[];
-  completedTopics: CanonicalTopic[];
-  activeTopic: CanonicalTopic | null;
-  fullInterview: boolean;
-  onExplore: (topic: CanonicalTopic) => void;
-}) {
-  const prominent = new Set(prominentTopics);
-  const completed = new Set(completedTopics);
-  return (
-    <section className="impact-index" aria-labelledby="impact-index-title">
-      <header>
-        <p>Every issue this rule could raise for you, depending on your circumstances</p>
-        <h3 id="impact-index-title">Click any issue to explore deeper</h3>
-      </header>
-      <div className="impact-index-list">
-        {topics.map((topic) => {
-          const meta = topicMeta(topic);
-          const isProminent = prominent.has(topic);
-          const isActive = activeTopic === topic;
-          const state = isActive
-            ? "Exploring"
-            : completed.has(topic)
-              ? fullInterview ? "Covered" : "Explored"
-              : fullInterview && isProminent
-                ? "In interview"
-                : isProminent
-                  ? "Priority"
-                  : "Explore";
-          return (
-            <button
-              type="button"
-              key={topic}
-              className={`${isProminent ? "prominent" : ""} ${isActive ? "active" : ""}`.trim()}
-              onClick={() => onExplore(topic)}
-              aria-pressed={isActive}
-            >
-              <span className="impact-index-icon" aria-hidden="true">{isProminent ? <Check /> : <ArrowRight />}</span>
-              <span className="impact-index-copy"><strong>{meta.title}</strong><small>{topicImpactLine(map, topic, scenario)}</small></span>
-              <span className="impact-index-state">{state}</span>
-            </button>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
 function ImpactList({
   map,
-  scenario,
-  topics,
-  prominentTopics,
-  completedTopics,
-  activeTopic,
-  fullInterview = false,
-  timelinePreview,
-  onExplore,
   onResolveQuestion
 }: {
   map: ImpactMap;
-  scenario?: StudentScenario;
-  topics?: CanonicalTopic[];
-  prominentTopics?: CanonicalTopic[];
-  completedTopics?: CanonicalTopic[];
-  activeTopic?: CanonicalTopic | null;
-  fullInterview?: boolean;
-  timelinePreview?: React.ReactNode;
-  onExplore?: (topic: CanonicalTopic) => void;
   onResolveQuestion?: (questionId: string) => void;
 }) {
   return (
@@ -1512,19 +1440,6 @@ function ImpactList({
           <h3>Your priorities</h3>
           <ImpactClaimList claims={map.focusClaims} onResolveQuestion={onResolveQuestion} />
         </section>
-      )}
-      {timelinePreview}
-      {scenario && topics && prominentTopics && completedTopics && onExplore && (
-        <ImpactIndex
-          map={map}
-          scenario={scenario}
-          topics={topics}
-          prominentTopics={prominentTopics}
-          completedTopics={completedTopics}
-          activeTopic={activeTopic ?? null}
-          fullInterview={fullInterview}
-          onExplore={onExplore}
-        />
       )}
       {map.ruleStatus && <p className="impact-status">{map.ruleStatus}</p>}
     </section>
@@ -1551,30 +1466,11 @@ function AdvisementAction({
   );
 }
 
-function AdvisementDraft({ map, topics }: { map: ImpactMap; topics: IntakeTopic[] }) {
-  const headings = canonicalTopics(topics).slice(0, 4).map((topic) => topicMeta(topic).title);
-  return (
-    <article className="advisement-draft" aria-label="Your advisement is being written">
-      <p className="section-eyebrow">Your advisement</p>
-      <h2>{map.headline}</h2>
-      <p className="draft-opening">{map.summary}</p>
-      <div className="draft-sections" aria-hidden="true">
-        {(headings.length ? headings : ["Your situation", "What to do next"]).map((heading, index) => (
-          <span style={{ "--draft-index": index } as React.CSSProperties} key={heading}>
-            <strong>{heading}</strong><i />
-          </span>
-        ))}
-      </div>
-      <p className="draft-status"><RefreshCw className="spin" aria-hidden="true" /> Bringing the details together.</p>
-    </article>
-  );
-}
-
 function ExplorationHome({ fullInterview }: { fullInterview: boolean }) {
   return (
     <section className="exploration-home">
       <CheckCircle2 aria-hidden="true" />
-      <p>{fullInterview ? "Your full interview is complete." : "Choose another issue from the list, or create your advisement."}</p>
+      <p>{fullInterview ? "Your full interview is complete." : "Your focused questions are complete. Create your advisement when you are ready."}</p>
     </section>
   );
 }
@@ -1750,18 +1646,18 @@ function TimelineDock({ events, onOpen }: { events: DisplayTimelineItem[]; onOpe
     : important.length
       ? important.slice(0, 4)
       : [events[0], events.at(-1)!];
+  const renderEvents = (items: DisplayTimelineItem[]) => items.map((event, index) => (
+    <span className={event.tone} key={`${event.sortKey}-${event.title}-${index}`}>
+      <i aria-hidden="true" />
+      <time dateTime={event.date}>{event.dateLabel}</time>
+      <small>{event.title}</small>
+    </span>
+  ));
   return (
     <button type="button" className="timeline-dock" onClick={onOpen} aria-label="Open your full timeline">
       <span className="timeline-dock-label"><CalendarDays aria-hidden="true" /> Your timeline</span>
-      <span className="timeline-dock-events" aria-hidden="true">
-        {visibleEvents.map((event, index) => (
-          <span className={event.tone} key={`${event.sortKey}-${event.title}-${index}`}>
-            <i aria-hidden="true" />
-            <time dateTime={event.date}>{event.dateLabel}</time>
-            <small>{event.title}</small>
-          </span>
-        ))}
-      </span>
+      <span className="timeline-dock-events timeline-dock-desktop" aria-hidden="true">{renderEvents(visibleEvents)}</span>
+      <span className="timeline-dock-events timeline-dock-mobile" aria-hidden="true">{renderEvents(events)}</span>
       <span className="timeline-dock-open">See all <ArrowRight aria-hidden="true" /></span>
     </button>
   );
@@ -1824,19 +1720,23 @@ function AdvisorFollowUp({
   turns,
   question,
   state,
+  eyebrow = "Continue with the rule advisor",
+  title = "What else would you like to ask?",
   onQuestion,
   onSubmit
 }: {
   turns: AdvisorTurn[];
   question: string;
   state: ReportState;
+  eyebrow?: string;
+  title?: string;
   onQuestion: (value: string) => void;
   onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
 }) {
   return (
     <section className="advisor-follow-up" aria-labelledby="advisor-follow-up-title">
-      <p className="section-eyebrow">Continue with the rule advisor</p>
-      <h2 id="advisor-follow-up-title">What else would you like to ask?</h2>
+      <p className="section-eyebrow">{eyebrow}</p>
+      <h2 id="advisor-follow-up-title">{title}</h2>
       {turns.length > 0 && (
         <div className="advisor-turns" aria-live="polite">
           {turns.map((turn, index) => (
@@ -1859,6 +1759,116 @@ function AdvisorFollowUp({
         {state === "failed" && <p className="field-error">That answer did not finish. Your question is still here; try again.</p>}
       </form>
     </section>
+  );
+}
+
+function RuleExplorer({
+  map,
+  scenario,
+  topics,
+  prominentTopics,
+  selectedTopic,
+  turns,
+  question,
+  followUpState,
+  timeline,
+  onSelectTopic,
+  onQuestion,
+  onSubmit,
+  onBack,
+  onRevise,
+  onOpenTimeline,
+  onRestart,
+  restartPrompt,
+  onCancelRestart,
+  onConfirmRestart
+}: {
+  map: ImpactMap;
+  scenario: StudentScenario;
+  topics: CanonicalTopic[];
+  prominentTopics: CanonicalTopic[];
+  selectedTopic: CanonicalTopic | null;
+  turns: AdvisorTurn[];
+  question: string;
+  followUpState: ReportState;
+  timeline: DisplayTimelineItem[];
+  onSelectTopic: (topic: CanonicalTopic) => void;
+  onQuestion: (value: string) => void;
+  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  onBack: () => void;
+  onRevise: () => void;
+  onOpenTimeline: () => void;
+  onRestart: () => void;
+  restartPrompt: boolean;
+  onCancelRestart: () => void;
+  onConfirmRestart: () => void;
+}) {
+  const prominent = new Set(prominentTopics);
+  const selectedClaims = selectedTopic ? claimsForTopic(map, selectedTopic) : [];
+  const explorerClaims = selectedTopic
+    ? selectedClaims.length > 0
+      ? selectedClaims
+      : [baselineClaimForTopic(map, selectedTopic, scenario)]
+    : [];
+  return (
+    <div className="explorer-shell" style={{ "--mobile-timeline-space": `${Math.min(330, 42 + timeline.length * 27)}px` } as React.CSSProperties}>
+      <header className="app-header explorer-header">
+        <span className="brand">F-1 Duration Mapper</span>
+        <span className="explorer-header-label">Explore further</span>
+        <div className="header-actions">
+          <button type="button" className="header-link" onClick={onBack}><ArrowLeft aria-hidden="true" /> Back to advisement</button>
+          <button type="button" className="start-over-action" onClick={onRestart}><RotateCcw aria-hidden="true" /> Start over</button>
+        </div>
+      </header>
+      <main className="explorer-page">
+        <section className="explorer-intro">
+          <p className="section-eyebrow">Your personal rule explorer</p>
+          <h1>Explore another part of the rule.</h1>
+          <p>Select any issue to see what the rule says for the facts already in your advisement.</p>
+          <div className="advisement-lock"><Lock aria-hidden="true" /><span>Your completed advisement will not change while you explore.</span><button type="button" onClick={onRevise}>Create a revised advisement</button></div>
+        </section>
+
+        <div className="explorer-grid">
+          <nav className="explorer-topics" aria-label="Rule issues to explore">
+            <p>Every issue this rule could raise for you, depending on your circumstances</p>
+            {topics.map((topic) => {
+              const meta = topicMeta(topic);
+              const active = selectedTopic === topic;
+              return (
+                <button type="button" key={topic} className={active ? "active" : ""} aria-pressed={active} onClick={() => onSelectTopic(topic)}>
+                  <span><strong>{meta.title}</strong><small>{topicImpactLine(map, topic, scenario)}</small></span>
+                  <span className="explorer-topic-state">{prominent.has(topic) ? "In your advisement" : "Explore"}<ArrowRight aria-hidden="true" /></span>
+                </button>
+              );
+            })}
+          </nav>
+
+          <section className="explorer-detail" aria-live="polite">
+            {selectedTopic ? (
+              <>
+                <p className="section-eyebrow">{prominent.has(selectedTopic) ? "Covered in your advisement" : "Additional guidance"}</p>
+                <h2>{topicMeta(selectedTopic).title}</h2>
+                <ImpactClaimList claims={explorerClaims} />
+              </>
+            ) : (
+              <div className="explorer-empty-state"><Compass aria-hidden="true" /><h2>Choose an issue.</h2><p>Its guidance and exact rule sources will open here.</p></div>
+            )}
+          </section>
+        </div>
+
+        <AdvisorFollowUp
+          turns={turns}
+          question={question}
+          state={followUpState}
+          eyebrow="Ask additional questions"
+          title="What else would you like to know?"
+          onQuestion={onQuestion}
+          onSubmit={onSubmit}
+        />
+      </main>
+      <TimelineDock events={timeline} onOpen={onOpenTimeline} />
+      {restartPrompt && <RestartDialog onCancel={onCancelRestart} onConfirm={onConfirmRestart} />}
+    </div>
   );
 }
 
@@ -1957,7 +1967,8 @@ function clearPlannerSession(): void {
 
 export default function App() {
   const restoredSession = useMemo(readPlannerSession, []);
-  const [page, setPage] = useState<Page>(() => window.location.hash === "#what-happened" ? "overview" : "planner");
+  const [page, setPage] = useState<Page>(() => window.location.hash === "#what-happened" ? "overview" : window.location.hash === "#explore" ? "explorer" : "planner");
+  const [explorerTopic, setExplorerTopic] = useState<CanonicalTopic | null>(null);
   const [experience, setExperience] = useState<Experience>(restoredSession?.experience ?? "welcome");
   const [storyMode, setStoryMode] = useState<StoryMode>(restoredSession?.storyMode ?? "voice");
   const [scenario, setScenario] = useState<StudentScenario>(() => restoredSession?.scenario ? { ...DEFAULT_SCENARIO, ...restoredSession.scenario } : DEFAULT_SCENARIO);
@@ -2000,11 +2011,10 @@ export default function App() {
   const storyResultsRef = useRef<HTMLElement | null>(null);
   const timelineRef = useRef<HTMLElement | null>(null);
   const reportRef = useRef<HTMLElement | null>(null);
-  const preserveReportForScenarioUpdateRef = useRef(false);
   const restoringReportRef = useRef(Boolean(restoredSession?.report));
 
   useEffect(() => {
-    const onHash = () => setPage(window.location.hash === "#what-happened" ? "overview" : "planner");
+    const onHash = () => setPage(window.location.hash === "#what-happened" ? "overview" : window.location.hash === "#explore" ? "explorer" : "planner");
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
@@ -2047,10 +2057,6 @@ export default function App() {
   useEffect(() => {
     if (restoringReportRef.current) {
       restoringReportRef.current = false;
-      return;
-    }
-    if (preserveReportForScenarioUpdateRef.current) {
-      preserveReportForScenarioUpdateRef.current = false;
       return;
     }
     reportAbortRef.current?.abort();
@@ -2264,7 +2270,6 @@ export default function App() {
       .find((question) => !coreQuestionIds.has(question.id) && questionNeedsAnswer(question, answered, scenario))
     : undefined;
   const activeQuestion = coreQuestion ?? focusedQuestion ?? fullInterviewQuestion;
-  const activeImpactTopic = activeQuestion ? topicForQuestion(activeQuestion.id) ?? null : null;
   const historyTopics = useMemo(
     () => interviewMode === "full"
       ? impactTopics
@@ -2307,6 +2312,29 @@ export default function App() {
     window.location.hash = show ? "what-happened" : "";
   }
 
+  function navigateExplorer(show: boolean) {
+    window.location.hash = show ? "explore" : "";
+    if (show) {
+      setExplorerTopic(null);
+      window.scrollTo({ top: 0, behavior: "auto" });
+    } else {
+      window.setTimeout(() => reportRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+    }
+  }
+
+  function beginRevision() {
+    window.location.hash = "";
+    setExplorerTopic(null);
+    setReport(null);
+    setReportState("idle");
+    setReportError("");
+    setReportReadyNotice("");
+    setFollowUpQuestion("");
+    setFollowUpTurns([]);
+    setFollowUpState("idle");
+    window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 60);
+  }
+
   function beginPath(mode: StoryMode | "full") {
     if (mode !== "full") {
       setStoryMode(mode);
@@ -2337,11 +2365,6 @@ export default function App() {
     setExploreTopics([]);
     setExperience("interview");
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function exploreImpact(topic: CanonicalTopic) {
-    setExploreTopics((current) => canonicalTopics([...current, topic]));
-    if (!activeQuestion) window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function patchScenario(patch: Partial<StudentScenario>) {
@@ -2963,7 +2986,10 @@ export default function App() {
     setFollowUpTurns(requestHistory);
     setFollowUpState("loading");
     try {
-      const advisorTopics: IntakeTopic[] = interviewMode === "full" ? impactTopics : visibleFocusTopics;
+      const advisorTopics: IntakeTopic[] = canonicalTopics([
+        ...(interviewMode === "full" ? impactTopics : visibleFocusTopics),
+        ...(explorerTopic ? [explorerTopic] : [])
+      ]);
       let body: FollowUpResponse | null = null;
       for (let attempt = 0; attempt < 2 && !body; attempt += 1) {
         const response = await fetch("/api/follow-up", {
@@ -2982,28 +3008,11 @@ export default function App() {
         else if (attempt === 1) throw new Error(`Follow-up failed: ${response.status}`);
       }
       if (!body) throw new Error("Follow-up failed");
-      const explicitFacts = body.facts.filter((fact) => !fact.needsConfirmation);
-      const nextScenario = mergeFacts(scenario, explicitFacts, true);
       const assistantTurn: AdvisorTurn = { role: "assistant", text: body.answer, sourceIds: body.sourceIds };
       const nextTurns = [...requestHistory, assistantTurn];
-      const nextFocusTopics: IntakeTopic[] = interviewMode === "full"
-        ? impactTopics
-        : [...new Set([...focusTopics, ...body.topics])];
       setFollowUpTurns(nextTurns);
       setFollowUpQuestion("");
       setFollowUpState("ready");
-      if (interviewMode === "focused") setFocusTopics(nextFocusTopics);
-      if (explicitFacts.length) {
-        preserveReportForScenarioUpdateRef.current = true;
-        setScenario(nextScenario);
-        markFactsAnswered(explicitFacts);
-      }
-      window.setTimeout(() => void createReport(
-        nextScenario,
-        nextTurns,
-        nextFocusTopics,
-        interviewMode === "full" ? impactTopics : exploreTopics
-      ), 0);
     } catch {
       setFollowUpState("failed");
     }
@@ -3022,6 +3031,8 @@ export default function App() {
     recognitionRef.current = null;
     recordingRef.current = false;
     clearPlannerSession();
+    window.location.hash = "";
+    setExplorerTopic(null);
     setScenario(DEFAULT_SCENARIO);
     setAnswered(new Set());
     setIntake(null);
@@ -3049,6 +3060,35 @@ export default function App() {
   }
 
   if (page === "overview") return <WhatHappened onBack={() => navigateOverview(false)} />;
+
+  if (page === "explorer" && report) {
+    return (
+      <RuleExplorer
+        map={displayedImpactMap}
+        scenario={scenario}
+        topics={impactTopics}
+        prominentTopics={selectedProminentTopics}
+        selectedTopic={explorerTopic}
+        turns={followUpTurns}
+        question={followUpQuestion}
+        followUpState={followUpState}
+        timeline={activeTimeline}
+        onSelectTopic={setExplorerTopic}
+        onQuestion={setFollowUpQuestion}
+        onSubmit={askFollowUp}
+        onBack={() => navigateExplorer(false)}
+        onRevise={beginRevision}
+        onOpenTimeline={() => {
+          window.location.hash = "";
+          window.setTimeout(() => timelineRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 80);
+        }}
+        onRestart={() => setRestartPrompt(true)}
+        restartPrompt={restartPrompt}
+        onCancelRestart={() => setRestartPrompt(false)}
+        onConfirmRestart={restart}
+      />
+    );
+  }
 
   if (experience === "welcome") {
     return (
@@ -3175,7 +3215,7 @@ export default function App() {
         : "Your advisement";
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" style={{ "--mobile-timeline-space": `${Math.min(330, 42 + activeTimeline.length * 27)}px` } as React.CSSProperties}>
       <header className="app-header">
         <span className="brand">F-1 Duration Mapper</span>
         <FlowProgress step={plannerStep} label={plannerStepLabel} />
@@ -3188,16 +3228,22 @@ export default function App() {
           {completedQuestions.length > 0 && (
             <div className="answer-history" aria-label="Your answers">
               {completedQuestions.map((question) => (
-                <button type="button" key={question.id} onClick={() => editQuestion(question.id)}>
+                <button type="button" key={question.id} onClick={() => editQuestion(question.id)} disabled={Boolean(report)}>
                   <Check aria-hidden="true" />
                   <span><small>{question.eyebrow}</small><strong>{question.answerLabel}</strong></span>
-                  <Pencil aria-hidden="true" />
+                  {report ? <Lock aria-hidden="true" /> : <Pencil aria-hidden="true" />}
                 </button>
               ))}
             </div>
           )}
 
-          {activeQuestion ? (
+          {report ? (
+            <section className="locked-case" aria-label="Completed advisement">
+              <Lock aria-hidden="true" />
+              <div><strong>Your advisement is complete.</strong><p>The answers above are locked to that report.</p></div>
+              <button type="button" onClick={beginRevision}>Create a revised advisement</button>
+            </section>
+          ) : activeQuestion ? (
             <QuestionCard
               key={activeQuestion.id}
               question={activeQuestion}
@@ -3207,11 +3253,11 @@ export default function App() {
             />
           ) : focusCaptured ? <ExplorationHome fullInterview={interviewMode === "full"} /> : null}
 
-          {focusCaptured && !coreQuestion && (
+          {!report && focusCaptured && !coreQuestion && (
             <AdvisementAction state={reportState} disabled={contradiction} onCreate={() => void createReport()} />
           )}
 
-          {focusCaptured && !coreQuestion && (
+          {!report && focusCaptured && !coreQuestion && (
             isCurrent(scenario) && !activeQuestion ? <I94Correction scenario={scenario} onPatch={patchScenario} /> : null
           )}
         </section>
@@ -3219,14 +3265,7 @@ export default function App() {
         <aside className="results-column">
           <ImpactList
             map={displayedImpactMap}
-            scenario={scenario}
-            topics={impactTopics}
-            prominentTopics={selectedProminentTopics}
-            completedTopics={completedTopics}
-            activeTopic={activeImpactTopic}
-            fullInterview={interviewMode === "full"}
-            onExplore={exploreImpact}
-            onResolveQuestion={editQuestion}
+            onResolveQuestion={report ? undefined : editQuestion}
           />
         </aside>
       </main>
@@ -3259,13 +3298,16 @@ export default function App() {
       {(report || reportState === "loading" || reportState === "failed") && (
         <section className="report-band" aria-live="polite" ref={reportRef} tabIndex={-1}>
           {reportReadyNotice && reportState === "ready" && <div className="report-ready" role="status"><CheckCircle2 aria-hidden="true" />{reportReadyNotice}</div>}
-          {reportState === "loading" && <AdvisementDraft map={displayedImpactMap} topics={visibleFocusTopics} />}
+          {reportState === "loading" && <div className="report-loading"><RefreshCw className="spin" aria-hidden="true" /><p>Writing your advisement.</p></div>}
           {reportState === "failed" && <div className="report-error"><AlertTriangle aria-hidden="true" /><div><h2>The advisement did not finish.</h2><p>Your work is still here. Try the advisor again without re-entering anything.</p>{reportError && <details><summary>Why this attempt failed</summary><p>{reportError}</p></details>}<button type="button" onClick={() => void createReport()}><RefreshCw aria-hidden="true" /> Try the advisor again</button></div></div>}
           {report && (
             <>
               <article className="advisor-report">
-                <p className="section-eyebrow">Your advisement</p>
-                <h2>{report.title}</h2>
+                <div className="advisor-report-heading">
+                  <div><p className="section-eyebrow">Your advisement</p><h2>{report.title}</h2></div>
+                  <button type="button" className="explore-further" onClick={() => navigateExplorer(true)}><Compass aria-hidden="true" /> Explore further</button>
+                </div>
+                <div className="report-lock"><Lock aria-hidden="true" /><span>Locked to the answers used to create this advisement.</span></div>
                 {report.sections.map((section) => <section className="advisor-section" key={section.heading}><h3>{section.heading}</h3><p>{section.body}</p></section>)}
                 <div className="result-actions final-actions" aria-label="Save or share your completed advisement">
                   <button type="button" onClick={() => window.print()}><Printer aria-hidden="true" /> Save as PDF</button>
@@ -3274,7 +3316,6 @@ export default function App() {
                 </div>
                 {shareNotice && <p className="share-notice" role="status">{shareNotice}</p>}
               </article>
-              <AdvisorFollowUp turns={followUpTurns} question={followUpQuestion} state={followUpState} onQuestion={setFollowUpQuestion} onSubmit={askFollowUp} />
             </>
           )}
         </section>

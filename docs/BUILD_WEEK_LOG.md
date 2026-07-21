@@ -1039,3 +1039,35 @@ Each entry should capture:
 **Verification**
 
 - Vitest: 122/122 passed across nine test files, including the past-return contradiction, an exact September 15 completion, and the four-event second-master's case. TypeScript and the production Vite build passed.
+
+### Locked Advisement and Separate Rule Explorer - July 21, 2026
+
+**Research and diagnosis**
+
+- The complete impact list and open-ended follow-up competed with the final report and made the page feel unfinished. A student could not tell whether the advisement was final or whether later exploration had silently made it stale.
+- Streaming or otherwise changing the successful GPT-5.6 report call immediately before submission would create unnecessary risk. The existing report was accurate; the problem was the product boundary around it.
+- Browser verification of the first explorer pass found that an unexamined topic could open to a one-line label without enough rule detail or a citation.
+- The horizontal fixed timeline showed too few dates on a phone. A vertical rail can preserve the chronological order and show every applicable event in less horizontal space.
+
+**Decisions**
+
+- Treat “Create my advisement” as finality. The report is a locked snapshot of the answers used to create it, and prior answers become read-only while that report exists.
+- Put **Explore further** beside the completed report. Its separate page contains only applicable topics, concise personalized summaries, exact source links, and a rule-scoped question box.
+- Exploration cannot silently mutate or regenerate the report. A material change requires the explicit **Create a revised advisement** path.
+- When the deterministic map has a student-specific claim for an explorer topic, show it first. Otherwise show concise, verified baseline guidance with a rule citation instead of an empty state.
+- Keep the report generation call unchanged and restore the honest “Writing your advisement” loading state. The earlier temporary draft treatment is superseded by this decision.
+- On mobile, replace the truncated horizontal dock with an always-visible vertical date rail whose reserved page space scales with the number of events.
+
+**Codex and OpenAI assistance**
+
+- Codex separated report finality, topic exploration, follow-up conversation, and revision into explicit state boundaries while leaving the working GPT-5.6 report function untouched.
+- Codex found the thin unexplored-topic state during browser replay and added source-linked baseline guidance for each applicable rule category.
+- Codex converted the submission requirements into a timed demo script and final-day checklist, including a clear explanation of the bounded Luna/Sol architecture and the deterministic engine.
+
+**Verification**
+
+- Vitest: 124/124 passed across nine test files; TypeScript and the production Vite build passed.
+- A live current-undergraduate travel/OPT story preserved the I-20 date, education level, OPT plan, travel, and return date; the planner immediately showed travel-triggered fixed rules and the controlling timeline.
+- The completed report locked all seven answered facts. Explore further opened in a separate route, marked Travel and OPT as report priorities, and left the report unchanged.
+- The explorer's “Need more time” topic opened to Form I-539 guidance with exact source links even though the student had not previously selected that issue.
+- At 390 by 844, the desktop timeline strip was hidden and all three applicable events rendered as a vertical rail without horizontal overflow.

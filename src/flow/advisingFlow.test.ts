@@ -4,6 +4,7 @@ import type { StudentScenario } from "../engine/types";
 import type { ImpactMap } from "../impact/impactMap";
 import {
   allImpactTopics,
+  baselineClaimForTopic,
   canonicalTopics,
   claimsForTopic,
   topicImpactLine
@@ -69,5 +70,16 @@ describe("student-controlled impact map", () => {
     expect(topicImpactLine(map, "school_transfer", currentGraduate)).toBe("A graduate school transfer requires an SEVP exception");
     expect(topicImpactLine(map, "program_change", currentGraduate)).toBe("Graduate students cannot change their major or degree level");
     expect(topicImpactLine(map, "dependents", currentGraduate)).toBe("F-2 family members cannot stay beyond your F-1 period");
+  });
+
+  it("gives every unexplored topic concise grounded guidance", () => {
+    const claim = baselineClaimForTopic(map, "extension", currentGraduate);
+    expect(claim.detail).toContain("Form I-539");
+    expect(claim.sourceIds).toEqual(["8CFR-214-2-F7", "8CFR-214-2-F7-TIMELY"]);
+  });
+
+  it("uses education-level-specific academic guidance", () => {
+    expect(baselineClaimForTopic(map, "school_transfer", currentGraduate).detail).toContain("graduate program");
+    expect(baselineClaimForTopic(map, "program_change", currentGraduate).detail).not.toContain("first academic year");
   });
 });
